@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zenith-pdf"
+version = "0.3.0"
+description = "A PDF viewer and markup app for Windows"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "Andrea Loroni" }]
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6-Essentials>=6.8",
+    "pypdfium2>=5",
+    "pikepdf>=10.17",
+    "Pillow>=10",  # re-encoding pictures when compressing
+    "qtawesome>=1.4",
+    # Text recognition with the engine built into Windows
+    "winrt-Windows.Media.Ocr>=3; sys_platform == 'win32'",
+    "winrt-Windows.Graphics.Imaging>=3; sys_platform == 'win32'",
+    "winrt-Windows.Storage.Streams>=3; sys_platform == 'win32'",
+    "winrt-Windows.Globalization>=3; sys_platform == 'win32'",
+    "winrt-Windows.Foundation.Collections>=3; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.gui-scripts]
+zenith-pdf = "zenith_pdf.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+zenith_pdf = ["assets/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

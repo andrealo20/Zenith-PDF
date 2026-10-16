@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Zenith PDF logo">
+  <defs>
+    <linearGradient id="nibLeft" x1="0.1" y1="0.05" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#C4A8FF"/>
+      <stop offset="0.55" stop-color="#9A5CFF"/>
+      <stop offset="1" stop-color="#8236F5"/>
+    </linearGradient>
+    <linearGradient id="nibRight" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#5A1FC4"/>
+      <stop offset="1" stop-color="#7B3AE0"/>
+    </linearGradient>
+    <linearGradient id="base" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#7FC4FF"/>
+      <stop offset="0.5" stop-color="#2E8BFF"/>
+      <stop offset="1" stop-color="#0A5CFF"/>
+    </linearGradient>
+    <linearGradient id="drop" gradientUnits="userSpaceOnUse" x1="0" y1="185" x2="0" y2="228">
+      <stop offset="0" stop-color="#D6C7FF" stop-opacity="0"/>
+      <stop offset="1" stop-color="#C2AEFF" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+  <path d="M249 185 C249 205 229 212 229 240 A 27 27 0 0 0 283 240 C283 212 263 205 263 185 Z" fill="url(#drop)"/>
+  <path d="M249 96 C249 82 247 72 239 72 C232 72 227 78 222 86 C195 128 150 196 128 232 C121 243 121 262 132 276 L177.3 329.1 Q183.1 336 192.1 336 L256 336 L256 267 A 27 27 0 0 1 229 240 C229 212 249 205 249 185 Z" fill="url(#nibLeft)"/>
+  <path d="M263 96 C263 82 265 72 273 72 C280 72 285 78 290 86 C317 128 362 196 384 232 C391 243 391 262 380 276 L334.7 329.1 Q328.9 336 319.9 336 L256 336 L256 267 A 27 27 0 0 0 283 240 C283 212 263 205 263 185 Z" fill="url(#nibRight)"/>
+  <rect x="166" y="360" width="180" height="92" rx="42" fill="url(#base)"/>
+</svg>

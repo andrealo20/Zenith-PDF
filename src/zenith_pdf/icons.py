@@ -1,0 +1,356 @@
+"""Theme-aware icons: Phosphor (MIT licensed, bundled with qtawesome), plus a few drawn here.
+
+Phosphor 1.3 has no squiggle, tape, lasso, laser pointer, signature or equation
+glyph, so those are painted with the same thin stroke, on a 24-unit grid. So are
+the pictures of the tool menu's choices: line styles, line endings, pen types and
+note icons, drawn from the same geometry as the annotations themselves.
+"""
+
+from __future__ import annotations
+
+import math
+
+import qtawesome as qta
+from PySide6.QtCore import QPointF, QRect, QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QFont, QIcon, QIconEngine, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
+
+from .core.annotations import DASHES, ENDINGS, dash_array, line_ending, round_dash_caps
+from .core.inking import calligraphy_widths, stroke_polygons
+from .theme import themes
+
+
+def _squiggle(p: QPainter) -> None:
+    p.drawLine(QPointF(7, 4.5), QPointF(17, 4.5))
+    p.drawLine(QPointF(12, 4.5), QPointF(12, 14))
+    wave = QPainterPath(QPointF(3, 19))
+    for i in range(6):
+        x = 3 + i * 3
+        wave.quadTo(QPointF(x + 1.5, 16.5 if i % 2 == 0 else 21.5), QPointF(x + 3, 19))
+    p.drawPath(wave)
+
+
+def _tape(p: QPainter) -> None:
+    p.drawEllipse(QPointF(9, 11), 6, 6)
+    p.drawEllipse(QPointF(9, 11), 2.2, 2.2)
+    strip = QPainterPath(QPointF(9, 17))
+    strip.lineTo(QPointF(20, 17))
+    strip.lineTo(QPointF(21.5, 15.5))
+    strip.lineTo(QPointF(20, 14))
+    strip.lineTo(QPointF(21.5, 12.5))
+    strip.lineTo(QPointF(20, 11))
+    strip.lineTo(QPointF(15, 11))
+    p.drawPath(strip)
+
+
+def _lasso(p: QPainter) -> None:
+    p.drawEllipse(QRectF(3.5, 3.5, 17, 11))
+    rope = QPainterPath(QPointF(8, 13.5))
+    rope.cubicTo(QPointF(5, 17), QPointF(10, 19), QPointF(8, 21))
+    p.drawPath(rope)
+    p.drawEllipse(QPointF(8, 13.8), 1.2, 1.2)
+
+
+def _laser(p: QPainter) -> None:
+    p.drawLine(QPointF(3.5, 20.5), QPointF(13, 11))
+    p.drawLine(QPointF(5.5, 21.5), QPointF(14.5, 12.5))
+    p.save()
+    p.setBrush(p.pen().color())
+    p.drawEllipse(QPointF(17, 7), 2.2, 2.2)
+    p.restore()
+    for angle in (-90, -45, 0, 45, 135):
+        a = math.radians(angle)
+        p.drawLine(QPointF(17 + 4 * math.cos(a), 7 + 4 * math.sin(a)), QPointF(17 + 6 * math.cos(a), 7 + 6 * math.sin(a)))
+
+
+def _signature(p: QPainter) -> None:
+    curve = QPainterPath(QPointF(3, 15))
+    curve.cubicTo(QPointF(6, 3), QPointF(9, 4), QPointF(8, 12))
+    curve.cubicTo(QPointF(7.5, 17), QPointF(10.5, 9), QPointF(12.5, 12))
+    curve.cubicTo(QPointF(14, 14.5), QPointF(16, 9), QPointF(18, 11))
+    curve.lineTo(QPointF(21, 10))
+    p.drawPath(curve)
+    p.drawLine(QPointF(3, 19.5), QPointF(21, 19.5))
+
+
+def _glyph(text: str, italic: bool = False, size: float = 15):
+    def draw(p: QPainter) -> None:
+        font = QFont("Cambria Math")
+        font.setPointSizeF(size)
+        font.setItalic(italic)
+        p.setFont(font)
+        p.drawText(QRectF(0, 0, 24, 24), Qt.AlignmentFlag.AlignCenter, text)
+    return draw
+
+
+def _cleaner(p: QPainter) -> None:
+    p.drawLine(QPointF(4, 5), QPointF(14, 5))
+    p.drawLine(QPointF(9, 5), QPointF(9, 18))
+    p.drawLine(QPointF(14.5, 13.5), QPointF(20.5, 19.5))
+    p.drawLine(QPointF(20.5, 13.5), QPointF(14.5, 19.5))
+
+
+def _snapshot(p: QPainter) -> None:
+    pen = QPen(p.pen())
+    pen.setDashPattern([2.0, 1.6])
+    p.save()
+    p.setPen(pen)
+    p.drawRect(QRectF(3.5, 3.5, 13, 11))
+    p.restore()
+    p.drawEllipse(QPointF(15.5, 18.5), 2.3, 2.3)
+    p.drawEllipse(QPointF(20, 15), 2.3, 2.3)
+    p.drawLine(QPointF(17, 17), QPointF(11, 11))
+    p.drawLine(QPointF(18.3, 13.5), QPointF(11.5, 18))
+
+
+def _dash(name: str):
+    """A line in one of the DASHES, as the tool menu offers them."""
+    def draw(p: QPainter) -> None:
+        pen = QPen(p.pen())
+        pen.setWidthF(2.0)
+        pattern = dash_array(name, 2.0)
+        if pattern:
+            # Qt measures dashes in pen widths; a zero-length dash with a round cap is a dot.
+            pen.setDashPattern([max(value / 2.0, 0.001) for value in pattern])
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap if round_dash_caps(name) else Qt.PenCapStyle.FlatCap)
+        p.setPen(pen)
+        p.drawLine(QPointF(3, 12), QPointF(21, 12))
+    return draw
+
+
+def _ending(name: str, start: bool):
+    """A short line ending in `name` (one of ENDINGS): on the right, or on the left for the start of a line."""
+    def draw(p: QPainter) -> None:
+        if start:
+            p.translate(24, 0)
+            p.scale(-1, 1)
+        reverse = name.startswith("R")  # its wings reach past the end
+        tip, tail = (15.5 if reverse else 18.0, 12.0), (3.0, 12.0)
+        p.drawLine(QPointF(*tail), QPointF(*tip))
+        ending = line_ending(name, tip, tail, 1.5)
+        if ending is None:
+            return
+        p.save()
+        if ending.filled:
+            p.setBrush(p.pen().color())
+        if ending.circle is not None:
+            centre, radius = ending.circle
+            p.drawEllipse(QPointF(*centre), radius, radius)
+        elif ending.closed:
+            p.drawPolygon(QPolygonF([QPointF(*q) for q in ending.points]))
+        else:
+            p.drawPolyline(QPolygonF([QPointF(*q) for q in ending.points]))
+        p.restore()
+    return draw
+
+
+def _wave(steps: int = 24) -> list[tuple[float, float]]:
+    return [(4 + 16 * i / steps, 12 - 5 * math.sin(i / steps * 2 * math.pi)) for i in range(steps + 1)]
+
+
+def _filled_stroke(points, widths):
+    """A stroke of varying width, filled the way the pen tools fill theirs."""
+    path = QPainterPath()
+    path.setFillRule(Qt.FillRule.WindingFill)
+    for piece in stroke_polygons(points, widths):
+        path.addPolygon(QPolygonF([QPointF(*q) for q in piece]))
+        path.closeSubpath()
+
+    def draw(p: QPainter) -> None:
+        p.save()
+        p.setBrush(p.pen().color())
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawPath(path)
+        p.restore()
+    return draw
+
+
+def _pen_basic(p: QPainter) -> None:
+    curve = QPainterPath(QPointF(*_wave()[0]))
+    for point in _wave()[1:]:
+        curve.lineTo(QPointF(*point))
+    p.drawPath(curve)
+
+
+def _pen_pro():
+    points = _wave()
+    widths = [0.6 + 2.6 * math.sin(i / (len(points) - 1) * math.pi) for i in range(len(points))]
+    return _filled_stroke(points, widths)
+
+
+def _pen_calligraphy():
+    points = _wave()
+    return _filled_stroke(points, calligraphy_widths(points, 3.4, 45.0, 0.2))
+
+
+def _lock_badge(p: QPainter) -> None:
+    """A padlock, filled, to sit small on a toolbar button."""
+    p.save()
+    pen = QPen(p.pen())
+    pen.setWidthF(2.6)
+    p.setPen(pen)
+    p.drawArc(QRectF(7.5, 3.5, 9, 11), 0, 180 * 16)
+    p.drawLine(QPointF(7.5, 9), QPointF(7.5, 11))
+    p.drawLine(QPointF(16.5, 9), QPointF(16.5, 11))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(pen.color())
+    p.drawRoundedRect(QRectF(4.5, 10.5, 15, 11), 2.2, 2.2)
+    p.restore()
+
+
+def _reading(p: QPainter) -> None:
+    """Reading glasses: two round lenses, the bridge between them, and the arms."""
+    p.drawEllipse(QPointF(7, 14.5), 4, 4)
+    p.drawEllipse(QPointF(17, 14.5), 4, 4)
+    bridge = QPainterPath(QPointF(10.6, 13))
+    bridge.quadTo(QPointF(12, 11.4), QPointF(13.4, 13))
+    p.drawPath(bridge)
+    p.drawLine(QPointF(3.2, 13.4), QPointF(5, 7))
+    p.drawLine(QPointF(20.8, 13.4), QPointF(19, 7))
+
+
+def _text_highlight(p: QPainter) -> None:
+    """Letters on a band of highlight: the text highlight, told apart from the freehand highlighter's nib."""
+    colour = p.pen().color()
+    band = QColor(colour)
+    band.setAlphaF(0.45)
+    p.save()
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(band)
+    p.drawRoundedRect(QRectF(2, 12, 20, 8), 1.5, 1.5)
+    p.restore()
+    font = QFont("Segoe UI")
+    font.setPixelSize(12)
+    font.setWeight(QFont.Weight.DemiBold)
+    p.setFont(font)
+    p.setPen(colour)
+    width = p.fontMetrics().horizontalAdvance("Ab")
+    p.drawText(QPointF(12 - width / 2, 17), "Ab")
+
+
+def _note_insert(p: QPainter) -> None:
+    """The caret proofreaders write where text goes in."""
+    p.drawLine(QPointF(5, 18), QPointF(12, 7))
+    p.drawLine(QPointF(12, 7), QPointF(19, 18))
+    p.drawLine(QPointF(3.5, 20.5), QPointF(20.5, 20.5))
+
+
+CUSTOM = {
+    "z-squiggle": _squiggle,
+    "z-tape": _tape,
+    "z-lasso": _lasso,
+    "z-laser": _laser,
+    "z-signature": _signature,
+    "z-equation": _glyph("π", italic=True, size=17),
+    "z-cleaner": _cleaner,
+    "z-snapshot": _snapshot,
+    "z-pen-basic": _pen_basic,
+    "z-pen-pro": _pen_pro(),
+    "z-pen-calligraphy": _pen_calligraphy(),
+    "z-lock-badge": _lock_badge,
+    "z-note-insert": _note_insert,
+    "z-reading": _reading,
+    "z-paragraph": _glyph("¶", size=15),
+    "z-text-highlight": _text_highlight,
+}
+CUSTOM |= {f"z-dash-{name}": _dash(name) for name in DASHES}
+CUSTOM |= {f"z-end-{name}": _ending(name, start=False) for name in ENDINGS}
+CUSTOM |= {f"z-start-{name}": _ending(name, start=True) for name in ENDINGS}
+
+
+def _luminance(color: QColor) -> float:
+    def linear(c: float) -> float:
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * linear(color.redF()) + 0.7152 * linear(color.greenF()) + 0.0722 * linear(color.blueF())
+
+
+def contrast(a: QColor, b: QColor) -> float:
+    """The WCAG contrast ratio of two colours, 1 to 21."""
+    light, dark = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (light + 0.05) / (dark + 0.05)
+
+
+def readable(color, background: str, text: str, ratio: float = 3.0) -> str:
+    """`color` (RGB floats) as an icon colour, mixed towards `text` until it stands out on `background`.
+
+    A yellow highlighter turns to a deeper yellow on white. The hue stays, so copies stay
+    told apart. A black pen keeps its black on a light toolbar and takes the text colour on
+    a dark one: a grey part of the way there would look like a disabled button.
+    """
+    base = QColor.fromRgbF(*color)
+    back, towards = QColor(background), QColor(text)
+    if base.hsvSaturationF() < 0.15 and contrast(base, back) < ratio:
+        return towards.name()
+    mixed = base
+    for step in range(11):
+        share = step / 10
+        mixed = QColor.fromRgbF(base.redF() + (towards.redF() - base.redF()) * share,
+                                base.greenF() + (towards.greenF() - base.greenF()) * share,
+                                base.blueF() + (towards.blueF() - base.blueF()) * share)
+        if contrast(mixed, back) >= ratio:
+            break
+    return mixed.name()
+
+
+class _DrawnIcon(QIconEngine):
+    """An icon drawn with QPainter, coloured like the Phosphor ones in each state."""
+
+    def __init__(self, draw, color: str, on: str, disabled: str):
+        super().__init__()
+        self._draw = draw
+        self._colors = (color, on, disabled)
+
+    def paint(self, painter: QPainter, rect: QRect, mode: QIcon.Mode, state: QIcon.State) -> None:
+        color, on, disabled = self._colors
+        if mode == QIcon.Mode.Disabled:
+            color = disabled
+        elif state == QIcon.State.On:
+            color = on
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.translate(rect.topLeft())
+        painter.scale(rect.width() / 24, rect.height() / 24)
+        pen = QPen(QColor(color), 1.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        self._draw(painter)
+        painter.restore()
+
+    def pixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QPixmap:
+        pixmap = QPixmap(size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        self.paint(painter, QRect(0, 0, size.width(), size.height()), mode, state)
+        painter.end()
+        return pixmap
+
+    def scaledPixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
+        # Sharp on 125% to 200% screens: draw at device pixels, not a stretched logical pixmap.
+        pixmap = QPixmap(round(size.width() * scale), round(size.height() * scale))
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        self.paint(painter, QRect(0, 0, pixmap.width(), pixmap.height()), mode, state)
+        painter.end()
+        pixmap.setDevicePixelRatio(scale)
+        return pixmap
+
+    def clone(self) -> QIconEngine:
+        return _DrawnIcon(self._draw, *self._colors)
+
+
+def icon(name: str, color: str | None = None) -> QIcon:
+    t = themes.current
+    color = color or t.text
+    if name in CUSTOM:
+        return QIcon(_DrawnIcon(CUSTOM[name], color, t.accent, t.text_muted))
+    # qtawesome derives the hover colour from the checked one unless both are given.
+    return qta.icon(
+        name if "." in name else f"ph.{name}",
+        color=color,
+        color_active=color,
+        color_on=t.accent,
+        color_on_active=t.accent,
+        color_disabled=t.text_muted,
+    )

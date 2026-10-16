@@ -1,0 +1,87 @@
+"""In-place editing of text boxes."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+import shiboken6
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QFontMetricsF, QPen, QTextCursor, QTransform
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsRectItem, QGraphicsTextItem
+
+from ..core import textlayout
+from ..core.annotations import TEXT_ASCENT, TEXT_PADDING, FreeText, quarter_turn
+from ..theme import themes
+from .annotation_items import qcolor
+
+Z_EDITOR = 5
+
+
+class TextBoxEditor(QGraphicsTextItem):
+    """Edits a FreeText's contents with the same font and scale as the final rendering,
+    so lines break while typing exactly where they will in the saved PDF.
+
+    The editor and its frame sit in `holder`, an item turned as the box is (FreeText.rotation),
+    so the text of a box on a turned page is typed the way it is shown.
+    """
+
+    def __init__(self, box: FreeText, page: QGraphicsItem, on_finish: Callable[[str], None]):
+        self.holder = QGraphicsRectItem(page)
+        self.holder.setPen(QPen(Qt.PenStyle.NoPen))
+        self.holder.setTransform(QTransform(*quarter_turn(box.rect, box.rotation)))
+        self.holder.setZValue(Z_EDITOR)
+        super().__init__(self.holder)
+        self.box = box
+        self._on_finish = on_finish
+        self._finished = False
+        factor = box.font_size / textlayout.REFERENCE_PIXELS
+        w, _ = box.upright_size()
+
+        self.document().setDocumentMargin(0)
+        self.setFont(textlayout.reference_font())
+        self.setDefaultTextColor(qcolor(box.color))
+        self.setScale(factor)
+        self.setTextWidth((w - 2 * TEXT_PADDING) / factor)
+        ascent = QFontMetricsF(textlayout.reference_font()).ascent() / textlayout.REFERENCE_PIXELS
+        self.setPos(TEXT_PADDING, TEXT_PADDING + (TEXT_ASCENT - ascent) * box.font_size)
+        self.setPlainText(box.contents)
+        self.setZValue(Z_EDITOR)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextEditorInteraction)
+        cursor = self.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.setTextCursor(cursor)
+
+        self.frame = QGraphicsRectItem(self.holder)
+        pen = QPen(QColor(themes.current.accent), 1, Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        self.frame.setPen(pen)
+        self.frame.setZValue(Z_EDITOR)
+        self.document().contentsChanged.connect(self._fit_frame)
+        self._fit_frame()
+
+    def _fit_frame(self) -> None:
+        w, h = self.box.upright_size()
+        needed = textlayout.fitted_height(self.toPlainText(), self.box.font_size, w)
+        self.frame.setRect(QRectF(0, 0, w, max(h, needed)))
+
+    def keyPressEvent(self, event) -> None:
+        enter = event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+        if event.key() == Qt.Key.Key_Escape or (enter and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            self.finish()
+            return
+        super().keyPressEvent(event)
+
+    def focusOutEvent(self, event) -> None:
+        super().focusOutEvent(event)
+        self.finish()
+
+    def finish(self) -> None:
+        if not self._finished:
+            self._finished = True
+            self._on_finish(self.toPlainText())
+
+    def dispose(self) -> None:
+        # A page reload may have cleared the scene, and deleted both, before this runs.
+        for item in (self.frame, self, self.holder):
+            if shiboken6.isValid(item) and item.scene() is not None:
+                item.scene().removeItem(item)
