@@ -70,3 +70,11 @@ def test_a_link_opens_its_page(qt_app, tmp_path, sample_pdf):
         window.close()
         window.renderer.shutdown()
 
+
+
+def test_the_installed_program_leaves_the_taskbar_button_to_windows(monkeypatch):
+    from zenith_pdf import app
+
+    assert app.taskbar_id() == "ZenithPDF.ZenithPDF"  # from source: apart from other Python programs
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert app.taskbar_id() is None  # installed: the same button as its shortcuts and a pinned one

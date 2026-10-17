@@ -115,12 +115,22 @@ class MacEvents(QObject):
         return False
 
 
+def taskbar_id() -> str | None:
+    """The id Windows groups the taskbar button by, when Zenith PDF has to give one.
+
+    Run from source, the program is Python: an id of its own keeps its button apart from other Python programs.
+    The installed Zenith-PDF.exe gives none, so Windows goes by the program itself, as it does for the Start menu
+    and desktop shortcuts and for a button pinned to the taskbar: with an id the shortcuts don't carry, a click on
+    the pinned button opened the window under a second button beside it.
+    """
+    return None if getattr(sys, "frozen", False) else "ZenithPDF.ZenithPDF"
+
+
 def create_app(argv: list[str], settings: Settings | None = None) -> tuple[QApplication, MainWindow]:
-    if sys.platform == "win32":
-        # Group the taskbar button under our own id rather than python.exe's.
+    if sys.platform == "win32" and taskbar_id():
         import ctypes
 
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ZenithPDF.ZenithPDF")
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(taskbar_id())
 
     app = QApplication.instance() or QApplication(argv)
     app.setApplicationName("Zenith PDF")
