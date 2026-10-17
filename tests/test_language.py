@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QTextBrowser
 
 from zenith_pdf.app import create_app
 from zenith_pdf.core.i18n import LANGUAGES, LOCALES, language, set_language, source, tr, tr_in
+from zenith_pdf.core.platforms import native_keys
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui.widgets import Segmented
 
@@ -102,7 +103,7 @@ def test_a_window_in_italian(qt_app, tmp_path):
         window.open_guide("start")
         QApplication.processEvents()
         text = window._guide.findChild(QTextBrowser, "GuideText").toPlainText()
-        assert "Zenith PDF legge, annota e riorganizza" in text and "Ctrl+Z" in text
+        assert "Zenith PDF legge, annota e riorganizza" in text and native_keys("Ctrl+Z") in text
     finally:
         if getattr(window, "_guide", None) is not None:
             window._guide.close()
