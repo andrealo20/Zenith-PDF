@@ -42,6 +42,7 @@ from .instance import own_command, parse_target
 from .library import Library
 from .new_file import NewFilePanel
 from . import pdf_tools
+from . import tool_menu
 from .pdf_tools import ToolsPanel
 from .home import HomePage
 from .reading import SHORTCUT as READING_SHORTCUT
@@ -171,6 +172,7 @@ class MainWindow(QMainWindow):
         self.home.builder_requested.connect(self.open_builder)
         self.home.tools_requested.connect(self.show_tools_panel)
         self.home.tool_requested.connect(self.run_tool_from_home)
+        tool_menu.colour_picker = self.pick_colour
         self.home.compare_requested.connect(self.command_compare)
         self.home.images_requested.connect(lambda: pdf_tools.images_to_pdf(self))
         self.home.guide_requested.connect(self.open_guide)
@@ -503,6 +505,11 @@ class MainWindow(QMainWindow):
             self._settings.last_directory = str(Path(paths[0]).parent)
         for path in paths:
             self.open_file(path)
+
+    def pick_colour(self):
+        """The eyedropper of the colour menus: a colour from the open document's pages, or None."""
+        workspace = self.current_workspace()
+        return workspace.view.pick_colour() if workspace is not None else None
 
     def run_tool_from_home(self, key: str) -> None:
         """A tool picked from the home page's list. One that works on a document asks for the PDF first, opens

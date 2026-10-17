@@ -39,6 +39,8 @@ class SelectionBar(FloatingBar):
         self.count_line = separator()
         self.style_button = self._button("palette", "Style: colour, thickness, line style", self.open_style,
                                          help="sel_style")
+        self.painter = self._button("paint-brush", "Copy style: then click another annotation",
+                                    view.start_format_painter, help="sel_painter")
         self.duplicate = self._button("copy-simple", "Duplicate", view.duplicate_selected, help="sel_duplicate")
         self.arrange = self._button("stack", "Arrange", None, help="sel_arrange")
         self.arrange.setMenu(self._menu([
@@ -73,6 +75,8 @@ class SelectionBar(FloatingBar):
         self.more = self._button("dots-three", "More", None, help="sel_more")
         self._more = self._menu([
             ("sliders-horizontal", "Properties…", workspace.edit_properties),
+            ("paint-brush", "Copy style", view.copy_style),
+            ("paint-roller", "Paste style", view.paste_style),
             ("stack-simple", "Flatten", workspace.flatten_selected),
             ("books", "Add to library", workspace.add_to_library),
             ("files", "Apply to pages", workspace.apply_to_pages),
@@ -96,8 +100,8 @@ class SelectionBar(FloatingBar):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(4)
-        for widget in (self.count, self.count_line, self.style_button, self.duplicate, self.arrange, self.lock,
-                       self.more, separator(), self.delete):
+        for widget in (self.count, self.count_line, self.style_button, self.painter, self.duplicate, self.arrange,
+                       self.lock, self.more, separator(), self.delete):
             layout.addWidget(widget)
 
     def _button(self, icon_name: str, tip: str, slot, help: str | None = None) -> IconButton:

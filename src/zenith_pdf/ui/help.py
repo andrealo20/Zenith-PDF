@@ -231,6 +231,10 @@ TOPICS: dict[str, Topic] = {
     "sel_style": Topic("Style", "Colour, fill, thickness, opacity, line style and ends of the selection: the "
                        "options of the tools' menus.", "Every change applies at once, and Undo takes it back."),
     "sel_duplicate": Topic("Duplicate", "Makes a copy of the selection, just below and to the right."),
+    "sel_painter": Topic("Copy style", "Gives this annotation's look to the next one you click.",
+                         "Colour, thickness, line style, fill and font go over; where it is and what it says stay. "
+                         "Esc, or a click off any annotation, puts the brush down. Paste style, in More, gives "
+                         "the look to everything selected."),
     "sel_arrange": Topic("Arrange", "Changes which annotation is drawn on top where they overlap, and groups them.",
                          "A group is picked, moved, copied and deleted as one, until it is ungrouped."),
     "sel_flatten": Topic("Flatten", "Makes the selection part of the page. It looks the same, but nobody can move "
@@ -334,6 +338,8 @@ MENU_TIPS = {
     "Replace the text…": "Strike the selected text out, with what replaces it on a caret after it.",
     "Redact": "Mark the selected text to black out for good, when redactions are applied.",
     "Group": "Make the selection one group: picked, moved and deleted as one.",
+    "Copy style": "Keep this annotation's look, to give it to others with Paste style.",
+    "Paste style": "Give the selection the look you copied.",
     "Align": "Line the selection up along one edge, or along its middle.",
     "Distribute": "Space three or more out evenly between the first and the last.",
     "Flip": "Mirror the selection; text stays readable.",

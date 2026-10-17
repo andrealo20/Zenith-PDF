@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSlider,
+    QToolButton,
     QToolTip,
     QVBoxLayout,
     QWidget,
@@ -158,6 +159,8 @@ ALIGN_GLYPHS = {"left": ("text-align-left", "Align left"), "center": ("text-alig
                 "right": ("text-align-right", "Align right")}
 
 _memory: dict[str, object] = {"recent_colours": [], "tool_menu_sections": {}}  # when Settings has no such key
+# The eyedropper: waits for a click on the open document and gives the colour there, or None. The window sets it.
+colour_picker = None
 
 
 def scale_text(measure: tuple) -> str:
@@ -899,6 +902,7 @@ class ColourRow(Swatches):
         self.popover = PalettePopover(self.current, self.prefs, self)
         self.popover.picked.connect(self._picked)
         self.popover.dialog_requested.connect(self._dialog)
+        self.popover.dropper_requested.connect(self._dropper)
         rect = self.slot_rect(index)
         anchor = self.mapToGlobal(QPoint(round(rect.center().x()), round(rect.bottom()) + 6))
         self.popover.show_at(anchor)
@@ -908,6 +912,16 @@ class ColourRow(Swatches):
         self.current = tuple(color)
         self.update()
         self.chosen.emit(self.current)
+
+    def _dropper(self) -> None:
+        """The eyedropper: the menu steps aside, the next click on a page gives the colour there."""
+        if colour_picker is None:
+            return
+        host = self.host if self.host is not None and isValid(self.host) else None
+        with host.suspended() if host is not None else _nothing():
+            color = colour_picker()
+        if color is not None and isValid(self):
+            self._picked(color)
 
     def _dialog(self) -> None:
         start = QColor.fromRgbF(*self.current) if self.current is not None else QColor("#e5322d")
@@ -943,6 +957,7 @@ class PalettePopover(Popover):
 
     picked = Signal(object)
     dialog_requested = Signal()
+    dropper_requested = Signal()
 
     def __init__(self, current, prefs=None, parent: QWidget | None = None):
         super().__init__(parent)
@@ -979,6 +994,16 @@ class PalettePopover(Popover):
         more.setFixedHeight(32)
         more.clicked.connect(self._more)
         row.addWidget(self.hex, 1)
+        self.dropper = None
+        if colour_picker is not None:
+            self.dropper = QToolButton()
+            self.dropper.setIcon(icon("eyedropper"))
+            self.dropper.setIconSize(QSize(18, 18))
+            self.dropper.setFixedSize(32, 32)
+            self.dropper.setAutoRaise(True)
+            self.dropper.setToolTip(tr("Pick a colour from the page"))
+            self.dropper.clicked.connect(self._dropper)
+            row.addWidget(self.dropper)
         row.addWidget(more)
         layout.addLayout(row)
         self.adjustSize()
@@ -1000,6 +1025,10 @@ class PalettePopover(Popover):
     def _pick(self, color) -> None:
         self.close_menu()
         self.picked.emit(color)
+
+    def _dropper(self) -> None:
+        self.close_menu()
+        self.dropper_requested.emit()
 
     def _typed(self) -> None:
         text = self.hex.text().strip()

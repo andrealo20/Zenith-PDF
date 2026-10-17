@@ -17,7 +17,7 @@ import time
 from dataclasses import fields, replace
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QEvent, QEventLoop, QObject, QPoint, QPointF, QRect, QRectF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -69,6 +69,9 @@ from ..core.annotations import (
     union,
 )
 from ..core import arrange
+# What Copy style takes from an annotation: its look, not where it is or what it says.
+STYLE_FIELDS = ("color", "fill", "width", "opacity", "dash", "head_start", "head_end", "highlight", "border",
+                "font_size", "font", "bold", "italic", "underline", "align", "border_color", "border_width", "icon")
 from ..core.document import Document, SearchHit
 from ..core.i18n import tr
 from ..core.render import RenderPool, render_scale
@@ -276,6 +279,8 @@ class DocumentView(QGraphicsView):
         self._pen_seen = -1e9
         self.viewport().setTabletTracking(True)  # pen moves arrive while it hovers, not only while it draws
         self._editor: tuple | None = None  # (TextBoxEditor, hidden AnnotationItem or None, tool or None)
+        self.copied_style: dict = {}  # an annotation's look, as Copy style took it
+        self.painting = False  # the format painter is on: the next annotation clicked takes copied_style
         self._spent_editors: list[TextBoxEditor] = []  # finished, still to be taken off the canvas
         self._cache = TileCache(int(self._pref("tile_cache_mb")) * 2**20)
         self._mouse: QPointF | None = None  # last cursor position over the viewport
@@ -838,6 +843,13 @@ class DocumentView(QGraphicsView):
             event.accept()
             return
         left = event.button() == Qt.MouseButton.LeftButton
+        if self.painting:
+            if left:
+                self._paint_format(event.position())
+            else:
+                self.stop_format_painter()
+            event.accept()
+            return
         if left and not self._space_down and self._press_on_editor(event):
             return
         if left and not self._space_down and self._tool_key() in ("select", "hand") and \
@@ -1090,6 +1102,8 @@ class DocumentView(QGraphicsView):
         elif key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and self.selected_annotations():
             if not self.reading:  # nothing shows as selected while reading: Delete must not remove it unseen
                 self.delete_selected()
+        elif key == Qt.Key.Key_Escape and self.painting:
+            self.stop_format_painter()
         elif key == Qt.Key.Key_Escape:
             if not self.reading:  # in reading mode the window takes Esc, to leave it
                 self._escape()
@@ -1927,7 +1941,82 @@ class DocumentView(QGraphicsView):
         x, y, w, h = union(a.bounds() for a in selected if a.page == page)
         QApplication.clipboard().setImage(self.area_image(page, (x - 4, y - 4, w + 8, h + 8), 3.0))
 
-    def apply_style(self, **changes) -> bool:
+    def copy_style(self) -> bool:
+        """Keep the first selected annotation's look, to give it to others. False if nothing is selected."""
+        selected = self.selected_annotations()
+        if not selected:
+            return False
+        names = {f.name for f in fields(selected[0])}
+        self.copied_style = {name: getattr(selected[0], name) for name in STYLE_FIELDS if name in names}
+        return True
+
+    def paste_style(self) -> bool:
+        """Give the selection the look Copy style kept: each annotation takes the parts it has."""
+        return bool(self.copied_style) and self.apply_style(label="Paste style", **self.copied_style)
+
+    def start_format_painter(self) -> None:
+        """The selected annotation's look goes to the next annotation clicked. Esc, or a click off any
+        annotation, puts the brush down."""
+        if self.copy_style() and not self.document.read_only:
+            self.painting = True
+            self.viewport().setCursor(Qt.CursorShape.CrossCursor)
+
+    def stop_format_painter(self) -> None:
+        if self.painting:
+            self.painting = False
+            self._set_cursor()
+
+    def _paint_format(self, view_pos: QPointF) -> None:
+        item = self._annotation_item_at(view_pos)
+        self.stop_format_painter()
+        if item is None:
+            return
+        group = item.annotation.group
+        self.select([a for a in self.store.all() if a.id == item.annotation.id or (group and a.group == group)])
+        self.apply_style(label="Paste style", **self.copied_style)
+
+    def pick_colour(self):
+        """Wait for a click on a page and give the colour there, as shown, annotations and all: an eyedropper.
+        None if Esc is pressed or the click misses the pages."""
+        loop = QEventLoop()
+        picked: list = [None]
+        view = self
+
+        class Watch(QObject):
+            def eventFilter(self, watched, event) -> bool:
+                if event.type() == QEvent.Type.MouseButtonPress:
+                    page, pos = view._page_at(event.position())
+                    if page is not None and event.button() == Qt.MouseButton.LeftButton:
+                        picked[0] = view.colour_at(page.index, (pos.x(), pos.y()))
+                    loop.quit()
+                    return True
+                if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
+                    loop.quit()
+                    return True
+                return event.type() in (QEvent.Type.MouseButtonRelease, QEvent.Type.MouseButtonDblClick)
+
+        watch = Watch(self)
+        self.viewport().installEventFilter(watch)
+        self.installEventFilter(watch)
+        self.viewport().setCursor(Qt.CursorShape.CrossCursor)
+        self.setFocus()
+        try:
+            loop.exec()
+        finally:
+            self.viewport().removeEventFilter(watch)
+            self.removeEventFilter(watch)
+            watch.deleteLater()
+            self._set_cursor()
+        return picked[0]
+
+    def colour_at(self, page: int, point) -> tuple[float, float, float]:
+        """The colour of one spot of a page, as it shows: page and annotations."""
+        x, y = point
+        image = self.area_image(page, (x - 0.5, y - 0.5, 1.0, 1.0), 4.0)
+        color = image.pixelColor(image.width() // 2, image.height() // 2)
+        return round(color.redF(), 4), round(color.greenF(), 4), round(color.blueF(), 4)
+
+    def apply_style(self, label: str = "Change style", **changes) -> bool:
         """Apply style changes to the selected annotations. False if nothing was selected."""
         old, new = [], []
         for annotation in self.selected_annotations():
@@ -1953,7 +2042,7 @@ class DocumentView(QGraphicsView):
                 old.append(annotation)
                 new.append(updated)
         if new:
-            self.undo_stack.push(ChangeAnnotations(self.store, old, new, "Change style"))
+            self.undo_stack.push(ChangeAnnotations(self.store, old, new, label))
         return bool(self.selected_annotations())
 
     def reveal_annotation(self, annotation_id: str) -> None:
