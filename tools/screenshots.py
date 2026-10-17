@@ -24,6 +24,7 @@ os.environ["QT_QPA_PLATFORM"] = f"offscreen:configfile={_SCREEN.name}"
 os.environ.setdefault("QT_SCALE_FACTOR", "1.25")  # sharper pictures than 100%
 os.environ.setdefault("ZENITH_RENDER_PROCESSES", "0")
 os.environ.setdefault("QT_QPA_FONTDIR", "C:/Windows/Fonts")
+os.environ.setdefault("ZENITH_LANGUAGE", "en")  # the README is in English, whatever the system speaks
 os.environ["ZENITH_CACHE_DIR"] = tempfile.mkdtemp(prefix="zenith-shots-cache-")
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
@@ -39,8 +40,13 @@ from zenith_pdf.app import create_app  # noqa: E402
 from zenith_pdf.core import audio  # noqa: E402
 from zenith_pdf.core.annotations import (Attachment, FreeText, Ink, Line, Measurement, Note, Shape,  # noqa: E402
                                          Tape, TextMarkup)
+from zenith_pdf.core.document import Document  # noqa: E402
+from zenith_pdf.core.i18n import set_language  # noqa: E402
 from zenith_pdf.settings import Settings  # noqa: E402
 from zenith_pdf.ui import writing_dialogs  # noqa: E402
+from zenith_pdf.ui.compare import CompareWindow  # noqa: E402
+from zenith_pdf.ui.flashcards import FlashcardsDialog, StudyDialog  # noqa: E402
+from zenith_pdf.ui.settings_page import SettingsWindow  # noqa: E402
 
 W, H = 595.0, 842.0  # A4 in points
 LEFT, RIGHT = 72.0, 72.0
@@ -708,6 +714,51 @@ def main() -> None:
         settle(400)
         save(to_pil(settings_window.grab()), out, f"settings-{theme}.png", dark)
         settings_window.hide()
+
+    settings.theme = "dark"
+    settle(300)
+    window._show_tab(window.workspaces.index(workspace))
+    show_page(0, 1.0)
+    marks = writing_dialogs.marks_of(view)
+    texts = {page: view.document.page_text(page) for page in {mark.page for mark in marks}}
+    choose = FlashcardsDialog(window, marks, texts, lecture.stem)
+    study = StudyDialog(choose.cards, window)
+    choose.deleteLater()
+    study.show()
+    settle(400)
+    save(dimmed(to_pil(window.grab()), to_pil(study.grab())), out, "flashcards.png", True)
+    study.close()
+    study.deleteLater()
+
+    old_report, new_report = work / "Lab report v1.pdf", work / "Lab report v2.pdf"
+    make_simple(old_report, "Lab report: inverter efficiency", others[1][2], 2, QColor(22, 163, 74))
+    make_simple(new_report, "Lab report: inverter efficiency",
+                [others[1][2][0], others[1][2][1].replace("two power analysers", "a calibrated power analyser"),
+                 "Result: the efficiency peaks at 96.1% near 40% load and falls to 89% at 10%.",
+                 "The fan was off for every measurement."], 2, QColor(22, 163, 74))
+    comparing = CompareWindow(Document(old_report), Document(new_report))
+    comparing.resize(1440, 880)
+    comparing.show()
+    for _ in range(300):
+        settle(20)
+        if comparing.changes:
+            break
+    comparing.step(1)
+    settle(800)
+    save(to_pil(comparing.grab()), out, "compare.png", True)
+    comparing.close()
+
+    settings.set("language", "it")
+    set_language("it")  # a window made now speaks Italian
+    italian = SettingsWindow(settings, window.tool_settings, window)
+    italian.resize(1100, 760)
+    italian.show()
+    italian.show_category("view")
+    settle(400)
+    save(to_pil(italian.grab()), out, "settings-italian.png", True)
+    italian.close()
+    set_language("en")
+    settings.set("language", "auto")
 
     for index in reversed(range(len(window.workspaces))):
         window.close_tab(index, confirm=False)

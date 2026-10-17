@@ -5,8 +5,8 @@
 # Zenith PDF
 
 **Read, mark up and study PDF documents on Windows, macOS and Linux.**<br>
-Thirty-five markup tools with a menu each, page management, PDF tools, text recognition, voice notes,<br>
-and an assistant that understands six languages. Everything runs on your computer.
+Thirty-five markup tools with a menu each, page management, PDF tools, forms, flashcards, reading aloud,<br>
+and an assistant, in English, Italian, French, Spanish, German or Portuguese. Everything runs on your computer.
 
 Completely free and open source, with no account, no ads and no paid version.<br>
 In continuous development: new versions come out often.
@@ -23,12 +23,13 @@ In continuous development: new versions come out often.
 
 [![Build](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml/badge.svg)](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml)
 ![Windows, macOS, Linux](https://img.shields.io/badge/runs_on-Windows%20%7C%20macOS%20%7C%20Linux-555?style=flat-square)
-![Version 0.4.0](https://img.shields.io/badge/version-0.4.0-2E8BFF?style=flat-square)
+![Version 0.5.0](https://img.shields.io/badge/version-0.5.0-2E8BFF?style=flat-square)
 ![Free and open source](https://img.shields.io/badge/free-open_source-2EA44F?style=flat-square)
 ![In continuous development](https://img.shields.io/badge/development-active-2EA44F?style=flat-square)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-487%20passing-2EA44F?style=flat-square&logo=pytest&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-538%20passing-2EA44F?style=flat-square&logo=pytest&logoColor=white)
 ![Works offline](https://img.shields.io/badge/works-offline-6E40C9?style=flat-square)
+![Six languages](https://img.shields.io/badge/languages-EN%20%7C%20IT%20%7C%20FR%20%7C%20ES%20%7C%20DE%20%7C%20PT-E3A008?style=flat-square)
 
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Qt 6 with PySide6](https://img.shields.io/badge/Qt%206-PySide6-41CD52?style=flat-square&logo=qt&logoColor=white)
@@ -126,6 +127,38 @@ bars, the panels and the tabs away, and brings them back as they were.
 <img src="docs/images/page-manager.png" alt="The page manager" width="100%">
 
 <img src="docs/images/reading-mode.png" alt="Reading mode, with tape over the answers and a voice note" width="100%">
+
+### In your language
+
+Menus, settings, help and the whole guide in English, Italian, French, Spanish, German or Portuguese. Zenith
+PDF speaks the system's language when it knows it; Settings > View & Layout picks another one.
+
+<img src="docs/images/settings-italian.png" alt="Settings in Italian, with the language chosen in View and Layout" width="100%">
+
+### Flashcards, and two versions side by side
+
+The highlights of a lecture become flashcards: the comment asks and the marked words answer, or the words go
+missing from their sentence. Study them here, or save them for Anki. Compare with another version opens two
+PDFs side by side, with what was added, removed or changed marked on both and listed beside them.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/flashcards.png" alt="A flashcard made from a highlight, with its answer hidden" width="100%"></td>
+    <td width="50%"><img src="docs/images/compare.png" alt="Two versions of a lab report side by side, the changes marked on both" width="100%"></td>
+  </tr>
+</table>
+
+### Also new in 0.5
+
+- A pen that feels the pressure on a Surface or a Wacom tablet, draws nothing under the hand resting on the
+  screen, and rubs out with its button or its other end.
+- Glass that turns light over a bright page and dark over a dark one, whatever the theme.
+- The home page searches inside every PDF you opened, offline, and opens the one you pick at the right page.
+- PDF forms: text fields, check boxes, radio buttons and lists, filled in, saved and undone like any change.
+- Study notes go straight into an Obsidian vault, each page a link that opens the PDF there.
+- Read aloud, with the system's voices, sentence by sentence.
+- Icons in colour by what they do.
+- A card when a new version is out, an install that can happen by itself, and a short tour of what changed.
 
 ## Download and install
 
@@ -288,7 +321,8 @@ every change, and publishes them with each new version.
 - Floating bars of frosted glass that blur the pages scrolling under them,
   with their colours lifted; the tint rises only where the page under a bar
   needs it for text to read at 4.5:1 in the Clear glass, 7:1 in the Balanced.
-  Clear, Balanced or Solid in the settings; menus and panels are solid
+  Clear, Balanced or Solid in the settings; menus and panels are solid. The
+  glass can also follow the page: light over a bright page, dark over a dark one
 - Reading mode (Ctrl+H): only the pages, with the bars, the side panel and the
   tabs out of the way. Scrolling, zoom, links, Back and the page keys work as
   always; Esc brings everything back as it was. It can also fill the screen
@@ -302,6 +336,25 @@ every change, and publishes them with each new version.
 - Single, two-page and book layouts; normal, dark and sepia page colours
 - Password-protected documents (encryption is kept when saving)
 - Dark and light themes
+- Menus, settings, help and the guide in English, Italian, French, Spanish,
+  German or Portuguese: the system's language, or the one picked in the settings
+- Pen pressure from a Surface pen or a Wacom tablet, with the resting hand
+  ignored while the pen is near and the pen's eraser rubbing out
+- Search inside every PDF opened so far, from the home page, through an index
+  kept on the computer; a result opens its file at its page
+- PDF forms filled in: text fields, check boxes, radio buttons, lists
+- Flashcards from highlights, studied in the app or saved for Anki
+- Study notes sent to an Obsidian vault, with links that open the PDF at the
+  page (`zenith-pdf://open?file=...&page=...`)
+- Read aloud with the system's voices, a sentence at a time, with pause, back,
+  forward, speed and voice
+- Compare two versions of a PDF side by side, word by word, the changes lit
+  on both and listed
+- Updates: a daily look at the latest release on GitHub, a card when there is
+  a new one, and, if chosen, a download checked against the release's SHA-256
+  fingerprints that installs when Zenith PDF closes. After each update a short
+  tour shows what changed
+- One copy at a time: opening a PDF while Zenith PDF runs adds a tab to it
 
 ## Keyboard shortcuts
 
@@ -353,7 +406,12 @@ On a Mac, Ctrl is ⌘ and Alt is ⌥, and three keys move because macOS keeps th
 | Voice notes | waveIn and MCI from winmm on Windows, through ctypes; Qt Multimedia on macOS and Linux |
 | Camera | the Windows Camera app; on macOS and Linux a live view through Qt Multimedia |
 | Assistant | its own search over a vocabulary in six languages: no language model, nothing sent anywhere |
-| Tests | pytest on Qt's offscreen platform: 487 tests, run on Windows, macOS and Linux |
+| Languages | its own catalogue: every text of the app keyed by its English, one JSON file per language |
+| Reading aloud | Qt TextToSpeech, with the system's voices |
+| Search in every PDF | SQLite's full-text index (FTS5), kept on the computer |
+| Comparing versions | the words of both versions, lined up with Python's difflib |
+| Updates | GitHub's releases API; each download checked against the release's SHA256SUMS |
+| Tests | pytest on Qt's offscreen platform: 538 tests, run on Windows, macOS and Linux |
 | Downloads | PyInstaller, then an NSIS installer, a .dmg or an AppImage (`tools/build.py`), built by GitHub Actions |
 
 ```
@@ -365,11 +423,13 @@ src/zenith_pdf/
   ui/         main window and its windows, page canvas, tools, their menus
               and the tool chooser, side panels, home, settings, guide,
               assistant, tips, audio recorder
+  locales/    the texts of the app in Italian, French, Spanish, German and
+              Portuguese, and the catalogue of the English ones
 tests/        pytest suite; the UI tests run on Qt's offscreen platform
 tools/        build.py makes the download of the system it runs on;
               screenshots.py the pictures of this README; make_icon.py the
               icon; bench_zoom.py times zooming; snapshot.py renders the
-              window to a PNG
+              window to a PNG; i18n.py gathers the texts to translate
 packaging/    the Windows installer script and the Linux desktop entry
 .github/      the workflow that tests and builds on the three systems
 docs/images/  the pictures of this README

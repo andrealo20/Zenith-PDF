@@ -55,6 +55,8 @@ RELEASES = (
                   "own. After each update this tour shows what changed.", "arrow-circle-up", "setting:help"),
     ), (
         "Opening a PDF while Zenith PDF runs adds it to the open window instead of starting a second copy.",
+        "Icons in colour by what they do, with a touch of depth, as in Acrobat's list of tools.",
+        "A tool that is not locked goes back to Select after one use, with what it made selected.",
         "Smaller downloads for macOS and Linux.",
     )),
     Release("0.4.0", (
