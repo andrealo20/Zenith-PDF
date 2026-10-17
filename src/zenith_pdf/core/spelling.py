@@ -18,8 +18,12 @@ import sys
 from ctypes import POINTER, byref, c_int, c_ulong, c_void_p, c_wchar_p
 from dataclasses import dataclass
 
-NAMES = {"en": "English", "it": "Italian", "fr": "French", "es": "Spanish", "de": "German", "pt": "Portuguese"}
-PREFERRED = {"en": "en-US", "it": "it-IT", "fr": "fr-FR", "es": "es-ES", "de": "de-DE", "pt": "pt-PT"}
+NAMES = {"en": "English", "it": "Italian", "fr": "French", "es": "Spanish", "de": "German", "pt": "Portuguese",
+         "ru": "Russian", "uk": "Ukrainian", "pl": "Polish", "cs": "Czech", "nl": "Dutch", "tr": "Turkish",
+         "zh": "Chinese", "ja": "Japanese", "ko": "Korean"}
+PREFERRED = {"en": "en-US", "it": "it-IT", "fr": "fr-FR", "es": "es-ES", "de": "de-DE", "pt": "pt-PT", "ru": "ru-RU",
+             "uk": "uk-UA", "pl": "pl-PL", "cs": "cs-CZ", "nl": "nl-NL", "tr": "tr-TR", "zh": "zh-CN", "ja": "ja-JP",
+             "ko": "ko-KR"}
 SUGGESTIONS = 5  # alternatives offered for a word
 ACTIONS = {1: "suggest", 2: "replace", 3: "delete"}  # CORRECTIVE_ACTION; 0 (none) never comes as an error
 WORD = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")  # letters, with apostrophes inside: l'anno, don't

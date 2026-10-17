@@ -1,8 +1,10 @@
 """Writing helpers that need no language model: which language a text is in, small fixes to spacing,
 punctuation and capitals, the sentences that carry a text, and study notes from a document's highlights.
 
-Everything here is plain Python over the text, in English, Italian, French, Spanish,
-German and Portuguese. Spelling itself comes from Windows (core/spelling.py).
+Everything here is plain Python over the text, in English, Italian, French, Spanish, German, Portuguese,
+Russian, Ukrainian, Polish, Czech, Dutch and Turkish, and in Chinese, Japanese and Korean, whose words are
+read two characters at a time as they have no spaces between them. Spelling itself comes from Windows
+(core/spelling.py).
 """
 
 from __future__ import annotations
@@ -12,7 +14,12 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 
-LANGUAGES = ("en", "it", "fr", "es", "de", "pt")
+LANGUAGES = ("en", "it", "fr", "es", "de", "pt", "ru", "uk", "pl", "cs", "nl", "tr", "zh", "ja", "ko")
+CJK_LANGUAGES = ("zh", "ja", "ko")
+# Chinese characters, Japanese kana and Korean hangul: scripts written without spaces between words.
+CJK = re.compile(r"[\u1100-\u11ff\u3040-\u30ff\u3130-\u318f\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff]")
+KANA = re.compile(r"[\u3040-\u30ff]")
+HANGUL = re.compile(r"[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]")
 
 STOPWORDS: dict[str, frozenset[str]] = {
     "en": frozenset("""a about above after again against all also am an and any are as at be because been before being
@@ -39,6 +46,30 @@ STOPWORDS: dict[str, frozenset[str]] = {
     "pt": frozenset("""a ao aos as à às com como da das de do dos e é ela elas ele eles em entre era essa esse está
         estão eu foi há isso isto já mais mas me muito na nas não no nos o os ou para pela pelo por que quem se
         sem ser seu seus sua suas também tem um uma umas uns você""".split()),
+    "ru": frozenset("""а без более бы был была были было быть в вам вас весь во вот все всего всех вы где да даже
+        для до его ее если есть еще же за здесь и из или им их к как ко когда кто ли либо мне может мы на над
+        нам нас не него нее нет ни них но ну о об однако он она они оно от очень по под при с со так также такой
+        там те тем то того тоже той только том ты у уже хотя чего чей чем что чтобы чье эта эти это я""".split()),
+    "uk": frozenset("""а або аж але без би був була були було бути в вам вас ви від він вона вони воно все всі де
+        для до є же з за звідки и із інший її їх й к коли котрий ми мене мені на над нам нас не неї нема ні ніж
+        ну о об один ось під після по при про та так також там те тим то тобі того тоді той тому ти у уже хоча
+        це цей ці цього чи що щоб як який яка які я""".split()),
+    "pl": frozenset("""a aby ale bardzo bez był była było były być ci co czy dla do gdy gdzie go i ich im jak
+        jakie jako je jego jej jest jestem już każdy kiedy kto która które który lub ma mi mnie może można na nad
+        nam nas nawet nie nich nim no o od on ona one oni ono oraz po pod przed przez przy się są ta tak także tam
+        te tego tej ten to tu tylko tym w we wszystko z za ze że""".split()),
+    "cs": frozenset("""a aby ale ani až bez by byl byla bylo byli být co což či do i jak jako je jeho jej její
+        jejich jen jenž ještě již jsem jsme jsou jste k kde kdo když ke která které který mezi mi mně mít my na
+        nad nás ne nebo než ni nic o od on ona oni ono pak po pod podle pokud pro proto protože před při s se si
+        své svůj ta tak také tam te ten tento tím to toho tu ty u už v ve více všechno z za ze že""".split()),
+    "nl": frozenset("""aan al als bij dan dat de den der deze die dit doch door dus een en er ge geen had heb hebben
+        heeft hem het hier hij hoe hun ik in is ja je kan kon maar me meer men met mij mijn na naar niet niets nog
+        nu of om omdat ons ook op over te tegen toch tot u uit van veel voor want waren was wat we wel werd wie wij
+        worden wordt zal ze zei zich zij zijn zo zonder zou""".split()),
+    "tr": frozenset("""acaba ama ancak aslında az bazı belki ben beni benim bile bir biraz birçok birkaç biz bu
+        buna bunda bundan bunu bunun burada çok çünkü da daha de değil diye en gibi hem hep hepsi her hiç için ile
+        ise kadar ki kim mi mı mu mü nasıl ne neden nerede niçin o olan olarak olduğu ona onlar onu onun sen siz
+        şey şu tüm ve veya ya yani""".split()),
 }
 ALL_STOPWORDS = frozenset().union(*STOPWORDS.values())
 
@@ -48,17 +79,37 @@ ABBREVIATIONS = frozenset("""e.g i.e etc fig figs eq eqs no nr vs cf al approx c
     sec ch vol pag pp p ad es ecc cfr art n p.es""".split())
 
 
+def split_cjk(word: str) -> list[str]:
+    """A word of Chinese, Japanese or Korean as the overlapping pairs of characters that stand for its words;
+    the rest of it, Latin letters say, as they are."""
+    out = []
+    for run in re.findall(f"{CJK.pattern}+|[^{CJK.pattern[1:-1]}]+", word):
+        if CJK.match(run):
+            out += [run] if len(run) == 1 else [run[i:i + 2] for i in range(len(run) - 1)]
+        else:
+            out.append(run)
+    return out
+
+
 def words(text: str) -> list[str]:
-    return [w.lower() for w in WORD.findall(text)]
+    found = [w.lower() for w in WORD.findall(text)]
+    return [part for w in found for part in (split_cjk(w) if CJK.search(w) else [w])]
 
 
 def detect_language(text: str, default: str | None = None) -> str | None:
-    """The language most of the text's little words belong to, or `default` when it can't tell."""
+    """The language most of the text's little words belong to, or `default` when it can't tell. Chinese,
+    Japanese and Korean go by their scripts."""
+    letters = [c for c in text if c.isalpha()]
+    cjk = sum(1 for c in letters if CJK.match(c))
+    if letters and cjk / len(letters) > 0.3:
+        if sum(1 for c in letters if HANGUL.match(c)) > cjk * 0.3:
+            return "ko"
+        return "ja" if sum(1 for c in letters if KANA.match(c)) > cjk * 0.1 else "zh"
     found = words(text)
     if not found:
         return default
-    counts = {code: sum(1 for w in found if w in STOPWORDS[code]) for code in LANGUAGES}
-    best = max(LANGUAGES, key=lambda code: (counts[code], code == default))
+    counts = {code: sum(1 for w in found if w in STOPWORDS[code]) for code in STOPWORDS}
+    best = max(STOPWORDS, key=lambda code: (counts[code], code == default))
     if counts[best] == 0 or (len(found) > 6 and counts[best] < 2):
         return default
     return best
@@ -85,6 +136,11 @@ def tidy(text: str, language: str | None = None) -> list[Fix]:
     fixes: list[Fix] = []
     for match in re.finditer(r"(?<=\S)[ \t]{2,}(?=\S)", text):
         fixes.append(Fix(match.start(), match.end(), " ", "Extra space"))
+    if language in CJK_LANGUAGES or detect_language(text) in CJK_LANGUAGES:
+        # No spaces round punctuation, and no capitals: only the spaces left at the end of a line.
+        fixes += [Fix(m.start(), m.end(), "", "Space at the end of a line")
+                  for m in re.finditer(r"[ \t]+(?=\n|$)", text) if m.start() > 0]
+        return _without_overlaps(fixes)
     before = r"[ \t]+([,.])" if language == "fr" else r"[ \t]+([,.;:!?])"
     for match in re.finditer(before, text):
         if match.start() > 0 and text[match.start() - 1] not in " \t\n" and not _starts_number(text, match.end()):
@@ -108,7 +164,8 @@ def tidy(text: str, language: str | None = None) -> list[Fix]:
         for start in _sentence_starts(text):
             word = WORD.match(text, start)
             if word is not None and len(word.group()) >= 3 and word.group().islower():
-                fixes.append(Fix(start, start + 1, text[start].upper(), "Capital letter"))
+                capital = "İ" if language == "tr" and text[start] == "i" else text[start].upper()  # Turkish dotted i
+                fixes.append(Fix(start, start + 1, capital, "Capital letter"))
     return _without_overlaps(fixes)
 
 
@@ -163,13 +220,17 @@ def apply_fixes(text: str, fixes) -> str:
 
 
 def clean_pdf_text(text: str) -> str:
-    """Text as a PDF hands it out, as running prose: words split at the end of a line joined, lines run on."""
+    """Text as a PDF hands it out, as running prose: words split at the end of a line joined, lines run on.
+    Chinese and Japanese lines run on with no space, as they are written."""
     text = re.sub(r"(?<=[^\W\d_])-\s*\n\s*(?=[a-zà-ÿ])", "", text)
+    text = re.sub(f"(?<={CJK.pattern})[ \\t]*\\n\\s*(?={CJK.pattern})", lambda m: "" if not HANGUL.match(
+        m.string[m.start() - 1]) else " ", text)
     text = re.sub(r"\s*\n\s*", " ", text)
     return re.sub(r"[ \t ]+", " ", text).strip()
 
 
-SENTENCE_END = re.compile(r"[.!?…]+[\"'”»)]?\s+(?=[\"'“«(]?[A-ZÀ-Ý0-9])")
+# The end of a sentence: . ! ? and a space before a capital or a number, or a full-width 。！？ with no space.
+SENTENCE_END = re.compile(r"[.!?…]+[\"'”»)]?\s+|[。！？]+[」』”）)]*\s*")
 
 
 def sentences(text: str) -> list[str]:
@@ -183,7 +244,13 @@ def sentence_spans(text: str) -> list[tuple[int, int]]:
     it is, line breaks and all, so the positions are those of the original (a page's characters)."""
     found, start = [], 0
     for match in SENTENCE_END.finditer(text):
-        if text[match.start()] == "." and _abbreviation_before(text, match.start()):
+        if text[match.start()] in ".!?…":
+            following = text[match.end():].lstrip("\"'“«(")[:1]
+            if not following or not (following.isupper() or following.isdigit() or CJK.match(following)):
+                continue  # "e.g. this": no capital after it, no new sentence; Cyrillic and Polish capitals count
+            if text[match.start()] == "." and _abbreviation_before(text, match.start()):
+                continue
+        elif match.end() >= len(text):
             continue
         found.append((start, match.end()))
         start = match.end()
@@ -207,7 +274,7 @@ def key_sentences(text: str, count: int | None = None, language: str | None = No
         return all_sentences
     language = language or detect_language(text, "en")
     stop = STOPWORDS.get(language, frozenset()) | ALL_STOPWORDS
-    content = [[w for w in words(s) if len(w) > 2 and w not in stop] for s in all_sentences]
+    content = [[w for w in words(s) if (len(w) > 2 or CJK.match(w)) and w not in stop] for s in all_sentences]
     frequency = Counter(w for sentence in content for w in set(sentence))
     if not frequency:
         return all_sentences[: count or 2]
@@ -218,7 +285,7 @@ def key_sentences(text: str, count: int | None = None, language: str | None = No
     scores = []
     for index, (sentence, terms) in enumerate(zip(all_sentences, content)):
         length = len(words(sentence))
-        if not terms or length < 4:
+        if not terms or length < (3 if CJK.search(sentence) else 4):
             scores.append(0.0)
             continue
         weight = sum(frequency[w] / top for w in set(terms)) / math.sqrt(len(terms))

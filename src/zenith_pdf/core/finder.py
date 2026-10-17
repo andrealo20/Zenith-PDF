@@ -14,7 +14,7 @@ import unicodedata
 from dataclasses import dataclass
 
 from .lexicon import FILLER, SYNONYMS
-from .writing import ALL_STOPWORDS
+from .writing import ALL_STOPWORDS, CJK, split_cjk
 
 FIELDS = (("title", 3.0), ("keywords", 2.0), ("subtitle", 1.2), ("text", 1.0))
 TOP_FIELD = 3.0
@@ -31,14 +31,20 @@ THRESHOLD = 0.08
 
 
 def normalize(text: str) -> str:
-    """Lower case, without accents, with only letters, digits and spaces."""
-    text = unicodedata.normalize("NFKD", text.lower())
-    text = "".join(c for c in text if not unicodedata.combining(c))
-    return "".join(c if c.isalnum() else " " for c in text)
+    """Lower case, without accents, with only letters, digits and spaces. Chinese, Japanese and Korean letters
+    stay whole: taking them apart would turn a Korean syllable into its letters."""
+    out = []
+    for char in text.lower():
+        if CJK.match(char):
+            out.append(char)
+        else:
+            out.append("".join(c for c in unicodedata.normalize("NFKD", char) if not unicodedata.combining(c)))
+    return "".join(c if c.isalnum() else " " for c in "".join(out))
 
 
 def tokens(text: str) -> list[str]:
-    return normalize(text).split()
+    """The words of `text`; a run of Chinese, Japanese or Korean as its overlapping pairs of characters."""
+    return [part for word in normalize(text).split() for part in (split_cjk(word) if CJK.search(word) else [word])]
 
 
 def distance(a: str, b: str, limit: int = 2) -> int:

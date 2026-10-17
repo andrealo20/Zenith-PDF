@@ -20,7 +20,9 @@ from ..theme import themes
 from .widgets import FloatingBar, IconButton, separator
 
 SPEEDS = (0.75, 1.0, 1.25, 1.5, 2.0)  # what the speed menu offers, times the voice's own pace
-LANGUAGE_LOCALES = {"en": "en_US", "it": "it_IT", "fr": "fr_FR", "es": "es_ES", "de": "de_DE", "pt": "pt_PT"}
+LANGUAGE_LOCALES = {"en": "en_US", "it": "it_IT", "fr": "fr_FR", "es": "es_ES", "de": "de_DE", "pt": "pt_PT",
+                    "ru": "ru_RU", "uk": "uk_UA", "pl": "pl_PL", "cs": "cs_CZ", "nl": "nl_NL", "tr": "tr_TR",
+                    "zh": "zh_CN", "ja": "ja_JP", "ko": "ko_KR"}
 
 
 def available() -> bool:
