@@ -17,16 +17,18 @@ import time
 from dataclasses import fields, replace
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
     QCursor,
     QDesktopServices,
     QImage,
+    QInputDevice,
     QPainter,
     QPainterPath,
     QPixmap,
+    QPointingDevice,
     QTransform,
     QUndoStack,
 )
@@ -95,6 +97,9 @@ FOLLOWUP_MS = 30  # quiet time after results before rendering ahead of the user
 VIEW_ONLY_TOOLS = ("select", "hand", "lasso", "laser", "snapshot")  # they change nothing: on for view-only files
 Z_STEP = 1e-4  # z-value between annotations, in drawing order
 LANDING = 48  # pixels below the toolbar band where the spot a link or bookmark goes to lands
+PEN_FRESH = 0.25  # seconds a pen's pressure counts after its last event: then the mouse is drawing
+PALM_SECONDS = 1.5  # touches this long after the pen was near are a resting hand
+PEN_ERASES = {"pen", "marker", "highlight", "eraser"}  # tools the pen's eraser takes over while it is on
 HOLD_MS = 600  # how long hold() keeps a point in place: a window going full screen settles within it
 # Attachments that run as programs when opened, or carry macros: someone else's PDF could carry one, so opening
 # asks first, with a warning.
@@ -254,6 +259,12 @@ class DocumentView(QGraphicsView):
         self._pan_from: QPoint | None = None
         self._space_down = False
         self._text_selection = None  # (page, rects, text, preview item)
+        # A pen on a tablet or a Surface: its pressure, whether its eraser end or button is on, and when it was
+        # last near the screen, for telling a resting hand from a mouse (see viewportEvent).
+        self._pen_pressure: float | None = None
+        self._pen_erases = False
+        self._pen_seen = -1e9
+        self.viewport().setTabletTracking(True)  # pen moves arrive while it hovers, not only while it draws
         self._editor: tuple | None = None  # (TextBoxEditor, hidden AnnotationItem or None, tool or None)
         self._spent_editors: list[TextBoxEditor] = []  # finished, still to be taken off the canvas
         self._cache = TileCache(int(self._pref("tile_cache_mb")) * 2**20)
@@ -763,7 +774,48 @@ class DocumentView(QGraphicsView):
                 return item
         return None
 
+    # Pens -----------------------------------------------------------------------------------
+
+    def viewportEvent(self, event) -> bool:
+        kind = event.type()
+        if kind in (QEvent.Type.TabletPress, QEvent.Type.TabletMove, QEvent.Type.TabletRelease):
+            self._note_pen(event)
+            event.ignore()  # left to Qt, which turns it into the mouse events the tools follow
+            return False
+        return super().viewportEvent(event)
+
+    def _note_pen(self, event) -> None:
+        """Keep what a pen event says: its pressure, its eraser, that a pen is near."""
+        self._pen_seen = time.monotonic()
+        kind = event.type()
+        device = event.pointingDevice()
+        has_pressure = device is not None and bool(device.capabilities() & QInputDevice.Capability.Pressure)
+        if kind == QEvent.Type.TabletPress:
+            eraser = device is not None and device.pointerType() == QPointingDevice.PointerType.Eraser
+            barrel = bool(event.buttons() & (Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton))
+            self._pen_erases = eraser or barrel
+        if kind == QEvent.Type.TabletRelease:
+            self._pen_erases = False
+            self._pen_pressure = None
+        elif has_pressure and self._pref("pen_pressure") and (kind == QEvent.Type.TabletPress or event.buttons()):
+            self._pen_pressure = event.pressure()  # only while it touches: hovering, it presses nothing
+
+    def pen_pressure(self) -> float | None:
+        """The pressure of the pen drawing now (0 to 1), or None when a mouse or a finger draws."""
+        if self._pen_pressure is None or time.monotonic() - self._pen_seen > PEN_FRESH:
+            return None
+        return self._pen_pressure
+
+    def _resting_hand(self, event) -> bool:
+        """A touch while a pen is near or was just used: a hand resting on the screen, which draws nothing."""
+        device = event.pointingDevice()
+        touch = device is not None and device.type() == QInputDevice.DeviceType.TouchScreen
+        return touch and time.monotonic() - self._pen_seen < PALM_SECONDS
+
     def mousePressEvent(self, event) -> None:
+        if self._resting_hand(event):
+            event.accept()
+            return
         self._leave_link()
         self.release_hold()
         self._followed = False
@@ -793,6 +845,8 @@ class DocumentView(QGraphicsView):
         tool = self._tool()
         if tool is None:
             return
+        if self._pen_erases and tool.name in PEN_ERASES and "eraser" in self._tools:
+            tool = self._tools["eraser"]  # the pen's eraser end, or its button: rub out, then draw on as before
         if tool.name == "select" and not event.modifiers():
             target = self._link_target(event.position())
             if target is not None:
@@ -847,6 +901,8 @@ class DocumentView(QGraphicsView):
         super().hideEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
+        if self._resting_hand(event) and self._active is None:
+            return
         self._mouse = event.position()
         if self._active is None and self._pan_from is None and event.buttons() == Qt.MouseButton.NoButton:
             tool = self._tool()

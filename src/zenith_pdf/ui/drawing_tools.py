@@ -119,6 +119,7 @@ class FreehandTool(Tool):
         self.page = None
         self.points: list = []
         self.times: list[float] = []
+        self.pressures: list[float] | None = None  # with a pen that feels pressure: one per point
         self.straight = False  # Shift is held: the stroke is its first and last point
         self.item: AnnotationItem | None = None  # the stroke so far, at one width
         self.trail: _Trail | None = None  # or with its widths, for Pro and Calligraphy
@@ -137,7 +138,9 @@ class FreehandTool(Tool):
         self.cancel()
         self.page, self.points, self.times = page, [_point(pos)], [clock()]
         s = self.style
-        if s.pen == "basic":
+        pressure = None if s.highlight else self.view.pen_pressure()  # a highlighter keeps its width
+        self.pressures = None if pressure is None else [pressure]
+        if s.pen == "basic" and self.pressures is None:
             self.item = AnnotationItem(self._plain(self.points), page, interactive=False)
         else:
             self.trail = _Trail(page, s.color, s.opacity, s.highlight)
@@ -149,11 +152,16 @@ class FreehandTool(Tool):
             return
         point = _point(pos)
         shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+        pressure = self.view.pen_pressure() if self.pressures is not None else None
         if shift:
             self.points, self.times = [self.points[0], point], [self.times[0], clock()]
+            if self.pressures is not None:
+                self.pressures = [self.pressures[0], self.pressures[0]]
         elif not _near(self.points[-1], point, 0.4 / max(self.view.zoom, 0.1)):
             self.points.append(point)
             self.times.append(clock())
+            if self.pressures is not None:
+                self.pressures.append(self.pressures[-1] if pressure is None else pressure)
         else:
             return
         redraw = shift or self.straight  # the stroke changed as a whole, not just at its end
@@ -174,14 +182,27 @@ class FreehandTool(Tool):
     def _newest_width(self) -> float:
         """The width the last point gets while drawing. Pro tapers the end only on release."""
         s = self.style
+        if self.pressures is not None:
+            return self._pressed(self.points[-PRO_MEMORY:], self.pressures[-PRO_MEMORY:])[-1]
         if s.pen == "calligraphy":
             return inking.calligraphy_widths(self.points[-2:], s.width, s.nib_angle)[-1]
         points, times = self.points[-PRO_MEMORY:], self.times[-PRO_MEMORY:]
         return self._widths(points, times, False, live=True)[-1]
 
+    def _pressed(self, points, pressures) -> list[float]:
+        """Widths from the pen's pressure: every pen follows it, the calligraphy nib still turns with the line."""
+        s = self.style
+        widths = inking.pressure_widths(pressures, s.width)
+        if s.pen == "calligraphy":
+            nib = inking.calligraphy_widths(points, s.width, s.nib_angle)
+            widths = [w * n / max(s.width, 1e-6) for w, n in zip(widths, nib)]
+        return widths
+
     def _widths(self, points, times, straight: bool, live: bool = False) -> list[float] | None:
         """A width for each point, or None when the stroke keeps one width."""
         s = self.style
+        if self.pressures is not None and len(self.pressures) == len(points):
+            return self._pressed(points, self.pressures)
         if s.pen == "calligraphy":
             return inking.calligraphy_widths(points, s.width, s.nib_angle)
         if s.pen != "pro" or (straight and len(points) == 2):  # a ruled line has no speed to show
@@ -202,8 +223,11 @@ class FreehandTool(Tool):
             self.cancel()
             return
         index, points, times, straight = self.page.index, self.points, self.times, self.straight
+        pressures = self.pressures
         self.cancel()
+        self.pressures = pressures  # _finished reads them; the next press sets them again
         made = self._finished(index, points, times, straight)
+        self.pressures = None
         self.view.add_annotations([made], made.label)
         self.view.created([made])
 

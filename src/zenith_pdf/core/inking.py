@@ -91,6 +91,18 @@ def pro_widths(points, times, base: float, zoom: float = 1.0) -> list[float]:
     return widths
 
 
+def pressure_widths(pressures, base: float, lightest: float = 0.25, firmest: float = 1.6) -> list[float]:
+    """Widths from a pen's pressure (0 to 1, one per point): a light touch draws thin, an ordinary press about
+    `base`, a firm one up to `firmest` times it. Smoothed a little, so a shaky hand doesn't show as a ragged
+    edge."""
+    widths, level = [], None
+    for pressure in pressures:
+        pressure = min(max(float(pressure), 0.0), 1.0)
+        level = pressure if level is None else level * 0.6 + pressure * 0.4
+        widths.append(base * (lightest + (firmest - lightest) * level ** 0.8))
+    return widths
+
+
 def calligraphy_widths(points, base: float, angle_degrees: float = 45.0, thinnest: float = 0.18) -> list[float]:
     """A flat nib held at `angle_degrees`: the mark is as wide as the nib seen across the direction of travel."""
     nib = math.radians(angle_degrees)
