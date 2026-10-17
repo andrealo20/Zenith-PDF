@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,23 @@ NAME = "Zenith-PDF"  # the program's file name
 TITLE = "Zenith PDF"  # what people see
 BUNDLE_ID = "io.github.andrealo20.zenithpdf"
 TIMESTAMP = "http://timestamp.digicert.com"
+LANGUAGES = ("en", "it", "fr", "es", "de", "pt")  # Qt's own translations kept: those the app speaks
+# Python modules nothing in Zenith PDF uses, which PyInstaller would otherwise follow from PySide6 and Pillow.
+UNUSED = ("tkinter", "PySide6.QtDataVisualization", "PySide6.QtCharts", "PySide6.QtGraphs", "PySide6.QtQml",
+          "PySide6.QtQuick", "PySide6.QtQuickWidgets", "PySide6.QtQuick3D", "PySide6.QtPdf", "PySide6.QtPdfWidgets",
+          "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebChannel", "PySide6.QtSql",
+          "PySide6.QtTest", "PySide6.QtDesigner", "PySide6.QtHelp", "PySide6.QtUiTools", "PySide6.Qt3DCore",
+          "PySide6.QtBluetooth", "PySide6.QtPositioning", "PySide6.QtLocation", "PySide6.QtSensors",
+          "PySide6.QtSerialPort", "PySide6.QtRemoteObjects", "PySide6.QtScxml", "PySide6.QtStateMachine",
+          "PySide6.QtSpatialAudio", "PySide6.QtHttpServer", "PySide6.QtWebSockets", "PIL._avif",
+          "PIL.AvifImagePlugin")
+# Qt files left behind by plugins Zenith PDF never loads: the virtual keyboard (which brings Qt Quick), the PDF
+# image format (Qt's own PDF module), the TLS backends (Python does HTTPS itself), network information.
+PRUNE = (r"platforminputcontexts/.*virtualkeyboard", r"imageformats/.*qpdf", r"plugins/tls/",
+         r"plugins/networkinformation/", r"Qt6?VirtualKeyboard", r"Qt6?Qml", r"Qt6?Quick", r"Qt6?Pdf",
+         r"Qt6?DataVisualization")
+# On Windows sound goes through winmm and the camera through the Camera app: no FFmpeg, no software OpenGL.
+PRUNE_WINDOWS = (r"opengl32sw\.dll", r"ffmpegmediaplugin", r"/(avcodec|avformat|avutil|swresample|swscale)-")
 
 
 def run(command: list[str], **options) -> None:
@@ -55,7 +73,7 @@ def pyinstaller(name: str, extra: list[str]) -> Path:
         "--collect-all", "pypdfium2",
         "--collect-all", "pypdfium2_raw",
         "--collect-data", "qtawesome",
-        "--exclude-module", "tkinter",
+        *(part for module in UNUSED for part in ("--exclude-module", module)),
         "--specpath", BUILD,
         "--workpath", BUILD / "pyinstaller",
         "--distpath", DIST,
@@ -63,7 +81,47 @@ def pyinstaller(name: str, extra: list[str]) -> Path:
         ROOT / "tools" / "launcher.py",
     ]
     run(command, cwd=ROOT)
-    return DIST / (f"{name}.app" if sys.platform == "darwin" else name)
+    app = DIST / (f"{name}.app" if sys.platform == "darwin" else name)
+    prune(app)
+    return app
+
+
+def prune(app: Path) -> None:
+    """Delete what the app never loads (PRUNE), and Qt's translations into languages it doesn't speak."""
+    patterns = [re.compile(p, re.IGNORECASE) for p in PRUNE + (PRUNE_WINDOWS if sys.platform == "win32" else ())]
+    keep = re.compile(r"_(%s)(_[a-z]{2})?\.qm$" % "|".join(LANGUAGES), re.IGNORECASE)
+    freed = 0
+    for path in sorted(app.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if path.is_symlink() or not path.exists():
+            continue
+        text = path.as_posix()
+        unwanted = any(p.search(text) for p in patterns) or (
+            path.suffix == ".qm" and "/translations/" in text and not keep.search(path.name))
+        if not unwanted:
+            continue
+        if path.is_dir():
+            freed += sum(f.stat().st_size for f in path.rglob("*") if f.is_file() and not f.is_symlink())
+            shutil.rmtree(path)
+        else:
+            freed += path.stat().st_size
+            path.unlink()
+    print(f"Pruned {freed / 1e6:.1f} MB")
+
+
+def self_test(app: Path) -> None:
+    """Start the built program in its test mode: every module imports, and Qt finds what it needs."""
+    if sys.platform == "darwin":
+        program = app / "Contents" / "MacOS" / app.stem
+    else:
+        program = app / (f"{NAME}.exe" if sys.platform == "win32" else NAME)
+    log = BUILD / "self-test.log"
+    log.unlink(missing_ok=True)
+    environment = {**os.environ, "QT_QPA_PLATFORM": "offscreen", "ZENITH_SELF_TEST_LOG": str(log)}
+    done = subprocess.run([str(program), "--self-test"], env=environment, timeout=300)
+    report = log.read_text(encoding="utf-8") if log.exists() else "(no report)"
+    print(report)
+    if done.returncode != 0:
+        raise SystemExit(f"The built program failed its self-test ({done.returncode}).")
 
 
 # Windows ----------------------------------------------------------------------------------
@@ -157,6 +215,7 @@ def uninstall_list(folder: Path) -> Path:
 def windows() -> Path:
     app = pyinstaller(NAME, ["--icon", ASSETS / "zenith.ico", "--version-file", version_info(),
                              "--collect-all", "winrt"])  # text recognition with the engine built into Windows
+    self_test(app)
     sign = signing_script()
     if sign is not None:
         run([sign, app / f"{NAME}.exe"])
@@ -200,8 +259,9 @@ def mac() -> Path:
         }],
     })
     plist_path.write_bytes(plistlib.dumps(info))
-    # The edit undoes PyInstaller's ad-hoc signature, and an Apple silicon Mac runs nothing unsigned.
+    # The edits undo PyInstaller's ad-hoc signature, and an Apple silicon Mac runs nothing unsigned.
     run(["codesign", "--force", "--deep", "--sign", "-", app])
+    self_test(app)
     staging = BUILD / "dmg"
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(parents=True)
@@ -218,6 +278,7 @@ def mac() -> Path:
 
 def linux() -> Path:
     app = pyinstaller(NAME, [])
+    self_test(app)
     appdir = BUILD / "AppDir"
     shutil.rmtree(appdir, ignore_errors=True)
     shutil.copytree(app, appdir / "usr" / "lib" / "zenith-pdf", symlinks=True)

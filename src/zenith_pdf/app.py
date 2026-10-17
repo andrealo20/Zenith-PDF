@@ -154,9 +154,86 @@ def _default_glass(settings: Settings) -> None:
         settings.set("glass", "solid")
 
 
+def self_test() -> int:
+    """For the build (tools/build.py): every module imports and Qt finds what the app needs. 0 when all is well.
+
+    The report goes to the file ZENITH_SELF_TEST_LOG names: a windowed program has no console to print to.
+    """
+    import importlib
+    import pkgutil
+
+    from PySide6.QtGui import QImageReader
+
+    import zenith_pdf
+
+    app = QApplication.instance() or QApplication(["zenith-pdf"])
+    problems, lines = [], []
+    modules = [info.name for info in pkgutil.walk_packages(zenith_pdf.__path__, "zenith_pdf.")]
+    for name in modules:
+        try:
+            importlib.import_module(name)
+        except Exception as error:  # anything at all: the report says what
+            problems.append(f"{name}: {type(error).__name__}: {error}")
+    formats = {bytes(f).decode() for f in QImageReader.supportedImageFormats()}
+    for needed in ("png", "jpg", "svg"):
+        if needed not in formats:
+            problems.append(f"Qt can't read {needed} pictures")
+    try:
+        from PySide6.QtTextToSpeech import QTextToSpeech
+
+        lines.append(f"voices: {', '.join(QTextToSpeech.availableEngines()) or 'none'}")
+    except ImportError as error:
+        problems.append(f"text to speech: {error}")
+    problems += _self_test_window()
+    lines.insert(0, f"Zenith PDF {__version__}: {len(modules)} modules, platform {app.platformName()}")
+    lines += problems or ["all well"]
+    report = os.environ.get("ZENITH_SELF_TEST_LOG")
+    if report:
+        Path(report).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    else:
+        print("\n".join(lines))
+    return 1 if problems else 0
+
+
+def _self_test_window() -> list[str]:
+    """A window with settings of its own (never the user's), and a page drawn by PDFium: what went wrong."""
+    import tempfile
+
+    import pypdfium2 as pdfium
+    from PySide6.QtCore import QSettings
+
+    from .core.document import Document
+
+    folder = Path(tempfile.mkdtemp(prefix="zenith-self-test-"))
+    os.environ["ZENITH_CACHE_DIR"] = str(folder / "cache")  # thumbnails too stay out of the user's cache
+    try:
+        sample = folder / "sample.pdf"
+        pdf = pdfium.PdfDocument.new()
+        pdf.new_page(300, 400).close()
+        pdf.save(str(sample))
+        pdf.close()
+        document = Document(sample)
+        image = document.render(0, 1.0)
+        document.close()
+        if image.isNull():
+            return ["PDFium drew nothing"]
+        settings = Settings(QSettings(str(folder / "settings.ini"), QSettings.Format.IniFormat))
+        _app, window = create_app(["zenith-pdf"], settings)
+        window.show()
+        window.open_file(sample)
+        QApplication.processEvents()
+        window.close()
+        window.renderer.shutdown()
+    except Exception as error:  # anything at all: the report says what
+        return [f"window: {type(error).__name__}: {error}"]
+    return []
+
+
 def main(argv: list[str] | None = None) -> int:
     multiprocessing.freeze_support()  # lets render processes start from a frozen .exe too
     argv = sys.argv if argv is None else argv
+    if "--self-test" in argv:
+        return self_test()
     targets = [arg for arg in argv[1:] if not arg.startswith("-")]
     QApplication.instance() or QApplication(argv)
     if forward(targets):  # Zenith PDF is already running: it opens them, in its own window
