@@ -22,8 +22,10 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from .. import __version__
 from ..core.document import Document, PdfiumError
 from ..core.platforms import key as platform_key
+from ..core.releases import RELEASES, since
 from ..core.render import RenderPool
 from ..icons import icon
 from ..settings import Settings
@@ -56,6 +58,7 @@ REMEMBER_STYLES_MS = 300  # tool styles are written this long after the last cha
 
 class MainWindow(QMainWindow):
     open_windows: list[MainWindow] = []  # every window of the app that is open, the oldest first
+    updater = None  # the app's Updater (ui/updates.py), made by main() or the first check by hand
 
     def __init__(self, renderer: RenderPool, settings: Settings, tool_settings: ToolSettings | None = None,
                  library: Library | None = None):
@@ -170,6 +173,9 @@ class MainWindow(QMainWindow):
             self._on_setting_changed(key)
         self.show_home()
         MainWindow.open_windows.append(self)
+        self.update_card = None
+        if MainWindow.updater is not None:
+            self._attach_update_card()
 
     # Menu and shortcuts -------------------------------------------------
 
@@ -907,6 +913,80 @@ class MainWindow(QMainWindow):
 
     def show_shortcuts(self) -> None:
         self.open_settings("shortcuts")
+
+    # What's new ---------------------------------------------------------
+
+    def after_update(self) -> bool:
+        """Once per new version, the tour of what changed; never on a fresh install. True if it showed."""
+        seen = self._settings.get("seen_version")
+        if not seen:  # 0.4.0 and earlier did not record it: files opened mean an update, none a new install
+            seen = "0.4.0" if self._settings.get("recent") or self._settings.get("file_state") else __version__
+        self._settings.set("seen_version", __version__)
+        releases = since(seen)
+        if not releases or not self._settings.get("whats_new_after_update"):
+            return False
+        self.show_whats_new(releases)
+        return True
+
+    def show_whats_new(self, releases=None) -> None:
+        from .whats_new import WhatsNewDialog
+
+        dialog = WhatsNewDialog(releases or [RELEASES[0]], self)
+        dialog.show_me.connect(self.show_me)
+        dialog.exec()
+        dialog.deleteLater()
+
+    def show_me(self, action: str) -> None:
+        """Take the user to what a highlight of the tour is about: a tool, a setting, a guide chapter, a command."""
+        kind, _, what = action.partition(":")
+        if kind == "setting":
+            self.open_settings(what)
+        elif kind == "guide":
+            self.open_guide(what)
+        elif kind == "tool":
+            if self.current_workspace() is None:
+                self.open_guide("tools")  # no document to draw on: the chapter about tools
+            else:
+                self.tool_settings.set_tool(what)
+        elif kind == "command":
+            command = getattr(self, f"command_{what}", None)
+            if command is not None:
+                command()
+
+    def command_assistant(self) -> None:
+        self.show_assistant()
+
+    # Updates ------------------------------------------------------------
+
+    @classmethod
+    def make_updater(cls, settings: Settings):
+        """The app's one Updater: installs at quit what it downloaded, and gives every window its card."""
+        from PySide6.QtWidgets import QApplication
+
+        from .updates import Updater
+
+        if cls.updater is None:
+            app = QApplication.instance()
+            cls.updater = Updater(settings, app)
+            app.aboutToQuit.connect(cls.updater.install_at_quit)
+            for window in cls.open_windows:
+                window._attach_update_card()
+        return cls.updater
+
+    def _attach_update_card(self) -> None:
+        from .updates import UpdateCard
+
+        if self.update_card is None:
+            self.update_card = UpdateCard(MainWindow.updater, self.centralWidget())
+
+    def check_for_updates(self) -> None:
+        """Asked for by hand, from Settings: the card says what it found, also that nothing is newer."""
+        MainWindow.make_updater(self._settings).check(manual=True)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self.update_card is not None and self.update_card.isVisible():
+            self.update_card.place()
 
     def open_guide(self, chapter: str = "") -> None:
         from .guide import GuideWindow

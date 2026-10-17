@@ -26,8 +26,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__
 from ..core.platforms import MAC, SYSTEM_NAME, WINDOWS, mono_font, native_keys, settings_place, ui_font
+from ..core.releases import EARLIER, RELEASES
 from ..icons import icon
 from ..theme import themes
 from .dialogs import SHORTCUTS
@@ -54,6 +54,20 @@ else:
     SPELLER = ("Hunspell, through Enchant, with the dictionaries your system has (install more, such as "
                "hunspell-it, with your package manager)")
     CAMERA = "Image from camera shows what the camera sees; take the photo and it appears on the page."
+
+
+def _whats_new() -> str:
+    """Every version's highlights and smaller changes, the newest first, from core/releases.py."""
+    parts = ["<h1>What's new</h1>"]
+    for release in RELEASES:
+        parts.append(f"<h2>Version {release.version}</h2><ul>")
+        parts += [f"<li><b>{html.escape(h.title)}</b>. {html.escape(native_keys(h.text))}</li>" for h in release.highlights]
+        parts += [f"<li>{html.escape(native_keys(line))}</li>" for line in release.more]
+        parts.append("</ul>")
+    parts.append("<h2>Earlier</h2><ul>" + "".join(f"<li>{html.escape(line)}</li>" for line in EARLIER) + "</ul>")
+    parts.append("<p>After each update a short tour shows what changed. Settings &gt; Help turns it off, and "
+                 "opens it again.</p>")
+    return "".join(parts)
 
 
 def _keys(text: str) -> str:
@@ -327,45 +341,7 @@ documents open, whether reading mode fills the screen.</li>
 <li><b>Performance</b>, <b>Text Recognition</b>, <b>Keyboard Shortcuts</b>, <b>Help</b>, <b>About</b>.</li>
 </ul>"""),
         ("shortcuts", "Keyboard shortcuts", "keyboard", f"<h1>Keyboard shortcuts</h1>{_shortcuts()}"),
-        ("whats-new", "What's new", "sparkle", f"""
-<h1>What's new</h1>
-<h2>Version {__version__}</h2>
-<ul>
-<li>Every tool has its own menu, with a live preview, its lock, a subject and a pin to keep it open.</li>
-<li>Unlocked tools go back to Pan after one use; copies of a tool keep their own style.</li>
-<li>Audio notes recorded from the microphone, or attached from a file.</li>
-<li>Pro and calligraphy pens, ink that turns into lines and shapes, and an eraser that can take part of a
-stroke.</li>
-<li>Dotted and dashed lines, ten kinds of line ends, shapes with no border, highlight mode for shapes, and note
-icons.</li>
-<li>A smaller selection bar, whose Style button edits everything selected at once.</li>
-<li>A tool chooser with over thirty tools in six groups, and a toolbar you arrange yourself.</li>
-<li>New tools: pen, highlighter, eraser, tape, laser pointer, polyline, polygon, cloud, squiggle, text cleaner,
-callout, distance, perimeter, area, bookmark, signature, image from camera, hyperlink, audio note, equation,
-snapshot and lasso.</li>
-<li>Snapping to annotations and to the page's content.</li>
-<li>A new home page: all files with thumbnails, authors and pages, stars, tags, pinned folders and search.</li>
-<li>This guide.</li>
-<li>Reopen your documents where you left them, or start fresh: you choose.</li>
-<li>Links in documents can be followed with a click, and land on the line they point at.</li>
-<li>Back and forward after a link, a bookmark or Ctrl+G: {_keys('Alt+Left')}, {_keys('Alt+Right')}, the
-mouse's side buttons, or the Back chip in the page counter.</li>
-<li>Point at a link for a moment to see where it goes, in a card by the pointer.</li>
-<li>A bar over selected text highlights it in the colour you pick, underlines, strikes through or squiggles it,
-copies it, adds a note to it or searches for it. A double click selects a word.</li>
-<li>Lighter glass on the toolbars; menus and panels are solid.</li>
-<li>Reading mode ({_keys('Ctrl+H')}): only the pages, with nothing floating over them. {_keys('Esc')} brings
-everything back as it was.</li>
-<li>Clearer glass: the colours and shapes of the page show through the bars, blurred, while text on them stays
-readable over any page. Settings &gt; View &amp; Layout &gt; Glass picks Clear, Balanced or Solid.</li>
-</ul>
-<h2>Earlier</h2>
-<ul>
-<li>Settings with search, help cards on every button, pictures pasted with Ctrl+V.</li>
-<li>PDF tools: page numbers, crop, page size, pages per sheet, split, blank pages, export, compress,
-passwords, sanitize, properties, attachments, repair; redaction.</li>
-<li>The viewer, annotations, page management, text recognition, the Doc Builder, glass bars.</li>
-</ul>"""),
+        ("whats-new", "What's new", "sparkle", _whats_new()),
         ("problem", "Report a problem", "first-aid-kit", """
 <h1>Report a problem</h1>
 <p>If something doesn't work, write down what you did, what you expected and what happened instead. The button

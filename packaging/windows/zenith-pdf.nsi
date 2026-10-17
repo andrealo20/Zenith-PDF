@@ -82,6 +82,23 @@ Function .onInit
   ${EndIf}
   SetRegView 64
   StrCpy $ShortcutWanted ${BST_CHECKED}
+  ; An update keeps the choice made at the first install.
+  ClearErrors
+  ReadRegDWORD $0 HKLM "Software\ZenithPDF" "DesktopShortcut"
+  ${IfNot} ${Errors}
+  ${AndIf} $0 == 0
+    StrCpy $ShortcutWanted ${BST_UNCHECKED}
+  ${EndIf}
+FunctionEnd
+
+Function .onInstSuccess
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} $0 "/RELAUNCH" $1
+  ${IfNot} ${Errors}
+    ; Through Explorer, so the app starts as the user, without the installer's administrator rights.
+    Exec '"$WINDIR\explorer.exe" "$INSTDIR\${EXE}"'
+  ${EndIf}
 FunctionEnd
 
 Function un.onInit
@@ -107,6 +124,21 @@ FunctionEnd
 
 Section "Install"
   SetShellVarContext all
+  ; An update starts as the app closes: wait, up to 30 seconds, until it has let go of its files.
+  StrCpy $1 0
+  ${DoWhile} ${FileExists} "$INSTDIR\${EXE}"
+    ClearErrors
+    FileOpen $0 "$INSTDIR\${EXE}" a
+    ${IfNot} ${Errors}
+      FileClose $0
+      ${Break}
+    ${EndIf}
+    Sleep 500
+    IntOp $1 $1 + 1
+    ${If} $1 >= 60
+      ${Break}
+    ${EndIf}
+  ${Loop}
   ; An earlier version goes first, so none of its files are left among the new ones.
   ${If} ${FileExists} "$INSTDIR\Uninstall.exe"
     ExecWait '"$INSTDIR\Uninstall.exe" /S _?=$INSTDIR'
@@ -116,6 +148,7 @@ Section "Install"
   File /r "${SOURCE}\*.*"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKLM "Software\ZenithPDF" "InstallDir" "$INSTDIR"
+  WriteRegDWORD HKLM "Software\ZenithPDF" "DesktopShortcut" $ShortcutWanted
 
   CreateShortcut "$SMPROGRAMS\${APP}.lnk" "$INSTDIR\${EXE}"
   ${If} $ShortcutWanted == ${BST_CHECKED}

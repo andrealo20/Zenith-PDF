@@ -490,6 +490,7 @@ def _style_sheet(t: Theme) -> str:
     QDialog {{ background: {t.window}; }}
     QLabel#DialogTitle {{ font-size: 12pt; font-weight: 600; }}
     QLabel#DialogBody {{ color: {t.text_muted}; }}
+    QLabel#WhatsNewVersion {{ font-weight: 600; margin-top: 6px; }}
     QLabel#DialogDetail {{
         color: {t.text_muted}; font-size: 9pt; background: {t.hover}; border-radius: 6px; padding: 8px 10px;
     }}

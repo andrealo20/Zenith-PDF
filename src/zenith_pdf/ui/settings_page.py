@@ -869,6 +869,20 @@ class SettingsWindow(QDialog):
         guide.clicked.connect(self._open_guide)
         s.add(Row("Guide", "A short guide to every part of Zenith PDF. F1 opens it from anywhere.", guide,
                   "manual help learn tutorial"))
+        s.add(Row("Check for updates", "Once a day Zenith PDF asks GitHub whether a new version is out, and a card "
+                  "says so. Nothing about you or your files is sent.", self._switch("update_check"),
+                  "update new version upgrade github"))
+        s.add(Row("Install updates automatically", "New versions download in the background, checked against the "
+                  "release's fingerprints, and install when you close Zenith PDF.", self._switch("update_auto"),
+                  "update automatic install upgrade background"))
+        check = QPushButton("Check now")
+        check.clicked.connect(self._check_updates)
+        s.add(Row("Updates", f"This is version {__version__}.", check, "update version latest check"))
+        s.add(Row("What's new after an update", "After each update a short tour shows what changed, with a Show me "
+                  "for each part.", self._switch("whats_new_after_update"), "whats new tour changes release notes"))
+        tour = QPushButton("Show the tour")
+        tour.clicked.connect(self._show_tour)
+        s.add(Row("What's new", f"What version {__version__} brought.", tour, "whats new tour changes release notes"))
         questions = QPushButton("Ask again")
         questions.clicked.connect(lambda: self._settings.set("asked", []))
         s.add(Row("Questions you turned off", "Questions answered with \"don't ask again\" will be asked again.",
@@ -882,6 +896,17 @@ class SettingsWindow(QDialog):
         window = self.parent()
         if hasattr(window, "open_guide"):
             window.open_guide("")
+
+    def _check_updates(self) -> None:
+        window = self.parent()
+        if hasattr(window, "check_for_updates"):
+            window.check_for_updates()
+
+    def _show_tour(self) -> None:
+        window = self.parent()
+        if hasattr(window, "show_whats_new"):
+            self.hide()
+            window.show_whats_new()
 
     def _tips_again(self) -> None:
         self._settings.set("tips_seen", [])

@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, Qt
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QMenu, QProxyStyle, QStyleFactory, QWidget
 
@@ -169,6 +169,10 @@ def main(argv: list[str] | None = None) -> int:
     if not targets and window.settings.get("on_start") == "restore":
         window.restore_session()
     window.open_targets(targets)
+    QTimer.singleShot(700, window.after_update)  # once the window is up: the tour after an update
+    updater = MainWindow.make_updater(window.settings)
+    if updater.due():
+        QTimer.singleShot(8000, updater.check)  # a moment after starting, never in the way of it
     return app.exec()
 
 

@@ -36,6 +36,12 @@ DEFAULTS: dict[str, object] = {
     "tool_tips": True,  # a card with tips the first time each tool is used
     "tips_seen": [],  # the tools whose tips have shown
     "assistant_recent": [],  # what was last run from the assistant (Ctrl+K), the newest first
+    "whats_new_after_update": True,  # after an update, a tour of what changed
+    "seen_version": "",  # the version whose tour was shown last; "" before the first start
+    "update_check": True,  # ask GitHub once a day whether a new version is out
+    "update_auto": False,  # download new versions in the background and install them when the app closes
+    "update_skipped": "",  # a version the user chose to skip
+    "update_last_check": 0.0,  # when GitHub was last asked (seconds since 1970)
     # Annotation
     "author": "",
     "remember_styles": True,
