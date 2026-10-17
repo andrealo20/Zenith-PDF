@@ -51,6 +51,8 @@ CLEAN_KINDS = ("highlight", "underline", "squiggly", "strikeout")  # the markup 
 IMAGE_SIZES = {"actual": 0.0, "quarter": 0.25, "half": 0.5, "full": 1.0}  # share of the page width; 0: as copied
 SNAPSHOT_SCALES = (1, 2, 3)
 LASSO_PICKS = ("touching", "inside", "centre")
+TEXT_FONTS = ("Helvetica", "Times", "Courier")  # the PDF's built-in fonts a text box is written in
+TEXT_ALIGNS = ("left", "center", "right")
 
 
 @dataclass(frozen=True)
@@ -82,6 +84,19 @@ class ToolStyle:
     lasso_pick: str = "centre"  # LASSO_PICKS
     audio_source: str = "ask"  # AUDIO_SOURCES
     signature_width: float = 150.0  # points, of a newly placed signature
+    font: str = "Helvetica"  # TEXT_FONTS
+    bold: bool = False
+    italic: bool = False
+    underline: bool = False
+    align: str = "left"  # TEXT_ALIGNS
+
+    def face(self) -> tuple[str, bool, bool]:
+        """(font, bold, italic), as a text box made with this style measures its text."""
+        return self.font, self.bold, self.italic
+
+    def text_format(self) -> dict:
+        """The FreeText fields a text box made with this style takes from it, besides its size and colours."""
+        return dict(font=self.font, bold=self.bold, italic=self.italic, underline=self.underline, align=self.align)
 
 
 @dataclass(frozen=True)
@@ -140,7 +155,7 @@ _LINES = ("color", "width", "opacity", "dash", "endings", "highlight")
 _SHAPES = ("color", "fill", "width", "opacity", "dash", "highlight")
 _MARKUP = ("color", "opacity")
 _MEASURE = ("color", "width", "scale")
-_TEXT = ("color", "font_size", "fill")
+_TEXT = ("color", "font_size", "text_format", "fill")
 _PICTURE = ("image_size",)
 OPTIONS: dict[str, tuple[str, ...]] = {
     "pen": ("pen_type", "color", "width", "opacity", "ink_to_line", "ink_to_shape"),
@@ -185,6 +200,7 @@ OPTION_FIELDS: dict[str, tuple[str, ...]] = {
     "endings": ("head_start", "head_end"),
     "signatures": ("signature_width",),  # plus the saved signatures, in Settings
     "scale": (),
+    "text_format": ("font", "bold", "italic", "underline", "align"),
 } | {name: (name,) for name in (
     "fill", "width", "opacity", "font_size", "dash", "highlight", "ink_to_line", "ink_to_shape", "erase",
     "tape_start", "laser_size", "laser_fade", "clean_kinds", "note_icon", "image_size", "link_border",
@@ -291,6 +307,11 @@ FIELD_CHECKS = {
     "lasso_pick": _one_of(LASSO_PICKS),
     "audio_source": _one_of(AUDIO_SOURCES),
     "signature_width": _number(40.0, 600.0),
+    "font": _one_of(TEXT_FONTS),
+    "bold": _flag,
+    "italic": _flag,
+    "underline": _flag,
+    "align": _one_of(TEXT_ALIGNS),
 }
 
 
@@ -742,7 +763,7 @@ class TextBoxTool(Tool):
         page_width, page_height = page.rect.width(), page.rect.height()
         # As wide as the room right of the click; with too little room there, it ends at the page's edge instead.
         width = min(TEXT_BOX_WIDTH, page_width, max(page_width - pos.x(), MIN_TEXT_BOX))
-        height = textlayout.fitted_height("", s.font_size, width)
+        height = textlayout.fitted_height("", s.font_size, width, s.face())
         x = max(min(pos.x(), page_width - width), 0.0)
         y = max(min(pos.y(), page_height - height), 0.0)
         box = FreeText(
@@ -751,6 +772,7 @@ class TextBoxTool(Tool):
             font_size=s.font_size,
             color=s.color,
             fill=s.fill,
+            **s.text_format(),
             **self.common(),
         )
         self.view.edit_text_box(box, is_new=True, tool=self.name)

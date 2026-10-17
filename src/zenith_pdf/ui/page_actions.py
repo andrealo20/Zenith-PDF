@@ -201,11 +201,12 @@ class PageActions(QObject):
         width = max(min(260.0, self._view.page_width(page) - x), 60.0)
         box = FreeText(
             page=page,
-            rect=(x, y, width, textlayout.fitted_height(text, style.font_size, width)),
+            rect=(x, y, width, textlayout.fitted_height(text, style.font_size, width, style.face())),
             contents=text,
             font_size=style.font_size,
             color=style.color,
             fill=style.fill,
+            **style.text_format(),
             **self._view.common("text"),
         )
         self._view.add_annotations([box], box.label)

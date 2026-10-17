@@ -274,8 +274,8 @@ def check_spelling(view: DocumentView, annotation=None) -> bool:
     updated = replace(annotation, contents=new_text)
     if isinstance(annotation, FreeText):
         width, height = annotation.upright_size()
-        updated = replace(annotation.with_height(max(height, textlayout.fitted_height(new_text, annotation.font_size,
-                                                                                       width))), contents=new_text)
+        needed = textlayout.fitted_height(new_text, annotation.font_size, width, annotation.face())
+        updated = replace(annotation.with_height(max(height, needed)), contents=new_text)
     view.undo_stack.push(ChangeAnnotations(view.store, [annotation], [updated], "Fix spelling"))
     return True
 

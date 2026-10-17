@@ -54,6 +54,7 @@ IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 MANAGED_KEYS = ("/RD", "/IC", "/LE", "/AS", "/IT", "/CL", "/BE", "/Measure", "/Vertices", "/Subj", "/Name",
                 "/ZenithHighlighter", "/ZenithWidths", "/ZenithBorderColor", "/ZenithBorderWidth", "/ZenithRotation",
                 "/ZenithEquationSize", "/ZenithEquationColor")
+ALIGNS = ("left", "center", "right")  # a text box's /Q: 0, 1 and 2
 FLAG_HIDDEN = 2
 FLAG_PRINT = 4
 FLAG_LOCKED = 128
@@ -316,6 +317,9 @@ def read_annotation(obj, page: int, geometry: PageGeometry, pages: dict | None =
     if subtype == "/FreeText":
         appearance_string = _text(obj.get("/DA"))
         size = re.search(r"([\d.]+)\s+Tf", appearance_string)
+        font, bold, italic, underline = _read_face(appearance_string, _text(obj.get("/DS")))
+        quadding = obj.get("/Q", 0)
+        align = ALIGNS[int(quadding)] if isinstance(quadding, int) and 0 <= int(quadding) < 3 else "left"
         rgb = re.search(r"([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg", appearance_string)
         gray = re.search(r"([\d.]+)\s+g\b", appearance_string)
         text_color = (
@@ -336,6 +340,11 @@ def read_annotation(obj, page: int, geometry: PageGeometry, pages: dict | None =
             color=text_color,
             callout=callout,
             rotation=_text_turns(obj, geometry),
+            font=font,
+            bold=bold,
+            italic=italic,
+            underline=underline,
+            align=align,
             **common,
         )
 
@@ -377,6 +386,53 @@ def _text_turns(obj, geometry: PageGeometry) -> int:
         return (int(_number(obj.get("/ZenithRotation"), 0)) + page_turns) % 4
     written = _drawn_turns(obj)
     return 0 if written is None else (page_turns - written) % 4
+
+
+def _style_string(a: FreeText) -> str:
+    """A text box's /DS: its font as the CSS a viewer that redraws it reads."""
+    family = {"Helvetica": "Helvetica,sans-serif", "Times": "Times,serif", "Courier": "Courier,monospace"}
+    style = [f"font: {family.get(a.font, family['Helvetica'])} {appearance.num(a.font_size)}pt",
+             f"text-align:{a.align}", "color:#" + "".join(f"{round(c * 255):02X}" for c in a.color)]
+    if a.bold:
+        style.append("font-weight:bold")
+    if a.italic:
+        style.append("font-style:italic")
+    if a.underline:
+        style.append("text-decoration:underline")
+    return "; ".join(style)
+
+
+def _family(text: str) -> str | None:
+    """The built-in font closest to a font's name or CSS family, if the text names one we know."""
+    lower = text.lower()
+    if "times" in lower or "georgia" in lower or re.search(r"(?<!sans-)serif", lower):
+        return "Times"
+    if "cour" in lower or "mono" in lower or "consol" in lower:
+        return "Courier"
+    if "helv" in lower or "arial" in lower or "sans" in lower:
+        return "Helvetica"
+    return None
+
+
+def _read_face(appearance_string: str, style: str) -> tuple[str, bool, bool, bool]:
+    """(font, bold, italic, underline) of a text box, from the font its /DA names and its /DS style string,
+    whichever app wrote them: our resource names, or a font's own name such as /Times-Bold or /Arial,Italic.
+    A family the style string names wins, as apps that redraw a box read that one."""
+    named = re.search(r"/([^\s/]+)\s+[\d.]+\s+Tf", appearance_string)
+    name = named.group(1) if named else ""
+    ours = {resource: face for face, (resource, _) in appearance.STANDARD_FONTS.items()}
+    if name in ours:
+        font, bold, italic = ours[name]
+    else:
+        font = _family(name) or "Helvetica"
+        bold = "bold" in name.lower()
+        italic = "italic" in name.lower() or "oblique" in name.lower()
+    family = re.search(r"font(?:-family)?\s*:\s*([^;]+)", style, re.IGNORECASE)
+    font = (_family(family.group(1)) if family else None) or font
+    css = style.lower().replace(" ", "")
+    bold = bold or "font-weight:bold" in css or re.search(r"font-weight:[6-9]00", css) is not None
+    italic = italic or "font-style:italic" in css or "font-style:oblique" in css
+    return font, bold, italic, "text-decoration:underline" in css or "text-decoration:word" in css
 
 
 def _read_link(obj, geometry: PageGeometry, common: dict, color, pages: dict) -> Link | None:
@@ -644,7 +700,11 @@ def write_annotation(pdf: pikepdf.Pdf, obj: Dictionary, annotation: Annotation, 
             obj.ZenithWidths = Array([Array([round(w, 2) for w in ws]) for ws in a.stroke_widths()])
     elif isinstance(a, FreeText):
         r, g, b = a.color
-        obj.DA = String(f"/Helv {appearance.num(a.font_size)} Tf {appearance.num(r)} {appearance.num(g)} {appearance.num(b)} rg")
+        name, _ = appearance.standard_font(a.face())
+        obj.DA = String(f"/{name} {appearance.num(a.font_size)} Tf {appearance.num(r)} {appearance.num(g)} {appearance.num(b)} rg")
+        # How a viewer that redraws the box sets its text: alignment, and the font as a style string.
+        obj.Q = ALIGNS.index(a.align) if a.align in ALIGNS else 0
+        obj.DS = String(_style_string(a))
         _set_border(obj, a.border_width)
         obj.ZenithBorderColor = _array(a.border_color)
         # The text's turns on the page as stored, which survive the page being turned.
@@ -744,9 +804,9 @@ def write_annotation(pdf: pikepdf.Pdf, obj: Dictionary, annotation: Annotation, 
     if len(states.keys()):
         resources.ExtGState = states
     if look.uses_font:
-        resources.Font = Dictionary(
-            Helv=Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.Helvetica, Encoding=Name.WinAnsiEncoding)
-        )
+        name, base = appearance.standard_font(look.face)
+        resources.Font = Dictionary({"/" + name: Dictionary(Type=Name.Font, Subtype=Name.Type1,
+                                                            BaseFont=Name("/" + base), Encoding=Name.WinAnsiEncoding)})
     if look.uses_image:
         pictures = {} if pictures is None else pictures
         picture = pictures.get(a.digest)

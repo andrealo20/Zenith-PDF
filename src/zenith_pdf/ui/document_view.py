@@ -1631,10 +1631,11 @@ class DocumentView(QGraphicsView):
         width = max(min(200.0, self._pages[page].rect.width() - x), 40.0)
         box = FreeText(
             page=page,
-            rect=(x, y, width, textlayout.fitted_height("", style.font_size, width)),
+            rect=(x, y, width, textlayout.fitted_height("", style.font_size, width, style.face())),
             font_size=style.font_size,
             color=style.color,
             fill=style.fill,
+            **style.text_format(),
             **self.common("text"),
         )
         self.edit_text_box(box, is_new=True, tool="text")
@@ -1882,6 +1883,12 @@ class DocumentView(QGraphicsView):
                 updated = replace(updated, widths=widths)
             if getattr(updated, "border", True) is False and getattr(updated, "fill", None) is None:
                 updated = replace(updated, border=True)  # with neither, a shape would vanish
+            if isinstance(updated, FreeText) and updated.contents and \
+                    {"contents", "font_size", "font", "bold", "italic"} & set(valid):
+                width, height = updated.upright_size()  # a bigger or wider font: the box grows to show all of it
+                needed = textlayout.fitted_height(updated.contents, updated.font_size, width, updated.face())
+                if needed > height:
+                    updated = updated.with_height(needed)
             if updated != annotation:
                 old.append(annotation)
                 new.append(updated)
@@ -2012,7 +2019,7 @@ class DocumentView(QGraphicsView):
         if item is not None:
             item.show()
         upright_w, upright_h = box.upright_size()  # the text runs across the box as the user reads it
-        needed = textlayout.fitted_height(text, box.font_size, upright_w)
+        needed = textlayout.fitted_height(text, box.font_size, upright_w, box.face())
         # A turned box grows away from its first line, which stays where it was typed.
         updated = replace(box.with_height(needed if is_new else max(upright_h, needed)), contents=text)
         if is_new:

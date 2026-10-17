@@ -148,7 +148,13 @@ NO_SUBJECT = {"eraser", "laser", "snapshot", "cleaner", "select", "lasso", "hand
 GROUPED = {"dash": "Line style", "endings": "Line endings", "highlight": "Advanced", "ink_to_line": "Smart ink",
            "ink_to_shape": "Smart ink"}
 OPEN_AT_FIRST = {"Line style": True, "Line endings": True, "Smart ink": True, "Advanced": False}
-SELECTION_ORDER = ("color", "fill", "width", "opacity", "font_size", "note_icon", "dash", "endings", "highlight")
+SELECTION_ORDER = ("color", "fill", "width", "opacity", "font_size", "text_format", "note_icon", "dash", "endings",
+                   "highlight")
+FONT_NAMES = {"Helvetica": "Sans serif", "Times": "Serif", "Courier": "Monospace"}
+TEXT_STYLES = {"bold": ("text-bolder", "Bold"), "italic": ("text-italic", "Italic"),
+               "underline": ("text-underline", "Underline")}
+ALIGN_GLYPHS = {"left": ("text-align-left", "Align left"), "center": ("text-align-center", "Centre"),
+                "right": ("text-align-right", "Align right")}
 
 _memory: dict[str, object] = {"recent_colours": [], "tool_menu_sections": {}}  # when Settings has no such key
 
@@ -1014,11 +1020,13 @@ class OptionGrid(QWidget):
 
     chosen = Signal(object)  # the value, or for several the chosen values as a tuple
 
-    def __init__(self, items, columns: int, multi: bool = False, cell: int = 32, parent: QWidget | None = None):
+    def __init__(self, items, columns: int, multi: bool = False, cell: int = 32, parent: QWidget | None = None,
+                 empty: bool = False):
         super().__init__(parent)
         self.items = list(items)  # (value, icon name or None, text or None, tip)
         self.columns = columns
         self.multi = multi
+        self.empty = empty  # several: whether all may be off
         self.cell = cell
         self.selected: set = set()
         self._hover = -1
@@ -1054,7 +1062,7 @@ class OptionGrid(QWidget):
         """What a click on the cell with `value` does."""
         if self.multi:
             chosen = set(self.selected) ^ {value}
-            if not chosen:
+            if not chosen and not self.empty:
                 return  # one at least stays chosen
             self.selected = chosen
             self.update()
@@ -1677,10 +1685,10 @@ def preview_annotation(base: str, style: ToolStyle, measure: tuple | None = None
         size = min(s.font_size, 40.0)
         contents = "Text box" if base == "text" else "Look here"
         left = 24.0 if base == "text" else 100.0
-        width = min(textlayout.text_width(contents, size) + 12, w - left - 12)
-        height = textlayout.fitted_height(contents, size, width)
+        width = min(textlayout.text_width(contents, size, s.face()) + 12, w - left - 12)
+        height = textlayout.fitted_height(contents, size, width, s.face())
         box = FreeText(rect=(left, (h - height) / 2, width, height), contents=contents, font_size=size, fill=s.fill,
-                       **common)
+                       **s.text_format(), **common)
         if base == "callout":
             box = replace(box, callout=((30.0, h - 14), (70.0, h / 2)))
         return box
@@ -2106,6 +2114,29 @@ class StyleEditor(QWidget):
         row.addWidget(box)
         return self._block("Size" if base == "equation" else "Font size", row)
 
+    def _build_text_format(self, base: str) -> QWidget:
+        """The font, bold, italic and underline, and how the lines line up."""
+        fonts = Segmented(list(FONT_NAMES.items()))
+        styles = OptionGrid([(name, glyph, None, label) for name, (glyph, label) in TEXT_STYLES.items()], 3,
+                            multi=True, cell=36, empty=True)
+        aligns = OptionGrid([(name, glyph, None, label) for name, (glyph, label) in ALIGN_GLYPHS.items()], 3, cell=36)
+        fonts.chosen.connect(lambda v: self._emit("text_format", font=v))
+        styles.chosen.connect(lambda chosen: self._emit("text_format", **{name: name in chosen for name in TEXT_STYLES}))
+        aligns.chosen.connect(lambda v: self._emit("text_format", align=v))
+
+        def load(s: ToolStyle) -> None:
+            fonts.set_value(s.font)
+            styles.set_value(tuple(name for name in TEXT_STYLES if getattr(s, name)))
+            aligns.set_value(s.align)
+
+        self._load("text_format", load)
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        row.addWidget(styles)
+        row.addStretch()
+        row.addWidget(aligns)
+        return self._block("Font", fonts, row)
+
     def _build_dash(self, base: str) -> QWidget:
         grid = OptionGrid([(name, f"z-dash-{name}", None, label) for name, label in DASH_NAMES.items()], 4)
         grid.chosen.connect(lambda v: self._emit("dash", dash=v))
@@ -2334,7 +2365,7 @@ def _options_of(a: Annotation) -> set[str]:
     if isinstance(a, (Ink, Measurement, Tape)):
         return {"color", "width"} | ({"opacity"} if isinstance(a, Ink) else set())
     if isinstance(a, FreeText):
-        return {"color", "font_size", "fill"}
+        return {"color", "font_size", "text_format", "fill"}
     if isinstance(a, ImageStamp):
         return {"opacity"}
     if isinstance(a, Note):
@@ -2368,6 +2399,8 @@ def selection_style(a: Annotation) -> ToolStyle:
         head_end=getattr(a, "head_end", "None"),
         highlight=bool(getattr(a, "highlight", False)),
         note_icon=a.icon if isinstance(a, Note) else "Comment",
+        **({"font": a.font, "bold": a.bold, "italic": a.italic, "underline": a.underline, "align": a.align}
+           if isinstance(a, FreeText) else {}),
     )
 
 

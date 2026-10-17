@@ -440,6 +440,10 @@ ENDING_NAMES = {"None": "None", "Square": "Square", "Circle": "Circle", "Diamond
 DASH_NAMES = {"solid": "Solid", "dotted": "Dotted", "dashed": "Dashed", "dashdot": "Dash and dot"}
 
 
+FONT_LABELS = {"Helvetica": "Sans serif", "Times": "Serif", "Courier": "Monospace"}
+ALIGN_LABELS = {"left": "Left", "center": "Centre", "right": "Right"}
+
+
 class PropertiesDialog(FormDialog):
     """Edit what the selected annotations have in common.
 
@@ -547,16 +551,45 @@ class PropertiesDialog(FormDialog):
             self._watch("font_size", size, self.font_box.current)
             self.add_row("Font size", self.font_box)
 
-        locked = common_value(annotations, "locked")
-        self.locked_box = QCheckBox(tr("Locked: can't be moved, resized or deleted"))
-        if locked is MIXED:
-            self.locked_box.setTristate(True)
-            self.locked_box.setCheckState(Qt.CheckState.PartiallyChecked)
-            self.locked_box.clicked.connect(self._lock_picked)
-        else:
-            self.locked_box.setChecked(locked)
-        self._watch("locked", locked, self._locked_now)
+        self.face_box = self.align_box = None
+        self.style_boxes: dict[str, QCheckBox] = {}
+        if all(isinstance(a, FreeText) for a in annotations):
+            font = common_value(annotations, "font")
+            self.face_box = self._choices(font, FONT_LABELS)
+            self._watch("font", font, self.face_box.currentData)
+            self.add_row("Font", self.face_box)
+            row = QHBoxLayout()
+            row.setSpacing(14)
+            for name, label in (("bold", "Bold"), ("italic", "Italic"), ("underline", "Underline")):
+                self.style_boxes[name] = box = self._check(name, label, common_value(annotations, name))
+                row.addWidget(box)
+            row.addStretch()
+            self.add_row("Style", row)
+            align = common_value(annotations, "align")
+            self.align_box = self._choices(align, ALIGN_LABELS)
+            self._watch("align", align, self.align_box.currentData)
+            self.add_row("Alignment", self.align_box)
+
+        self.locked_box = self._check("locked", "Locked: can't be moved, resized or deleted",
+                                      common_value(annotations, "locked"))
         self.add_row("", self.locked_box)
+
+    def _check(self, name: str, label: str, value) -> QCheckBox:
+        """A tick for a yes-or-no field; for a mixed one, half ticked until clicked, then on or off for all."""
+        box = QCheckBox(tr(label))
+        if value is MIXED:
+            box.setTristate(True)
+            box.setCheckState(Qt.CheckState.PartiallyChecked)
+            box.clicked.connect(lambda *_: box.setTristate(False))
+        else:
+            box.setChecked(value)
+
+        def now():
+            state = box.checkState()
+            return MIXED if state == Qt.CheckState.PartiallyChecked else state == Qt.CheckState.Checked
+
+        self._watch(name, value, now)
+        return box
 
     def _opacity_now(self):
         # Untouched, it keeps the exact value it showed rounded (0.333 is not 33%).
@@ -569,13 +602,6 @@ class PropertiesDialog(FormDialog):
     def _show_opacity(self) -> None:
         mixed = self._opacity_now() is MIXED
         self.opacity_label.setText(tr("Mixed" if mixed else f"{self.opacity_slider.value()}%"))
-
-    def _lock_picked(self, *_) -> None:
-        self.locked_box.setTristate(False)  # once clicked it is on or off for all: no going back to mixed
-
-    def _locked_now(self):
-        state = self.locked_box.checkState()
-        return MIXED if state == Qt.CheckState.PartiallyChecked else state == Qt.CheckState.Checked
 
     def _choices(self, value, names: dict[str, str]) -> QComboBox:
         box = QComboBox()

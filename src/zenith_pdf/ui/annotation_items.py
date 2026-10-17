@@ -358,14 +358,20 @@ def paint_text_box(painter: QPainter, a: FreeText, with_text: bool = True) -> No
     if with_text:
         painter.setClipRect(rect, Qt.ClipOperation.IntersectClip)
         painter.setPen(qcolor(a.color))
-        painter.setFont(textlayout.reference_font())
+        painter.setFont(textlayout.reference_font(a.face()))
         factor = a.font_size / textlayout.REFERENCE_PIXELS
-        for line, dx, baseline in textlayout.layout(a.contents, a.font_size, rect.width()):
+        below, thickness = textlayout.underline(a.font_size)
+        for line, dx, baseline in textlayout.layout(a.contents, a.font_size, rect.width(), a.face(), a.align):
             painter.save()
             painter.translate(rect.x() + dx, rect.y() + baseline)
             painter.scale(factor, factor)
             painter.drawText(QPointF(0, 0), line)
             painter.restore()
+            drawn = line.rstrip(" ")
+            if a.underline and drawn:  # as the saved appearance draws it: a thin bar under the line
+                width = textlayout.text_width(drawn, a.font_size, a.face())
+                painter.fillRect(QRectF(rect.x() + dx, rect.y() + baseline + below, width, thickness),
+                                 qcolor(a.color))
     painter.restore()
 
 

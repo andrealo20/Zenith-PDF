@@ -788,14 +788,14 @@ class CalloutTool(Tool):
         page_width, page_height = page_item.rect.width(), page_item.rect.height()
         width = min(CALLOUT_WIDTH, max(page_width - end[0], 60.0)) if end[0] >= tip[0] else CALLOUT_WIDTH
         width = min(width, page_width)
-        height = textlayout.fitted_height("", s.font_size, width)
+        height = textlayout.fitted_height("", s.font_size, width, s.face())
         x = end[0] if end[0] >= tip[0] else end[0] - width
         # The box stays on the page whole, wherever the drag ended; the arrow still points where it was pressed.
         x = max(min(x, page_width - width), 0.0)
         y = max(min(end[1] - height / 2, page_height - height), 0.0)
         box = FreeText(page=page_item.index, rect=(x, y, width, height), font_size=s.font_size,
                        color=s.color, callout=(tip,), border_width=1.0, border_color=s.color, fill=s.fill,
-                       **self.common())
+                       **s.text_format(), **self.common())
         self.view.edit_text_box(box, is_new=True, tool=self.name)
 
     def cancel(self) -> None:

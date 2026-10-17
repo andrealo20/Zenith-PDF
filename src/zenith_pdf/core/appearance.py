@@ -47,6 +47,26 @@ from .annotations import (
 from .geometry import PageGeometry
 
 BOUNDS_PAD = 2.0  # points added around the drawing so antialiased edges aren't clipped
+# The PDF's built-in fonts, by (font, bold, italic): the name a stream calls each by, and the font it is.
+STANDARD_FONTS = {
+    ("Helvetica", False, False): ("Helv", "Helvetica"),
+    ("Helvetica", True, False): ("HeBo", "Helvetica-Bold"),
+    ("Helvetica", False, True): ("HeOb", "Helvetica-Oblique"),
+    ("Helvetica", True, True): ("HeBO", "Helvetica-BoldOblique"),
+    ("Times", False, False): ("TiRo", "Times-Roman"),
+    ("Times", True, False): ("TiBo", "Times-Bold"),
+    ("Times", False, True): ("TiIt", "Times-Italic"),
+    ("Times", True, True): ("TiBI", "Times-BoldItalic"),
+    ("Courier", False, False): ("Cour", "Courier"),
+    ("Courier", True, False): ("CoBo", "Courier-Bold"),
+    ("Courier", False, True): ("CoOb", "Courier-Oblique"),
+    ("Courier", True, True): ("CoBO", "Courier-BoldOblique"),
+}
+
+
+def standard_font(face: textlayout.Face) -> tuple[str, str]:
+    """(resource name, BaseFont) of the built-in font for `face`; Helvetica for a face that isn't one."""
+    return STANDARD_FONTS.get(tuple(face), STANDARD_FONTS[textlayout.DEFAULT_FACE])
 
 
 @dataclass(frozen=True)
@@ -57,6 +77,7 @@ class Appearance:
     blend: str | None  # PDF blend mode name, e.g. "Multiply"
     uses_font: bool
     uses_image: bool = False  # draws the picture /Im0
+    face: tuple[str, bool, bool] = textlayout.DEFAULT_FACE  # the font uses_font means, as standard_font names it
     soft_fill: bool = False  # uses /GS1, a see-through fill (the inside of a measured area)
 
 
@@ -142,15 +163,16 @@ def _endings(endings: list[Ending], dashed: bool) -> list[str]:
 
 
 @lru_cache(maxsize=512)
-def glyph_path(text: str) -> str:
-    """`text` as glyph outlines (PDF path operators): Arial at the reference size, baseline at y = 0, y down.
+def glyph_path(text: str, face: textlayout.Face = textlayout.DEFAULT_FACE) -> str:
+    """`text` as glyph outlines (PDF path operators): the face's system font at the reference size, baseline at
+    y = 0, y down.
 
     For characters Helvetica can't show (Greek, arrows, maths, Cyrillic, CJK): drawn as
     shapes, they look the same in every viewer without embedding a font. Qt finds
     each glyph in a fallback font when Arial has none, as it does on screen.
     """
     path = QPainterPath()
-    path.addText(QPointF(0, 0), textlayout.reference_font(), text)
+    path.addText(QPointF(0, 0), textlayout.reference_font(face), text)
     ops, i, count = [], 0, path.elementCount()
     p = lambda *elements: " ".join(f"{num(e.x, 2)} {num(e.y, 2)}" for e in elements)
     while i < count:
@@ -183,24 +205,32 @@ def _runs(line: str) -> list[tuple[int, str, bool]]:
     return runs
 
 
-def _text_lines(text: str, font_size: float, x: float, y: float, width: float, color) -> list[str]:
-    """A text box's lines at (x, y), laid out `width` wide: Helvetica where it can, glyph outlines elsewhere."""
-    words, shapes = [], []
+def _text_lines(text: str, font_size: float, x: float, y: float, width: float, color,
+                face: textlayout.Face = textlayout.DEFAULT_FACE, align: str = "left",
+                underline: bool = False) -> list[str]:
+    """A text box's lines at (x, y), laid out `width` wide in `face`: the built-in font where it can, glyph
+    outlines elsewhere, each line placed as `align` says and underlined when asked."""
+    words, shapes, lines = [], [], []
     scale = font_size / textlayout.REFERENCE_PIXELS
-    for line, dx, baseline in textlayout.layout(text, font_size, width):
+    below, thickness = textlayout.underline(font_size)
+    for line, dx, baseline in textlayout.layout(text, font_size, width, face, align):
         for start, run, plain in _runs(line):
-            left = x + dx + (textlayout.text_width(line[:start], font_size) if start else 0.0)
+            left = x + dx + (textlayout.text_width(line[:start], font_size, face) if start else 0.0)
             if plain:
                 # y runs downwards here, so flip the text matrix to keep glyphs upright.
                 words.append(f"1 0 0 -1 {num(left)} {num(y + baseline)} Tm {pdf_string(run)} Tj")
-            elif glyph_path(run):
+            elif glyph_path(run, face):
                 shapes.append(f"q {num(scale, 5)} 0 0 {num(scale, 5)} {num(left)} {num(y + baseline)} cm "
-                              f"{glyph_path(run)} f Q")
+                              f"{glyph_path(run, face)} f Q")
+        drawn = line.rstrip(" ")
+        if underline and drawn:
+            lines.append(f"{num(x + dx)} {num(y + baseline + below)} "
+                         f"{num(textlayout.text_width(drawn, font_size, face))} {num(thickness)} re f")
     ops = []
     if words:
-        ops += [f"BT /Helv {num(font_size)} Tf {_rgb(color, stroke=False)}"] + words + ["ET"]
-    if shapes:
-        ops += [_rgb(color, stroke=False)] + shapes
+        ops += [f"BT /{standard_font(face)[0]} {num(font_size)} Tf {_rgb(color, stroke=False)}"] + words + ["ET"]
+    if shapes or lines:
+        ops += [_rgb(color, stroke=False)] + shapes + lines
     return ops
 
 
@@ -281,7 +311,7 @@ def _draw(annotation: Annotation) -> tuple[list[str], bool]:
                 f"{num(x + inset)} {num(y + inset)} {num(w - 2 * inset)} {num(h - 2 * inset)} re S"
             )
         ops.append(f"{num(x)} {num(y)} {num(w)} {num(h)} re W n")  # clip overflow to the box
-        ops += _text_lines(a.contents, a.font_size, x, y, w, a.color)
+        ops += _text_lines(a.contents, a.font_size, x, y, w, a.color, a.face(), a.align, a.underline)
         if a.rotation:
             ops.append("Q")
         return ops, True
@@ -396,5 +426,6 @@ def build(annotation: Annotation, geometry: PageGeometry) -> Appearance:
         blend="Multiply" if is_highlight else ("Normal" if needs_state else None),
         uses_font=uses_font,
         uses_image=isinstance(annotation, ImageStamp),
+        face=annotation.face() if isinstance(annotation, FreeText) else textlayout.DEFAULT_FACE,
         soft_fill=isinstance(annotation, Measurement) and annotation.mode == "area",
     )

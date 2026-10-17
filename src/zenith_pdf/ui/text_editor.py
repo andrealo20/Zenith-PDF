@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import shiboken6
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFontMetricsF, QPen, QTextCursor, QTransform
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPen, QTextCursor, QTransform
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsRectItem, QGraphicsTextItem
 
 from ..core import textlayout
@@ -38,11 +38,17 @@ class TextBoxEditor(QGraphicsTextItem):
         w, _ = box.upright_size()
 
         self.document().setDocumentMargin(0)
-        self.setFont(textlayout.reference_font())
+        font = QFont(textlayout.reference_font(box.face()))
+        font.setUnderline(box.underline)
+        self.setFont(font)
+        option = self.document().defaultTextOption()
+        option.setAlignment({"center": Qt.AlignmentFlag.AlignHCenter, "right": Qt.AlignmentFlag.AlignRight}.get(
+            box.align, Qt.AlignmentFlag.AlignLeft))
+        self.document().setDefaultTextOption(option)
         self.setDefaultTextColor(qcolor(box.color))
         self.setScale(factor)
         self.setTextWidth((w - 2 * TEXT_PADDING) / factor)
-        ascent = QFontMetricsF(textlayout.reference_font()).ascent() / textlayout.REFERENCE_PIXELS
+        ascent = QFontMetricsF(textlayout.reference_font(box.face())).ascent() / textlayout.REFERENCE_PIXELS
         self.setPos(TEXT_PADDING, TEXT_PADDING + (TEXT_ASCENT - ascent) * box.font_size)
         self.setPlainText(box.contents)
         self.setZValue(Z_EDITOR)
@@ -61,7 +67,7 @@ class TextBoxEditor(QGraphicsTextItem):
 
     def _fit_frame(self) -> None:
         w, h = self.box.upright_size()
-        needed = textlayout.fitted_height(self.toPlainText(), self.box.font_size, w)
+        needed = textlayout.fitted_height(self.toPlainText(), self.box.font_size, w, self.box.face())
         self.frame.setRect(QRectF(0, 0, w, max(h, needed)))
 
     def keyPressEvent(self, event) -> None:

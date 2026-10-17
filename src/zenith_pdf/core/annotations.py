@@ -234,9 +234,18 @@ class FreeText(Annotation):
     callout: tuple[Point, ...] = ()  # a callout's line: the arrow's tip first, then where it bends
     # Quarter turns clockwise of the text in its box, 0 to 3: a box keeps its look when its page turns.
     rotation: int = 0
+    font: str = "Helvetica"  # Helvetica, Times or Courier: the PDF's built-in fonts (textlayout.FAMILIES)
+    bold: bool = False
+    italic: bool = False
+    underline: bool = False
+    align: str = "left"  # left, center or right
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "rotation", int(self.rotation) % 4)
+
+    def face(self) -> tuple[str, bool, bool]:
+        """(font, bold, italic): how textlayout measures the text and the appearance names its font."""
+        return self.font, self.bold, self.italic
 
     @property
     def kind(self) -> str:
