@@ -160,7 +160,6 @@ def test_home_fits_a_narrow_window(window, pdf):
         wait()
         assert home.minimumSizeHint().width() <= 960
         assert not home.aside.isVisible()
-        assert {card.mode for card in home.cards} != {"full"}
         assert home.table.columnWidth(NAME) >= 260
         assert home.table.isColumnHidden(AUTHOR) and not home.table.isColumnHidden(OPENED)
         home.resize(1400, 900)

@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMenu,
     QPushButton,
+    QScrollArea,
     QStyle,
     QStyledItemDelegate,
     QTableView,
@@ -65,7 +66,6 @@ from ..theme import qcolor, themes
 from .library_search import InsideResults
 from . import messages
 from .help import attach_help
-from .home_tools import ToolList
 from .widgets import IconButton, muted_label
 
 INFO_LIMIT = 400  # files whose page count and author are remembered
@@ -471,8 +471,9 @@ class NavButton(QPushButton):
         painter.setFont(font)
         painter.setPen(QColor(t.accent_ink if self.isChecked() else t.text))  # text on the tinted fill
         metrics = painter.fontMetrics()
-        painter.drawText(QRect(38, 0, rect.width() - 80, rect.height()), Qt.AlignmentFlag.AlignVCenter,
-                         metrics.elidedText(tr(self.label), Qt.TextElideMode.ElideRight, rect.width() - 80))
+        room = rect.width() - (80 if self.count else 44)  # a row with no count lends its space to the name
+        painter.drawText(QRect(38, 0, room, rect.height()), Qt.AlignmentFlag.AlignVCenter,
+                         metrics.elidedText(tr(self.label), Qt.TextElideMode.ElideRight, room))
         if self.count:
             painter.setPen(QColor(t.text_muted))
             painter.drawText(QRect(rect.width() - 44, 0, 34, rect.height()),
@@ -546,7 +547,6 @@ class HomePage(QWidget):
     page_requested = Signal(Path, int, str)  # a page found inside a document: file, page from 0, the words
     new_requested = Signal()
     builder_requested = Signal()
-    tools_requested = Signal()
     tool_requested = Signal(str)  # a PDF tool of the list, by key
     compare_requested = Signal()
     images_requested = Signal()
@@ -585,10 +585,19 @@ class HomePage(QWidget):
         self._nav.addLayout(brand)
         self._nav.addSpacing(16)
         self._nav_buttons: list[NavButton] = []
-        self._dynamic = QVBoxLayout()
+        # Files, folders, tags and the tools: a column that scrolls when the window is short.
+        middle = QWidget()
+        self._dynamic = QVBoxLayout(middle)
+        self._dynamic.setContentsMargins(0, 0, 0, 0)
         self._dynamic.setSpacing(2)
-        self._nav.addLayout(self._dynamic)
-        self._nav.addStretch()
+        scroll = QScrollArea()
+        scroll.setWidget(middle)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }")
+        self._nav.addWidget(scroll, 1)
+        self._nav.addSpacing(8)
         guide = NavButton("graduation-cap", "Guide", "guide")
         guide.setCheckable(False)
         guide.clicked.connect(lambda: self.guide_requested.emit(""))
@@ -631,7 +640,6 @@ class HomePage(QWidget):
             ("folder-open", "Open a file", "Or drop PDFs on the window", self.open_requested),
             ("squares-four", "Doc Builder", "Join PDFs, pick their pages", self.builder_requested),
             ("image-square", "Images to PDF", "Photos and scans into one PDF", self.images_requested),
-            ("wrench", "PDF tools", "Split, compress, protect, number…", self.tools_requested),
         ):
             card = QuickCard(icon_name, title, detail)
             card.clicked.connect(signal.emit)
@@ -693,15 +701,11 @@ class HomePage(QWidget):
         main.addWidget(self.quick)
         main.addSpacing(4)
         main.addLayout(title_row)
-        main.addWidget(self.empty)
+        main.addWidget(self.empty, 1)  # with no files, the space below the cards is the message's
         main.addWidget(self.table, 1)
         self.inside = InsideResults()
         self.inside.page_requested.connect(self.page_requested)
         main.addWidget(self.inside, 1)
-        self.tools = ToolList()
-        self.tools.tool_requested.connect(self._tool)
-        self.tools.hide()
-        main.addWidget(self.tools, 1, Qt.AlignmentFlag.AlignLeft)  # a column on the left
 
         # Right column: the way into the guide
         self.aside = QFrame()
@@ -838,11 +842,7 @@ class HomePage(QWidget):
             self.empty.setText(tr("Files you open will appear here. Open one, or drop PDFs on the window."))
         self.tip.setText(native_keys(tr(random.choice(TIPS))))
         self.search.setPlaceholderText(tr(self._files_placeholder))
-        if self.scope == "tools":
-            self._show_tools()
-        else:
-            self.tools.hide()
-            self.inside.show_for(self.search.text())
+        self.inside.show_for(self.search.text())
 
     def _on_loaded(self, path: str, info: dict, image: QImage) -> None:
         if info:
@@ -883,30 +883,8 @@ class HomePage(QWidget):
             self.refresh()
 
     def _search(self, text: str) -> None:
-        if self.scope == "tools":
-            shown = self.tools.filter(text)
-            self.summary.setText(tr(f"{shown} tool{'s' if shown != 1 else ''}"))
-            return
         self.proxy.set_text(text)
         self.inside.show_for(text)
-
-    def _tool(self, key: str) -> None:
-        signals = {"new": self.new_requested, "builder": self.builder_requested, "compare": self.compare_requested}
-        if key in signals:
-            signals[key].emit()
-        else:
-            self.tool_requested.emit(key)
-
-    def _show_tools(self) -> None:
-        """The list of tools in place of the files: the search box looks among the tools."""
-        self.title.setText(tr("Tools"))
-        self.table.hide()
-        self.empty.hide()
-        self.inside.hide()
-        self.tools.show()
-        self.search.setPlaceholderText(tr("Search tools"))
-        shown = self.tools.filter(self.search.text())
-        self.summary.setText(tr(f"{shown} tool{'s' if shown != 1 else ''}"))
 
     def set_indexer(self, indexer) -> None:
         """Search inside the documents too, with the app's index."""
@@ -934,7 +912,6 @@ class HomePage(QWidget):
         starred = [p for p in self._settings.get("starred") if Path(p).exists()]
         self._nav_add(NavButton("files", "All files", "all"), str(len(recent)))
         self._nav_add(NavButton("star", "Starred", "starred"), str(len(starred)))
-        self._nav_add(NavButton("wrench", "Tools", "tools"), str(self.tools.count()))
         self._dynamic.addSpacing(14)
         self._dynamic.addWidget(self._heading("Folders", "push-pin", "Pin a folder", self.pin_requested.emit))
         for folder in self._settings.pinned_folders:
@@ -956,6 +933,26 @@ class HomePage(QWidget):
             self._nav_add(NavButton("tag", name, f"tag:{name}", colour=self.tag_colour(name)), str(counts[name]))
         if not counts:
             self._dynamic.addWidget(self._hint("Tag files from the list."))
+        self._dynamic.addSpacing(14)
+        self._dynamic.addWidget(self._heading("Tools"))
+        from .pdf_tools import TOOLS  # here: pdf_tools imports the window, which imports this page
+
+        rows = [("compare", "git-diff", "Compare two versions", "What was added, removed or changed")]
+        rows += [(tool.key, tool.icon, tool.title, tool.description) for tool in TOOLS]
+        for key, icon_name, title, detail in rows:
+            button = NavButton(icon_name, title, f"tool:{key}")
+            button.setCheckable(False)
+            button.setMinimumHeight(32)
+            button.setToolTip(tr(detail))
+            button.clicked.connect(lambda _=False, key=key: self._tool(key))
+            self._dynamic.addWidget(button)
+        self._dynamic.addStretch()
+
+    def _tool(self, key: str) -> None:
+        if key == "compare":
+            self.compare_requested.emit()
+        else:
+            self.tool_requested.emit(key)
 
     @staticmethod
     def _hint(text: str) -> QLabel:

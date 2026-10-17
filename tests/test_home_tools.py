@@ -1,4 +1,4 @@
-"""The home page's list of tools: every one listed by group, found by the search box, and run on a PDF."""
+"""The home page's tools: listed open in the left column, under the tags, and run on a PDF."""
 
 import dataclasses
 import shutil
@@ -6,12 +6,12 @@ import shutil
 import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QFileDialog
+from PySide6.QtWidgets import QFileDialog, QLabel
 
 from zenith_pdf.app import create_app
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui import pdf_tools
-from zenith_pdf.ui.home_tools import CREATE
+from zenith_pdf.ui.home import NavButton
 
 
 @pytest.fixture
@@ -29,26 +29,23 @@ def window(qt_app, tmp_path):
     window.renderer.shutdown()
 
 
-def test_every_tool_is_listed_by_group_and_the_search_finds_them(window):
+def tool_rows(home):
+    return [button for button in home.findChildren(NavButton) if button.key.startswith("tool:")]
+
+
+def test_every_tool_is_listed_open_in_the_left_column_under_the_tags(window):
     home = window.home
-    nav = next(button for button in home._nav_buttons if button.key == "tools")
-    assert nav.count == str(len(pdf_tools.TOOLS) + len(CREATE))
-    nav.click()
-    QApplication.processEvents()
-    assert home.tools.isVisible() and not home.table.isVisible() and home.title.text() == "Tools"
-    keys = {tile.key for tile in home.tools.tiles()}
-    assert keys == {tool.key for tool in pdf_tools.TOOLS} | {key for key, *_ in CREATE}
-    groups = [title.text() for title, _ in home.tools.groups]
-    assert groups == ["Create", *pdf_tools.GROUPS]
-    assert home.search.placeholderText() == "Search tools"
-    home.search.setText("compress")
-    assert [tile.key for tile in home.tools.tiles() if not tile.isHidden()] == ["compress"]
-    assert home.summary.text() == "1 tool"
-    home.search.setText("no such tool at all")
-    assert home.tools.empty.isVisible()
-    home.search.clear()
-    home.show_scope("all")
-    assert not home.tools.isVisible() and home.search.placeholderText() != "Search tools"
+    QTest.qWait(50)  # rows added to a shown column show on the next turn of the event loop
+    rows = tool_rows(home)
+    assert [row.key for row in rows] == ["tool:compare"] + [f"tool:{tool.key}" for tool in pdf_tools.TOOLS]
+    assert all(row.isVisibleTo(home) for row in rows)  # open, no click needed
+    assert not [card for card in home.cards if card.title == "PDF tools"]
+    assert "tools" not in {button.key for button in home._nav_buttons}
+    layout = rows[0].parentWidget().layout()
+    tags = next(i for i in range(layout.count()) if (w := layout.itemAt(i).widget()) is not None
+                and w.findChild(QLabel) is not None
+                and w.findChild(QLabel).text() == "TAGS")
+    assert layout.indexOf(rows[0]) > tags
 
 
 def test_a_document_tool_asks_for_the_pdf_then_works_on_it(window, monkeypatch, sample_pdf, tmp_path):
@@ -71,14 +68,14 @@ def test_a_document_tool_asks_for_the_pdf_then_works_on_it(window, monkeypatch, 
     assert [key for key, _ in ran] == ["images_to_pdf"]
 
 
-def test_the_create_tools_go_where_the_home_cards_go(window):
-    went = []
+def test_the_tools_in_the_left_column_run_their_tool(window):
     home = window.home
-    for name in ("new", "builder", "compare"):
-        signal = getattr(home, f"{name}_requested")
-        signal.disconnect()  # the window's own dialogs stay closed
-        signal.connect(lambda name=name: went.append(name))
-    for tile in home.tools.tiles():
-        if tile.key in ("new", "builder", "compare"):
-            tile.clicked.emit(tile.key)
-    assert sorted(went) == ["builder", "compare", "new"]
+    went = []
+    home.compare_requested.disconnect()  # the window's own dialogs stay closed
+    home.compare_requested.connect(lambda: went.append("compare"))
+    home.tool_requested.disconnect()
+    home.tool_requested.connect(went.append)
+    rows = {row.key: row for row in tool_rows(home)}
+    rows["tool:compare"].click()
+    rows["tool:compress"].click()
+    assert went == ["compare", "compress"]

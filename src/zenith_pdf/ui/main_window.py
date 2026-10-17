@@ -172,7 +172,6 @@ class MainWindow(QMainWindow):
             self.home.set_indexer(MainWindow.indexer)
         self.home.new_requested.connect(self.new_document_dialog)
         self.home.builder_requested.connect(self.open_builder)
-        self.home.tools_requested.connect(self.show_tools_panel)
         self.home.tool_requested.connect(self.run_tool_from_home)
         tool_menu.colour_picker = self.pick_colour
         from .annotation_items import Handle
