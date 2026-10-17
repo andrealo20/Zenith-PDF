@@ -38,6 +38,8 @@ DEFAULTS: dict[str, object] = {
     "assistant_recent": [],  # what was last run from the assistant (Ctrl+K), the newest first
     "whats_new_after_update": True,  # after an update, a tour of what changed
     "seen_version": "",  # the version whose tour was shown last; "" before the first start
+    "read_speed": 1.0,  # reading aloud: times the voice's own pace
+    "read_voice": "",  # the voice picked last; "" for the system's
     "update_check": True,  # ask GitHub once a day whether a new version is out
     "update_auto": False,  # download new versions in the background and install them when the app closes
     "update_skipped": "",  # a version the user chose to skip

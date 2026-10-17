@@ -24,8 +24,8 @@ dependencies = [
     "winrt-Windows.Globalization>=3; sys_platform == 'win32'",
     "winrt-Windows.Foundation>=3; sys_platform == 'win32'",
     "winrt-Windows.Foundation.Collections>=3; sys_platform == 'win32'",
-    # Audio notes and the camera on macOS and Linux
-    "PySide6-Addons>=6.8; sys_platform != 'win32'",
+    # Reading aloud everywhere; audio notes and the camera on macOS and Linux
+    "PySide6-Addons>=6.8",
     # Text recognition (Vision) and spelling (NSSpellChecker) on macOS
     "pyobjc-framework-Vision>=10; sys_platform == 'darwin'",
     "pyobjc-framework-Quartz>=10; sys_platform == 'darwin'",

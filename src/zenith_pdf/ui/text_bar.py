@@ -122,6 +122,8 @@ class TextSelectionBar(FloatingBar):
         self.note.clicked.connect(self.add_note)
         self.search = IconButton("magnifying-glass", "Search for this text", icon_size=ICON, help="text_search")
         self.search.clicked.connect(self.search_text)
+        self.speak = IconButton("speaker-high", "Read aloud", icon_size=ICON, help="text_read_aloud")
+        self.speak.clicked.connect(workspace.read_aloud)
 
         highlight = QHBoxLayout()  # Highlight and its colour read as one split button
         highlight.setContentsMargins(0, 0, 0, 0)
@@ -133,7 +135,7 @@ class TextSelectionBar(FloatingBar):
         layout.setSpacing(4)
         layout.addLayout(highlight)
         for widget in (self.markups["underline"], self.markups["strikeout"], self.markups["squiggly"], separator(),
-                       self.copy, self.note, self.search):
+                       self.copy, self.note, self.search, self.speak):
             layout.addWidget(widget)
 
         workspace.tool_settings.style_changed.connect(self._on_style)

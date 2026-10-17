@@ -956,6 +956,13 @@ class MainWindow(QMainWindow):
     def command_assistant(self) -> None:
         self.show_assistant()
 
+    def command_read_aloud(self) -> None:
+        workspace = self.current_workspace()
+        if workspace is None:
+            self.open_guide("reading")
+        else:
+            workspace.read_aloud()
+
     # Updates ------------------------------------------------------------
 
     @classmethod

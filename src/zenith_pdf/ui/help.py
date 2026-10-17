@@ -252,6 +252,9 @@ TOPICS: dict[str, Topic] = {
     "text_underline": Topic("Underline", "Draws a line under the selected text, in the underline tool's colour."),
     "text_strike": Topic("Strikethrough", "Draws a line through the selected text, to mark it as removed."),
     "text_squiggle": Topic("Squiggle", "Draws a wavy line under the selected text, to point out a mistake."),
+    "text_read_aloud": Topic("Read aloud", "Reads the selected text with the system's voices.",
+                             "A bar at the bottom pauses, goes back or on a sentence, changes the speed and the voice, "
+                             "and stops."),
     "text_copy": Topic("Copy", "Copies the selected text, to paste it into any other app.", keys="Ctrl+C"),
     "text_note": Topic("Note", "Highlights the selected text with a note you write on it.",
                        "Point at the highlight to read the note; other PDF apps show it too. Properties, in the "

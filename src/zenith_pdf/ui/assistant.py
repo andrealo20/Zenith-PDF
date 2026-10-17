@@ -168,6 +168,8 @@ def _commands(window, workspace) -> list[Found]:
         _command("search", "Search in the document", "search find word text", "magnifying-glass", "Ctrl+F",
                  ws.show_search),
         _command("go_to_page", "Go to page…", "go page number jump", "hash", "Ctrl+G", ws.page_counter.focus),
+        _command("read_aloud", "Read aloud", "read aloud speak voice listen speech audio", "speaker-high", "",
+                 ws.read_aloud),
         _command("first_page", "First page", "go start beginning", "arrow-line-up", "Home", lambda: view.jump(0)),
         _command("last_page", "Last page", "go end", "arrow-line-down", "End",
                  lambda: view.jump(ws.document.page_count - 1)),

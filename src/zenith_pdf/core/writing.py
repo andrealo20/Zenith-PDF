@@ -169,21 +169,34 @@ def clean_pdf_text(text: str) -> str:
     return re.sub(r"[ \t ]+", " ", text).strip()
 
 
+SENTENCE_END = re.compile(r"[.!?…]+[\"'”»)]?\s+(?=[\"'“«(]?[A-ZÀ-Ý0-9])")
+
+
 def sentences(text: str) -> list[str]:
     """The sentences of `text`, split after . ! ? and a capital, but not after an abbreviation."""
     text = clean_pdf_text(text)
+    return [text[start:end] for start, end in sentence_spans(text)]
+
+
+def sentence_spans(text: str) -> list[tuple[int, int]]:
+    """Where the sentences of `text` are, as (start, end) indices: split as sentences() splits, on the text as
+    it is, line breaks and all, so the positions are those of the original (a page's characters)."""
     found, start = [], 0
-    for match in re.finditer(r"[.!?…]+[\"'”»)]?\s+(?=[\"'“«(]?[A-ZÀ-Ý0-9])", text):
+    for match in SENTENCE_END.finditer(text):
         if text[match.start()] == "." and _abbreviation_before(text, match.start()):
             continue
-        piece = text[start:match.end()].strip()
-        if piece:
-            found.append(piece)
+        found.append((start, match.end()))
         start = match.end()
-    rest = text[start:].strip()
-    if rest:
-        found.append(rest)
-    return found
+    found.append((start, len(text)))
+    spans = []
+    for first, end in found:
+        while first < end and text[first].isspace():
+            first += 1
+        while end > first and text[end - 1].isspace():
+            end -= 1
+        if first < end:
+            spans.append((first, end))
+    return spans
 
 
 def key_sentences(text: str, count: int | None = None, language: str | None = None) -> list[str]:

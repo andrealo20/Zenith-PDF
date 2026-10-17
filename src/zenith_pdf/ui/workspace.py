@@ -562,6 +562,22 @@ class _Canvas(QWidget):
                     card.hide()
         self.resizeEvent(None)
 
+    def place_bottom(self, bar: QWidget) -> None:
+        """Float `bar` over the middle of the bottom of the pages, above the zoom and undo bars where they leave
+        no room beside them."""
+        hint = bar.sizeHint()
+        x = (self.width() - hint.width()) // 2
+        y = self.height() - hint.height() - GAP
+        spot = QRect(x, y, hint.width(), hint.height())
+        below = [self.bars[key].geometry() for key in ("zoom", "undo")]
+        if any(spot.intersects(rect) for rect in below):
+            y = min(rect.top() for rect in below) - GAP // 2 - hint.height()
+        bar.setGeometry(x, y, hint.width(), hint.height())
+        if not self.reading:
+            bar.show()
+        bar.raise_()
+        self.schedule_glass([bar])
+
     def place_selection(self, area) -> None:
         """Float the selection bar above the selection, or below it if there's no room."""
         if area is None or self.manager is not None or self.reading:
@@ -682,6 +698,9 @@ class _Canvas(QWidget):
         self.place_exit_chip()
         toast = self.toast.sizeHint()
         self.toast.setGeometry((width - toast.width()) // 2, height - toast.height() - GAP - 50, toast.width(), toast.height())
+        for widget in self._floating:
+            if getattr(widget, "bottom_bar", False) and shiboken6.isValid(widget) and widget.isVisible():
+                self.place_bottom(widget)
         floating = (self.toolbar, self.selection, *self.bars.values(), *self._floating, self.toast, self.exit_chip)
         for widget in floating:
             if widget is not None and shiboken6.isValid(widget):
@@ -755,6 +774,7 @@ class Workspace(QWidget):
         self.text_bar = TextSelectionBar(self)
         self.canvas.add_floating(self.text_bar)
         self.tool_tips = ToolTips(self)  # a tool's tips, the first time it is picked
+        self._read_aloud = None  # made the first time something is read aloud
         self.view.text_selection_changed.connect(self._show_text_bar)
         self.view.history_changed.connect(self._on_history_changed)
         self.view.selection_changed.connect(self._update_selection_bar)
@@ -1113,7 +1133,23 @@ class Workspace(QWidget):
         self.document.save(self.store.all(), path)
         self.undo_stack.setClean()
 
+    def read_aloud(self) -> None:
+        """Read the selected text aloud, or the pages from the current one on."""
+        from . import read_aloud
+
+        if not read_aloud.available():
+            self.notify("Reading aloud needs the system's voices, and none was found.")
+            return
+        if self._read_aloud is None:
+            self._read_aloud = read_aloud.ReadAloud(self)
+        self._read_aloud.start()
+
+    def stop_reading_aloud(self) -> None:
+        if self._read_aloud is not None:
+            self._read_aloud.stop()
+
     def close_document(self) -> None:
+        self.stop_reading_aloud()
         if self._chooser is not None:
             self._chooser.close()
         if self.page_manager is not None:

@@ -726,6 +726,15 @@ class Document:
         with PDFIUM_LOCK:
             return textclean.clean(self._textpage(index).get_text_range())
 
+    def page_characters(self, index: int) -> tuple[str, bool]:
+        """The page's text with one string position per PDFium character, and whether that holds: a
+        character outside the Basic Multilingual Plane takes two positions, and then it doesn't."""
+        with PDFIUM_LOCK:
+            textpage = self._textpage(index)
+            count = textpage.count_chars()
+            text = textpage.get_text_range(0, count) if count else ""
+        return text, textclean.units(text) == count == len(text)
+
     def _raw_text(self, index: int) -> str | None:
         """The page's text as PDFium has it, if cleaning would change it; else None.
         The caller must hold PDFIUM_LOCK."""

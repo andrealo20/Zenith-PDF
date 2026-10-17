@@ -1542,6 +1542,13 @@ class DocumentView(QGraphicsView):
     def has_text_selection(self) -> bool:
         return self._text_selection is not None
 
+    def text_selection(self) -> tuple[int, list, str] | None:
+        """The selected text: (page, its display-space rectangles, the text), or None."""
+        if self._text_selection is None:
+            return None
+        page, rects, text, _preview = self._text_selection
+        return page, list(rects), text
+
     def page_width(self, page: int) -> float:
         return self._pages[page].rect.width()
 
