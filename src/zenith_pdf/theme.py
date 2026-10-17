@@ -491,6 +491,8 @@ def _style_sheet(t: Theme) -> str:
     QLabel#DialogTitle {{ font-size: 12pt; font-weight: 600; }}
     QLabel#DialogBody {{ color: {t.text_muted}; }}
     QLabel#WhatsNewVersion {{ font-weight: 600; margin-top: 6px; }}
+    QLabel#CardFront {{ font-size: 14pt; font-weight: 600; }}
+    QLabel#CardBack {{ font-size: 12pt; color: {t.accent_ink}; }}
     QLabel#DialogDetail {{
         color: {t.text_muted}; font-size: 9pt; background: {t.hover}; border-radius: 6px; padding: 8px 10px;
     }}

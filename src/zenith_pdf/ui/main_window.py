@@ -956,6 +956,24 @@ class MainWindow(QMainWindow):
     def command_assistant(self) -> None:
         self.show_assistant()
 
+    def command_study_notes(self) -> None:
+        workspace = self.current_workspace()
+        if workspace is None:
+            self.open_guide("assistant")
+        else:
+            from . import writing_dialogs
+
+            writing_dialogs.study_notes(workspace.view)
+
+    def command_flashcards(self) -> None:
+        workspace = self.current_workspace()
+        if workspace is None:
+            self.open_guide("assistant")
+        else:
+            from .flashcards import flashcards_for
+
+            flashcards_for(workspace.view)
+
     def command_read_aloud(self) -> None:
         workspace = self.current_workspace()
         if workspace is None:

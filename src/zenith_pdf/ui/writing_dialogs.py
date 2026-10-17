@@ -10,8 +10,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QLocale, Qt
-from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
+from PySide6.QtCore import QLocale, Qt, QUrl
+from PySide6.QtGui import QColor, QDesktopServices, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -26,12 +26,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import spelling, textlayout, writing
+from ..core import obsidian, spelling, textlayout, writing
 from ..core.annotations import NOTE_SIZE, FreeText, Note, TextMarkup
 from ..core.platforms import LINUX, SYSTEM_NAME, settings_place
 from ..theme import themes
 from . import messages
 from .commands import ChangeAnnotations
+from .instance import page_link
 from .widgets import Segmented, muted_label
 
 if TYPE_CHECKING:
@@ -371,12 +372,13 @@ def marks_of(view: DocumentView) -> list[writing.Marked]:
 class StudyNotesDialog(messages.MessageDialog):
     def __init__(self, parent, marks: list[writing.Marked], title: str):
         super().__init__(parent, "Study notes", "", [
-            ("save", "Save as…", "primary"), ("copy", "Copy", ""), (messages.CANCEL, "Close", "")])
+            ("obsidian", "Send to Obsidian", ""), ("save", "Save as…", "primary"), ("copy", "Copy", ""),
+            (messages.CANCEL, "Close", "")])
         self.setMinimumWidth(620)
         self.marks, self.title = marks, title
         intro = muted_label(f"{len(marks)} marked passage{'s' if len(marks) != 1 else ''}, each with the text under "
                             "it and its comment, ready to revise from. Save them as Markdown, which most note apps "
-                            "read.")
+                            "read. Sent to Obsidian, every page is a link that opens the PDF there.")
         intro.setWordWrap(True)
         self.add_field(intro)
         self.order = Segmented((("page", "By page"), ("colour", "By colour")))
@@ -394,6 +396,52 @@ class StudyNotesDialog(messages.MessageDialog):
         self.view.setMarkdown(self.markdown.split("\n", 1)[1])  # the dialog's heading names it already
 
 
+def choose_vault(parent, settings) -> Path | None:
+    """The vault study notes go to: the one chosen before, else one Obsidian knows or a folder picked here."""
+    chosen = settings.get("obsidian_vault") if settings is not None else ""
+    if chosen and Path(chosen).is_dir():
+        return Path(chosen)
+    known = obsidian.vaults()
+    other = "Another folder…"
+    if known:
+        names = [f"{vault.name}  ({vault})" for vault in known] + [other]
+        picked = messages.get_item(parent, "Send to Obsidian", "Which vault should the notes go to?", names,
+                                   action="Choose")
+        if picked is None:
+            return None
+        if picked != other:
+            vault = known[names.index(picked)]
+            if settings is not None:
+                settings.set("obsidian_vault", str(vault))
+            return vault
+    folder = QFileDialog.getExistingDirectory(parent, "Your Obsidian vault", str(Path.home()))
+    if not folder:
+        return None
+    if settings is not None:
+        settings.set("obsidian_vault", folder)
+    return Path(folder)
+
+
+def send_to_obsidian(view: DocumentView, marks: list[writing.Marked], path: Path, order: str = "page") -> Path | None:
+    """Write the study notes into the Obsidian vault, each page a zenith-pdf link, and show them there."""
+    settings = view.settings
+    vault = choose_vault(view, settings)
+    if vault is None:
+        return None
+    notes = writing.study_notes(marks, f"Study notes: {path.stem}", order, link=lambda page: page_link(path, page))
+    folder = settings.get("obsidian_folder") if settings is not None else "Zenith PDF"
+    try:
+        note = obsidian.write_note(vault, folder, path, notes, page_link)
+    except OSError as error:
+        messages.warn(view, "The notes could not be sent", f"Writing into {vault} failed.",
+                      detail=error.strerror or str(error))
+        return None
+    view.message.emit(f"Sent to Obsidian: {note.name}")
+    if settings is None or settings.get("obsidian_open"):
+        QDesktopServices.openUrl(QUrl(obsidian.open_uri(note)))
+    return note
+
+
 def study_notes(view: DocumentView) -> str | None:
     marks = marks_of(view)
     if not marks:
@@ -402,9 +450,11 @@ def study_notes(view: DocumentView) -> str | None:
     path = view.document.path
     dialog = StudyNotesDialog(view, marks, f"Study notes: {path.stem}")
     dialog.exec()
-    choice, notes = dialog.choice, dialog.markdown
+    choice, notes, dialog_order = dialog.choice, dialog.markdown, dialog.order.value
     dialog.deleteLater()
-    if choice == "copy":
+    if choice == "obsidian":
+        send_to_obsidian(view, marks, path, dialog_order)
+    elif choice == "copy":
         QApplication.clipboard().setText(notes)
         view.message.emit("Study notes copied.")
     elif choice == "save":

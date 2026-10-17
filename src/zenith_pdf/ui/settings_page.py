@@ -806,6 +806,30 @@ class SettingsWindow(QDialog):
         layout.addWidget(clear)
         s.add(Row("Files on the home page", "How many recently opened files the home page lists.", recent,
                   "history home recent"))
+        vault = QPushButton()
+        vault.setFixedWidth(CONTROL_WIDTH)
+        self._watch("obsidian_vault", vault, lambda: vault.setText(
+            Path(self._settings.get("obsidian_vault")).name if self._settings.get("obsidian_vault") else "Choose…"))
+        vault.clicked.connect(self._choose_vault)
+        s.add(Row("Obsidian vault", "Where Study notes > Send to Obsidian writes the notes of each document.", vault,
+                  "obsidian vault notes markdown export"))
+        folder = QLineEdit()
+        folder.setFixedWidth(CONTROL_WIDTH)
+        folder.setPlaceholderText("The top of the vault")
+        self._watch("obsidian_folder", folder, lambda: folder.setText(self._settings.get("obsidian_folder")))
+        folder.editingFinished.connect(lambda: self._settings.set("obsidian_folder", folder.text().strip()))
+        s.add(Row("Folder in the vault", "The notes go in this folder of the vault.", folder,
+                  "obsidian folder notes"))
+        s.add(Row("Show the notes in Obsidian", "Once sent, the note opens in Obsidian.",
+                  self._switch("obsidian_open"), "obsidian open notes"))
+
+    def _choose_vault(self) -> None:
+        from .writing_dialogs import choose_vault
+
+        before = self._settings.get("obsidian_vault")
+        self._settings.set("obsidian_vault", "")  # asked again, from Obsidian's list or a folder
+        if choose_vault(self, self._settings) is None:
+            self._settings.set("obsidian_vault", before)
 
     def _set_recent_limit(self, value: int) -> None:
         # Only how many show: the list itself stays, so typing 50 (a 5 first) or a smaller number loses nothing.

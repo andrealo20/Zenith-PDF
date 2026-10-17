@@ -282,9 +282,20 @@ def _writing(window, workspace) -> list[Found]:
                              "study notes highlights underlines export summary revise", "", "", "notebook", "", marked,
                              "" if marked else (NO_DOCUMENT if view is None else "No highlights or underlines yet.")),
                        lambda: helpers.study_notes(view)))
+    found.append(Found(Entry("write:flashcards", "writing", "Flashcards from highlights", "Writing",
+                             "flashcards cards anki study revise quiz memorize test highlights", "", "", "cards", "",
+                             marked, "" if marked else (NO_DOCUMENT if view is None else
+                                                        "No highlights or underlines yet.")),
+                       lambda: _flashcards(view)))
     found.append(Found(Entry("write:model", "info", "Translate, explain or rewrite text", "Writing",
                              "translate explain rewrite paraphrase", "", "", "translate", "", False, MODEL_NOTE), None))
     return found
+
+
+def _flashcards(view) -> None:
+    from .flashcards import flashcards_for
+
+    flashcards_for(view)
 
 
 def _settings(window) -> list[Found]:

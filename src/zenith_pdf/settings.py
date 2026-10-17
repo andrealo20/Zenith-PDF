@@ -38,6 +38,9 @@ DEFAULTS: dict[str, object] = {
     "assistant_recent": [],  # what was last run from the assistant (Ctrl+K), the newest first
     "whats_new_after_update": True,  # after an update, a tour of what changed
     "seen_version": "",  # the version whose tour was shown last; "" before the first start
+    "obsidian_vault": "",  # the vault study notes go to; "" asks the first time
+    "obsidian_folder": "Zenith PDF",  # the folder in the vault, "" for its top
+    "obsidian_open": True,  # show the note in Obsidian once it is sent
     "read_speed": 1.0,  # reading aloud: times the voice's own pace
     "read_voice": "",  # the voice picked last; "" for the system's
     "update_check": True,  # ask GitHub once a day whether a new version is out

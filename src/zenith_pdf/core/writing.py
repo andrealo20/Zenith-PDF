@@ -259,8 +259,13 @@ class Marked:
     top: float = 0.0  # where it is on the page, to keep reading order
 
 
-def study_notes(marks: list[Marked], title: str, by: str = "page") -> str:
-    """Markdown notes of `marks`: grouped by page (in reading order) or by colour, with comments under each."""
+def study_notes(marks: list[Marked], title: str, by: str = "page", link=None) -> str:
+    """Markdown notes of `marks`: grouped by page (in reading order) or by colour, with comments under each.
+    With `link` (page from 1 -> URL), each page is a link to it."""
+
+    def page_ref(number: int, label: str) -> str:
+        return f"[{label}]({link(number)})" if link is not None else label
+
     if not marks:
         return f"# {title}\n\nNo highlights, underlines or strikethroughs yet.\n"
     ordered = sorted(marks, key=lambda m: (m.page, m.top))
@@ -273,7 +278,7 @@ def study_notes(marks: list[Marked], title: str, by: str = "page") -> str:
             lines += [f"## {name}", ""]
             for mark in members:
                 kind = "" if mark.style == "Highlight" else f" ({MARK_NAMES.get(mark.style, mark.style.lower())})"
-                lines.append(f"- p. {mark.page + 1}{kind}: {_quoted(mark.text)}")
+                lines.append(f"- {page_ref(mark.page + 1, f'p. {mark.page + 1}')}{kind}: {_quoted(mark.text)}")
                 if mark.comment.strip():
                     lines.append(f"  - Note: {mark.comment.strip()}")
             lines.append("")
@@ -284,7 +289,7 @@ def study_notes(marks: list[Marked], title: str, by: str = "page") -> str:
                 if page is not None:
                     lines.append("")
                 page = mark.page
-                lines += [f"## Page {page + 1}", ""]
+                lines += [f"## {page_ref(page + 1, f'Page {page + 1}')}", ""]
             kind = MARK_NAMES.get(mark.style, mark.style.lower())
             lines.append(f"- **{colour_name(mark.color)} {kind}:** {_quoted(mark.text)}")
             if mark.comment.strip():
