@@ -27,7 +27,7 @@ In continuous development: new versions come out often.
 ![Free and open source](https://img.shields.io/badge/free-open_source-2EA44F?style=flat-square)
 ![In continuous development](https://img.shields.io/badge/development-active-2EA44F?style=flat-square)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-554%20passing-2EA44F?style=flat-square&logo=pytest&logoColor=white)
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Works offline](https://img.shields.io/badge/works-offline-6E40C9?style=flat-square)
 ![English](https://img.shields.io/badge/language-English-E3A008?style=flat-square)
 ![Italian](https://img.shields.io/badge/language-Italian-E3A008?style=flat-square)
@@ -35,18 +35,6 @@ In continuous development: new versions come out often.
 ![Spanish](https://img.shields.io/badge/language-Spanish-E3A008?style=flat-square)
 ![German](https://img.shields.io/badge/language-German-E3A008?style=flat-square)
 ![Portuguese](https://img.shields.io/badge/language-Portuguese-E3A008?style=flat-square)
-
-![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
-![Qt 6 with PySide6](https://img.shields.io/badge/Qt%206-PySide6-41CD52?style=flat-square&logo=qt&logoColor=white)
-![PDFium through pypdfium2](https://img.shields.io/badge/PDFium-pypdfium2-4285F4?style=flat-square)
-![qpdf through pikepdf](https://img.shields.io/badge/qpdf-pikepdf-B0413E?style=flat-square)
-![Pillow](https://img.shields.io/badge/images-Pillow-F5C400?style=flat-square)
-![Phosphor icons](https://img.shields.io/badge/icons-Phosphor%20%2B%20QtAwesome-333?style=flat-square)
-![OCR](https://img.shields.io/badge/OCR-Windows.Media.Ocr%20%7C%20Vision%20%7C%20Tesseract-0078D4?style=flat-square)
-![pytest](https://img.shields.io/badge/tested_with-pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white)
-![PyInstaller](https://img.shields.io/badge/packaged_with-PyInstaller-4B8BBE?style=flat-square)
-![NSIS](https://img.shields.io/badge/installer-NSIS-8A2BE2?style=flat-square)
-![GitHub Actions](https://img.shields.io/badge/built_by-GitHub_Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 
 <br>
 
