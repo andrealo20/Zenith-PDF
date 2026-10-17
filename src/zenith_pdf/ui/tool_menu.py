@@ -48,6 +48,7 @@ from ..core.annotations import (
     UNITS,
     Annotation,
     Attachment,
+    Caret,
     FreeText,
     ImageStamp,
     Ink,
@@ -2370,7 +2371,7 @@ def _options_of(a: Annotation) -> set[str]:
         return {"opacity"}
     if isinstance(a, Note):
         return {"color", "note_icon"}
-    if isinstance(a, Attachment):
+    if isinstance(a, (Attachment, Caret)):
         return {"color"}
     if isinstance(a, Redaction):
         return {"fill"}

@@ -50,17 +50,22 @@ from ..core import images, textlayout
 from ..core.annotations import (
     AUDIO_SUFFIXES,
     NOTE_SIZE,
+    CARET_BLUE,
     Annotation,
     Attachment,
+    Caret,
     FreeText,
     ImageStamp,
     Ink,
     Link,
     Note,
+    Redaction,
     Tape,
     TextMarkup,
+    caret_at,
     new_id,
     overlaps,
+    regrouped,
     union,
 )
 from ..core.document import Document, SearchHit
@@ -1052,7 +1057,7 @@ class DocumentView(QGraphicsView):
             super().mouseDoubleClickEvent(event)
         elif isinstance(annotation, FreeText):
             self.edit_text_box(annotation, is_new=False)
-        elif isinstance(annotation, Note):
+        elif isinstance(annotation, (Note, Caret)):
             self.edit_note(annotation)
         elif isinstance(annotation, Tape):
             from .drawing_tools import toggle_tape
@@ -1741,9 +1746,41 @@ class DocumentView(QGraphicsView):
 
     def _on_selection_changed(self) -> None:
         selected = self.selected_annotations()
+        groups = {a.group for a in selected if a.group}
+        mates = [item for item in self._items.values()
+                 if groups and item.annotation.group in groups and not item.isSelected()]
+        if mates:  # a group is selected whole, however one of it was picked
+            scene = self.scene()
+            scene.blockSignals(True)
+            try:
+                for item in mates:
+                    item.setSelected(True)
+            finally:
+                scene.blockSignals(False)
+            selected = self.selected_annotations()
         if selected:
             self.clear_text_selection()  # one selection at a time, with one bar over it
         self.selection_changed.emit(selected)
+
+    def can_group(self) -> bool:
+        """Whether the selection can become one group: two or more, on one page, not one group already."""
+        selected = self.selected_annotations()
+        return len(selected) > 1 and len({a.page for a in selected}) == 1 and \
+            not (len({a.group for a in selected}) == 1 and selected[0].group)
+
+    def group_selected(self) -> None:
+        if not self.can_group() or self.document.read_only:
+            return
+        selected = self.selected_annotations()
+        name = new_id()
+        self.undo_stack.push(ChangeAnnotations(self.store, selected, [replace(a, group=name) for a in selected],
+                                               "Group"))
+
+    def ungroup_selected(self) -> None:
+        grouped = [a for a in self.selected_annotations() if a.group]
+        if grouped and not self.document.read_only:
+            self.undo_stack.push(ChangeAnnotations(self.store, grouped, [replace(a, group="") for a in grouped],
+                                                   "Ungroup"))
 
     def selected_annotations(self) -> list[Annotation]:
         return [i.annotation for i in self.scene().selectedItems() if isinstance(i, AnnotationItem)]
@@ -1794,8 +1831,8 @@ class DocumentView(QGraphicsView):
                 item.setSelected(True)
 
     def duplicate_selected(self) -> None:
-        copies = [replace(a, id=new_id(), locked=False).translated(12, 12)
-                  for a in self.selected_annotations() if not isinstance(a, TextMarkup)]
+        copies = regrouped([replace(a, id=new_id(), locked=False).translated(12, 12)
+                            for a in self.selected_annotations() if not isinstance(a, TextMarkup)])
         if copies:
             self.undo_stack.push(AddAnnotations(self.store, copies, "Duplicate"))
             self.select(copies)
@@ -1838,8 +1875,8 @@ class DocumentView(QGraphicsView):
     def apply_to_pages(self, pages: list[int]) -> int:
         """Copy the selected annotations to the same place on other pages. Returns how many."""
         sources = [a for a in self.selected_annotations() if not isinstance(a, TextMarkup)]
-        copies = [self._clamped(replace(a, page=p, id=new_id()), p) for p in pages for a in sources
-                  if p != a.page and 0 <= p < self.document.page_count]  # a smaller page: kept on it
+        copies = [copy for p in pages if 0 <= p < self.document.page_count for copy in regrouped(
+            [self._clamped(replace(a, page=p, id=new_id()), p) for a in sources if p != a.page])]  # kept on it
         if copies:
             self.undo_stack.push(AddAnnotations(self.store, copies, "Apply to pages"))
         return len(copies)
@@ -2039,10 +2076,53 @@ class DocumentView(QGraphicsView):
             remove_item(editor)
             remove_item(editor.holder)
 
-    def edit_note(self, note: Note) -> None:
-        text = messages.get_multiline_text(self, "Note", "What the note says.", note.contents, action="Save")
+    def edit_note(self, note: Note | Caret) -> None:
+        """The text of a note, or of a caret: the text to put in."""
+        if isinstance(note, Caret):
+            text = messages.get_multiline_text(self, "Inserted text", "The text to put in where the caret is.",
+                                               note.contents, action="Save")
+        else:
+            text = messages.get_multiline_text(self, "Note", "What the note says.", note.contents, action="Save")
         if text is not None and text != note.contents:
-            self.undo_stack.push(ChangeAnnotations(self.store, [note], [replace(note, contents=text)], "Edit note"))
+            label = "Edit inserted text" if isinstance(note, Caret) else "Edit note"
+            self.undo_stack.push(ChangeAnnotations(self.store, [note], [replace(note, contents=text)], label))
+
+    def insert_at_text_selection(self, text: str, replacing: bool = False) -> list[Annotation]:
+        """Proofreading: a caret after the selected text carrying `text`, the text to put in there. `replacing`
+        also strikes the selected text out, the two as one group: the text is to be replaced by `text`."""
+        if self._text_selection is None or self.document.read_only or not text:
+            return []
+        page, rects, _, _ = self._text_selection
+        if not rects:
+            return []
+        strike = self.tool_settings.style_for("strikeout")
+        caret = Caret(page=page, rect=caret_at(rects[-1]), contents=text,
+                      color=strike.color if replacing else CARET_BLUE, **self.common("strikeout" if replacing else "note"))
+        made: list[Annotation] = [caret]
+        if replacing:
+            x, y, w, h = rects[0]
+            first = self.document.char_at(page, (x + w / 2, y + h / 2), tolerance=6)
+            name = new_id()
+            made = [TextMarkup(page=page, style="StrikeOut", quads=rects, color=strike.color, opacity=strike.opacity,
+                               rotation=self.document.text_turns(page, first), group=name, **self.common("strikeout")),
+                    replace(caret, group=name)]
+        self.clear_text_selection()
+        self.add_annotations(made, "Replace text" if replacing else "Inserted text")
+        return made
+
+    def redact_text_selection(self) -> Redaction | None:
+        """A redaction over the selected text, in the redaction tool's colours: it hides the text once applied."""
+        if self._text_selection is None or self.document.read_only:
+            return None
+        page, rects, _, _ = self._text_selection
+        if not rects:
+            return None
+        s = self.tool_settings.style_for("redact")
+        mark = Redaction(page=page, rects=tuple(rects), color=s.color, fill=s.fill if s.fill is not None else
+                         (0.0, 0.0, 0.0), **self.common("redact"))
+        self.clear_text_selection()
+        self.add_annotations([mark], mark.label)
+        return mark
 
     # Rendering ----------------------------------------------------------
 

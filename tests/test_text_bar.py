@@ -148,7 +148,7 @@ def test_the_bar_sits_above_the_text_and_highlights_it(workspace, errors):
     text = selection_on_canvas(workspace)
     assert bar.geometry().bottom() < text.top() and not bar.geometry().intersects(text)  # above, never on it
     assert workspace.canvas.rect().contains(bar.geometry())
-    assert bar.height() <= 48 and bar.width() < 400  # compact: icons, not labels
+    assert bar.height() <= 48 and bar.width() < 440  # compact: icons, not labels
     rects = view._text_selection[1]
     first = themes.current.name
     for theme in ("light", "dark", first):  # a theme change while it is up
@@ -350,3 +350,41 @@ def test_the_bar_colours_follow_the_theme_and_the_tools(workspace):
         assert bar.markups["highlight"]._color != pink  # made readable on the other theme
     finally:
         workspace.window().set_theme(first)
+
+
+def test_proofreading_inserts_and_replaces_text(workspace, monkeypatch):
+    from zenith_pdf.core.annotations import CARET_BLUE, Caret
+
+    view, store = workspace.view, workspace.store
+    monkeypatch.setattr(messages, "get_multiline_text", lambda *args, **kwargs: "haystack")
+    double_click_needle(workspace)
+    workspace.text_bar.insert.trigger()
+    settle()
+    [caret] = [a for a in store.all() if isinstance(a, Caret)]
+    x, y, w, h = needle(workspace.document)
+    cx, cy, cw, ch = caret.rect
+    assert caret.contents == "haystack" and caret.color == CARET_BLUE and not caret.group
+    assert cx + cw / 2 == pytest.approx(x + w) and y + h / 2 < cy < y + h + 2  # under the end of the word
+    assert not view.has_text_selection()
+
+    monkeypatch.setattr(messages, "get_multiline_text", lambda *args, **kwargs: "pin")
+    double_click_needle(workspace)
+    workspace.text_bar.replace.trigger()
+    settle()
+    strike = next(a for a in markups(store) if a.style == "StrikeOut")
+    replacing = next(a for a in store.all() if isinstance(a, Caret) and a.contents == "pin")
+    assert strike.group and strike.group == replacing.group and replacing.color == strike.color
+    workspace.undo_stack.undo()  # the two came as one step
+    assert not markups(store) and [a.contents for a in store.all() if isinstance(a, Caret)] == ["haystack"]
+
+
+def test_redacting_the_selected_text(workspace):
+    from zenith_pdf.core.annotations import Redaction
+
+    drag_over_needle(workspace)
+    workspace.text_bar.redact.trigger()
+    settle()
+    [mark] = [a for a in workspace.store.all() if isinstance(a, Redaction)]
+    x, y, w, h = needle(workspace.document)
+    [(rx, ry, rw, rh)] = mark.rects
+    assert rx <= x + 1 and rx + rw >= x + w - 1 and mark.fill == DEFAULT_STYLES["redact"].fill

@@ -19,7 +19,7 @@ from ..core.i18n import tr
 from ..icons import icon, readable
 from ..theme import themes
 from . import messages
-from .help import attach_help
+from .help import attach_help, explain_menu
 from .tool_catalog import BY_KEY
 from .tool_menu import HIGHLIGHTER, nearest
 from .widgets import BAR_BUTTON, FloatingBar, IconButton, separator
@@ -88,7 +88,8 @@ def _ratio() -> float:
 
 
 class TextSelectionBar(FloatingBar):
-    """Highlight (with its colours), Underline, Strikethrough and Squiggle, then Copy, Note and Search."""
+    """Highlight (with its colours), Underline, Strikethrough and Squiggle; Insert, Replace and Redact; then Copy,
+    Note, Search and Read aloud."""
 
     def __init__(self, workspace: Workspace, parent=None):
         super().__init__(parent)
@@ -117,6 +118,15 @@ class TextSelectionBar(FloatingBar):
         self.colour_menu.aboutToShow.connect(self._tick_colour)
         self.colour.setMenu(self.colour_menu)
         attach_help(self.colour, "text_colour")
+        # Proofreading and redacting, in one menu: the bar stays small.
+        self.proofread = IconButton("pencil-line", "Insert, replace or redact", icon_size=ICON, help="text_proofread")
+        self.proofread.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        menu = QMenu(self)
+        self.insert = menu.addAction(icon("z-note-insert"), tr("Insert text after it…"), self.insert_text)
+        self.replace = menu.addAction(icon("swap"), tr("Replace the text…"), lambda: self.insert_text(replacing=True))
+        self.redact = menu.addAction(icon(BY_KEY["redact"].icon), tr("Redact"),
+                                     lambda: workspace.view.redact_text_selection())
+        self.proofread.setMenu(explain_menu(menu))
         self.copy = IconButton("copy", "Copy (Ctrl+C)", icon_size=ICON, help="text_copy")
         self.copy.clicked.connect(self.copy_text)
         self.note = IconButton("note-pencil", "Note on the text", icon_size=ICON, help="text_note")
@@ -136,7 +146,7 @@ class TextSelectionBar(FloatingBar):
         layout.setSpacing(4)
         layout.addLayout(highlight)
         for widget in (self.markups["underline"], self.markups["strikeout"], self.markups["squiggly"], separator(),
-                       self.copy, self.note, self.search, self.speak):
+                       self.proofread, self.copy, self.note, self.search, self.speak):
             layout.addWidget(widget)
 
         workspace.tool_settings.style_changed.connect(self._on_style)
@@ -176,7 +186,7 @@ class TextSelectionBar(FloatingBar):
 
     def sync(self, read_only: bool) -> None:
         """Markups and notes change the document: on one that can only be viewed, only Copy and Search work."""
-        for button in (*self.markups.values(), self.colour, self.note):
+        for button in (*self.markups.values(), self.colour, self.note, self.proofread):
             button.setEnabled(not read_only)
         self.adjustSize()
 
@@ -199,6 +209,22 @@ class TextSelectionBar(FloatingBar):
                                            action="Add note", required=True)
         if text is not None and text.strip():
             view.mark_text_selection("highlight", contents=text.strip())
+
+    def insert_text(self, replacing: bool = False) -> None:
+        """Proofreading marks: what to put in after the selected text, or what to replace it with."""
+        view = self._workspace.view
+        if not view.has_text_selection():
+            return
+        if replacing:
+            text = messages.get_multiline_text(self._workspace, "Replace the text",
+                                               "The text is struck out, and a caret after it carries what replaces "
+                                               "it.", action="Replace", required=True)
+        else:
+            text = messages.get_multiline_text(self._workspace, "Insert text",
+                                               "A caret after the selected text carries what to put in there.",
+                                               action="Insert", required=True)
+        if text is not None and text.strip():
+            view.insert_at_text_selection(text.strip(), replacing)
 
     def search_text(self) -> None:
         """Every place the selected words occur, in the Search panel."""

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication
 from ..core.annotations import (
     Annotation,
     Attachment,
+    Caret,
     FreeText,
     ImageStamp,
     Ink,
@@ -26,13 +27,14 @@ from ..core.annotations import (
     Tape,
     TextMarkup,
     new_id,
+    regrouped,
     union,
 )
 
 ANNOTATIONS_MIME = "application/x-zenith-pdf-annotations"
 PAGES_MIME = "application/x-zenith-pdf-pages"
 KINDS = {cls.__name__: cls for cls in (TextMarkup, Shape, Line, Ink, FreeText, Note, ImageStamp, Redaction, Poly,
-                                       Tape, Measurement, Link, Attachment)}
+                                       Tape, Measurement, Link, Attachment, Caret)}
 BINARY = (ImageStamp, Attachment)  # their bytes travel as base64, and their digest is worked out again
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp")
 
@@ -81,7 +83,7 @@ def from_records(records: list[dict], page: int, at: tuple[float, float] | None)
         return []
     left, top, _, _ = union(a.bounds() for a in made)
     dx, dy = (at[0] - left, at[1] - top) if at else (12.0, 12.0)
-    return [a.translated(dx, dy) for a in made]
+    return regrouped([a.translated(dx, dy) for a in made])
 
 
 def unreachable(annotations: list[Annotation], page_count: int) -> list[Annotation]:

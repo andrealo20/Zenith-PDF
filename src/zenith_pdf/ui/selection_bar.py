@@ -45,6 +45,9 @@ class SelectionBar(FloatingBar):
             ("caret-up", "Bring forward", lambda: view.arrange("forward")),
             ("caret-down", "Send backward", lambda: view.arrange("backward")),
             ("arrow-line-down", "Send to back", lambda: view.arrange("back")),
+            None,
+            ("selection-all", "Group", view.group_selected),
+            ("squares-four", "Ungroup", view.ungroup_selected),
         ]))
         self.lock = self._button("lock-simple", "Lock", view.toggle_lock, help="sel_lock")
         self.lock.setText(tr("Lock"))  # the icon shows; the text names it for the tooltip and screen readers
@@ -137,6 +140,11 @@ class SelectionBar(FloatingBar):
         self.lock.set_icon_name("lock-simple-open" if locked else "lock-simple")
         movable = [a for a in selected if not isinstance(a, TextMarkup)]
         self.style_button.setEnabled(not read_only and bool(selection_options(selected)))
+        for action in self.arrange.menu().actions():
+            if action.text() == tr("Group"):
+                action.setEnabled(not read_only and self._workspace.view.can_group())
+            elif action.text() == tr("Ungroup"):
+                action.setEnabled(not read_only and any(a.group for a in selected))
         for button in (self.arrange, self.lock):
             button.setEnabled(not read_only)
         self.duplicate.setEnabled(bool(movable) and not read_only)

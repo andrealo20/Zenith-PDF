@@ -231,7 +231,8 @@ TOPICS: dict[str, Topic] = {
     "sel_style": Topic("Style", "Colour, fill, thickness, opacity, line style and ends of the selection: the "
                        "options of the tools' menus.", "Every change applies at once, and Undo takes it back."),
     "sel_duplicate": Topic("Duplicate", "Makes a copy of the selection, just below and to the right."),
-    "sel_arrange": Topic("Arrange", "Changes which annotation is drawn on top where they overlap."),
+    "sel_arrange": Topic("Arrange", "Changes which annotation is drawn on top where they overlap, and groups them.",
+                         "A group is picked, moved, copied and deleted as one, until it is ungrouped."),
     "sel_flatten": Topic("Flatten", "Makes the selection part of the page. It looks the same, but nobody can move "
                          "or edit it any more, in any app.",
                          "Use it before sharing a file whose markup must not change. Undo works until you close it."),
@@ -260,6 +261,10 @@ TOPICS: dict[str, Topic] = {
     "text_note": Topic("Note", "Highlights the selected text with a note you write on it.",
                        "Point at the highlight to read the note; other PDF apps show it too. Properties, in the "
                        "selection bar's More menu, changes it."),
+    "text_proofread": Topic("Insert, replace or redact", "Proofreading marks on the selected text, and redaction.",
+                            "Insert puts a caret after the text, carrying what to add; Replace also strikes the text "
+                            "out, the two as one group. Double-click a caret to change its text. Redact marks the "
+                            "text to black out: Apply redactions, in PDF tools, removes it from the file."),
     "text_search": Topic("Search", "Finds every place the selected words occur in the document.",
                          "The results open in the Search panel; F3 goes to the next one."),
     # Page manager
@@ -325,6 +330,11 @@ MENU_TIPS = {
     "Guide": "A short guide to everything in Zenith PDF.",
     "Paste copied pages": "Insert the pages you copied after this page.",
     "Text box here": "Start typing a text box where you clicked.",
+    "Insert text after it…": "A caret after the selected text, carrying the words to put in there.",
+    "Replace the text…": "Strike the selected text out, with what replaces it on a caret after it.",
+    "Redact": "Mark the selected text to black out for good, when redactions are applied.",
+    "Group": "Make the selection one group: picked, moved and deleted as one.",
+    "Ungroup": "Make the group's annotations separate again.",
     "Note here": "Add a sticky note where you clicked.",
     "Select all annotations": "Select every annotation on this page.",
     "Select all text": "Select all the text on this page, to copy it.",

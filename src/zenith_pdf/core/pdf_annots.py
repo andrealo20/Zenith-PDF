@@ -17,11 +17,13 @@ from pikepdf import Array, Dictionary, Name, String
 from . import appearance, images
 from .annotations import (
     AUDIO_SUFFIXES,
+    CARET_BLUE,
     DASHES,
     ENDINGS,
     NOTE_ICONS,
     Annotation,
     Attachment,
+    Caret,
     Color,
     FreeText,
     ImageStamp,
@@ -47,13 +49,13 @@ log = logging.getLogger(__name__)
 
 MARKUPS = {"/Highlight", "/Underline", "/Squiggly", "/StrikeOut"}
 SUPPORTED = MARKUPS | {"/Square", "/Circle", "/Line", "/Ink", "/FreeText", "/Text", "/Stamp", "/Redact", "/PolyLine",
-                       "/Polygon", "/Link", "/FileAttachment"}
+                       "/Polygon", "/Link", "/FileAttachment", "/Caret"}
 DIMENSIONS = {"/LineDimension": "distance", "/PolyLineDimension": "perimeter", "/PolygonDimension": "area"}
 IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 # Keys rewritten from scratch on every write: an annotation that no longer needs one loses it.
 MANAGED_KEYS = ("/RD", "/IC", "/LE", "/AS", "/IT", "/CL", "/BE", "/Measure", "/Vertices", "/Subj", "/Name",
                 "/ZenithHighlighter", "/ZenithWidths", "/ZenithBorderColor", "/ZenithBorderWidth", "/ZenithRotation",
-                "/ZenithEquationSize", "/ZenithEquationColor")
+                "/ZenithEquationSize", "/ZenithEquationColor", "/ZenithGroup")
 ALIGNS = ("left", "center", "right")  # a text box's /Q: 0, 1 and 2
 FLAG_HIDDEN = 2
 FLAG_PRINT = 4
@@ -205,6 +207,7 @@ def read_annotation(obj, page: int, geometry: PageGeometry, pages: dict | None =
         author=_text(obj.get("/T")),
         subject=_text(obj.get("/Subj")),
         locked=bool(int(obj.get("/F", 0)) & FLAG_LOCKED),
+        group=_text(obj.get("/ZenithGroup")),
         id=_text(obj.get("/NM")) or new_id(),
     )
     color = _color(obj.get("/C"))
@@ -347,6 +350,9 @@ def read_annotation(obj, page: int, geometry: PageGeometry, pages: dict | None =
             align=align,
             **common,
         )
+
+    if subtype == "/Caret":
+        return Caret(rect=geometry.rect_to_display(_inner_box(obj)), color=color or CARET_BLUE, **common)
 
     if subtype == "/Text":
         x, y, _, _ = geometry.rect_to_display(_pdf_box(obj))
@@ -667,6 +673,11 @@ def write_annotation(pdf: pikepdf.Pdf, obj: Dictionary, annotation: Annotation, 
     for key in MANAGED_KEYS:
         if key in obj:
             del obj[key]
+    if obj.get("/RT") == Name.Group:  # its group's link, written again by write_page if it is still in one
+        for key in ("/IRT", "/RT"):
+            del obj[key]
+    if a.group:
+        obj.ZenithGroup = String(a.group)
     if a.subject:
         obj.Subj = String(a.subject)
     if getattr(a, "highlight", False) or getattr(a, "highlighter", False):
@@ -779,6 +790,12 @@ def write_annotation(pdf: pikepdf.Pdf, obj: Dictionary, annotation: Annotation, 
         obj.C = _array(a.color)
         obj.Name = Name("/" + (a.icon if a.icon in NOTE_ICONS else "Comment"))
         obj.Open = False
+    elif isinstance(a, Caret):
+        obj.C = _array(a.color)
+        obj.Sy = Name("/None")
+        left, bottom, right, top = look.bbox
+        sl, sb, sr, st = appearance.pdf_rect(geometry, a.rect)
+        obj.RD = _array((sl - left, sb - bottom, right - sr, top - st))
     elif isinstance(a, Redaction):
         obj.C = _array(a.color)
         obj.IC = _array(a.fill)
@@ -872,12 +889,40 @@ def write_page(
             write_annotation(pdf, obj, annotation, geometry, pictures)
             obj.P = page
         result.append(obj)
+    _link_groups(annotations, sources)
 
     if result:
         page.Annots = Array(result)
     elif "/Annots" in page:
         del page["/Annots"]
     return [a.id for a in annotations]
+
+
+def _link_groups(annotations: list[Annotation], sources: dict[str, Dictionary]) -> None:
+    """Each group's other members point at its first one (/IRT, /RT /Group), as other PDF apps keep a group;
+    /ZenithGroup holds it for Zenith PDF."""
+    heads: dict[str, Dictionary] = {}
+    for annotation in annotations:
+        if not annotation.group:
+            continue
+        obj = sources[annotation.id]
+        head = heads.setdefault(annotation.group, obj)
+        if key(head) != key(obj):
+            obj.IRT = head
+            obj.RT = Name.Group
+
+
+def groups_of(objects: list[tuple[Dictionary, Annotation]]) -> dict[str, str]:
+    """Group names for annotations another app grouped (/RT /Group pointing at the group's first one), by id:
+    the id of that first one."""
+    ids = {key(obj): annotation.id for obj, annotation in objects}
+    found = {}
+    for obj, annotation in objects:
+        target = obj.get("/IRT")
+        if obj.get("/RT") == Name.Group and isinstance(target, Dictionary) and key(target) in ids:
+            head = ids[key(target)]
+            found[annotation.id] = found.setdefault(head, head)
+    return found
 
 
 def _inherited(page: Dictionary, key: str):

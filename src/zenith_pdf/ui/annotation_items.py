@@ -15,6 +15,7 @@ from ..core.annotations import (
     NOTE_SIZE,
     Annotation,
     Attachment,
+    Caret,
     Ending,
     FreeText,
     ImageStamp,
@@ -312,6 +313,10 @@ def paint_annotation(painter: QPainter, a: Annotation) -> None:
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawPolyline(qpolygon(((x + s * .38, y + s * .75), (x + s * .38, y + s * .3),
                                           (x + s * .62, y + s * .3), (x + s * .62, y + s * .7))))
+    elif isinstance(a, Caret):
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(qcolor(a.color))
+        painter.drawPolygon(qpolygon(a.outline()))
     elif isinstance(a, Redaction):
         # Until applied, a hatched red box: clearly a mark, and the text under it still readable.
         outline = pen(qcolor(a.color), 1.5)

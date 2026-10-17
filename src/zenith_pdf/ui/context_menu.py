@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QHBoxLayout, QMenu, QWidget, QWidgetAction
 
-from ..core.annotations import Annotation, Attachment, FreeText, ImageStamp, Link, Note, Tape
+from ..core.annotations import Annotation, Attachment, Caret, FreeText, ImageStamp, Link, Note, Tape
 from ..core.i18n import tr
 from ..core.pages import TEMPLATES
 from ..icons import icon
@@ -63,6 +63,8 @@ def _annotation_actions(menu: QMenu, view: DocumentView, annotation: Annotation 
         _action(menu, "pencil-simple", "Edit text", lambda: view.edit_text_box(annotation, is_new=False), editable)
         _action(menu, "check-circle", "Check spelling…", lambda: _check_spelling(view, annotation),
                 editable and bool(annotation.contents.strip()))
+    elif isinstance(annotation, Caret):
+        _action(menu, "pencil-simple", "Edit inserted text", lambda: view.edit_note(annotation), editable)
     elif isinstance(annotation, Note):
         _action(menu, "pencil-simple", "Edit note", lambda: view.edit_note(annotation), editable)
         _action(menu, "check-circle", "Check spelling…", lambda: _check_spelling(view, annotation),

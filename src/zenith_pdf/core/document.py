@@ -31,7 +31,7 @@ from . import forms, pages, textclean
 from .annotations import Annotation, ImageStamp, Point, Rect, merge_line_rects, new_id
 from .appearance import pdf_rect
 from .geometry import Box, PageGeometry, visible_box
-from .pdf_annots import SUPPORTED, picture_parts, read_annotation, write_page
+from .pdf_annots import SUPPORTED, groups_of, picture_parts, read_annotation, write_page
 from .render_worker import PAGE_CACHE, hide_annotations, render_region
 
 log = logging.getLogger(__name__)
@@ -209,6 +209,14 @@ class Document:
 
     # Annotations --------------------------------------------------------
 
+    def _join_groups(self, read: list) -> None:
+        """Annotations another app grouped are one group here too."""
+        groups = groups_of([(obj, a) for obj, a in read if not a.group])
+        for position, annotation in enumerate(self.annotations):
+            if annotation.id in groups:
+                joined = replace(annotation, group=groups[annotation.id])
+                self.annotations[position] = self._saved[annotation.id] = joined
+
     def _import_annotations(self) -> None:
         page_numbers = {page.obj.objgen: index for index, page in enumerate(self._source.pages)}
         for index, page in enumerate(self._source.pages):
@@ -217,6 +225,7 @@ class Document:
                 continue
             geometry = self.geometry(index)
             hidden = []
+            read = []  # (dictionary, annotation): for the groups other apps made
             for position in range(len(annots)):
                 obj = annots[position]
                 if not isinstance(obj, pikepdf.Dictionary):
@@ -243,7 +252,9 @@ class Document:
                 self._saved[annotation.id] = annotation
                 self._owned.setdefault(index, []).append(annotation.id)
                 self.annotations.append(annotation)
+                read.append((obj, annotation))
                 hidden.append(position)
+            self._join_groups(read)
             if hidden:
                 self.hidden[index] = hidden
         # PDFium's annotation index is the position in /Annots, the order pikepdf sees too.

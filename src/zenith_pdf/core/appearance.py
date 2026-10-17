@@ -19,6 +19,7 @@ from .annotations import (
     NOTE_SIZE,
     Annotation,
     Attachment,
+    Caret,
     Ending,
     FreeText,
     ImageStamp,
@@ -365,6 +366,8 @@ def _draw(annotation: Annotation) -> tuple[list[str], bool]:
         else:  # a paperclip-like loop
             ops.append(_polyline(((x + s * .38, y + s * .75), (x + s * .38, y + s * .3), (x + s * .62, y + s * .3),
                                   (x + s * .62, y + s * .7))) + " S")
+    elif isinstance(a, Caret):
+        ops += [_rgb(a.color, stroke=False), _polyline(a.outline()) + " h f"]
     elif isinstance(a, Redaction):
         ops += ["1 w", _rgb(a.color, stroke=True)]
         ops += [f"{num(x + 0.5)} {num(y + 0.5)} {num(w - 1)} {num(h - 1)} re S" for x, y, w, h in a.rects]

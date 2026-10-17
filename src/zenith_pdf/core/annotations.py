@@ -65,6 +65,7 @@ class Annotation:
     author: str = ""
     subject: str = ""  # the PDF /Subj: what the mark is about, e.g. the tool's name or "Important"
     locked: bool = False  # can't be moved, resized or deleted until unlocked
+    group: str = ""  # annotations with the same group are selected, moved and deleted as one
     id: str = field(default_factory=new_id)
 
     @property
@@ -307,6 +308,51 @@ class Note(Annotation):
 
     def translated(self, dx: float, dy: float) -> Note:
         return replace(self, position=(self.position[0] + dx, self.position[1] + dy))
+
+
+@dataclass(frozen=True, kw_only=True)
+class Caret(Annotation):
+    """A proofreader's mark for text to put in: a caret where it goes, `contents` the text."""
+
+    rect: Rect = (0.0, 0.0, 0.0, 0.0)  # the caret's tip at the top middle, its feet on the bottom edge
+
+    @property
+    def kind(self) -> str:
+        return "Caret"
+
+    @property
+    def label(self) -> str:
+        return "Inserted text"
+
+    def bounds(self) -> Rect:
+        return self.rect
+
+    def translated(self, dx: float, dy: float) -> Caret:
+        x, y, w, h = self.rect
+        return replace(self, rect=(x + dx, y + dy, w, h))
+
+    def outline(self) -> tuple[Point, ...]:
+        """The caret's shape: two strokes meeting at the top, hollowed at the bottom."""
+        x, y, w, h = self.rect
+        return (x, y + h), (x + w / 2, y), (x + w, y + h), (x + w / 2, y + h * 0.62)
+
+
+CARET_BLUE = (0.13, 0.4, 0.95)  # a caret for text to put in, as proofreaders mark it
+
+
+def caret_at(line: Rect) -> Rect:
+    """Where a caret goes for text put in after the last letter of `line` (a line of text's rectangle): under
+    the line's end, its tip at the baseline, as wide as a letter."""
+    x, y, w, h = line
+    size = max(min(h * 0.55, 14.0), 4.0)
+    return x + w - size / 2, y + h * 0.82, size, size
+
+
+def regrouped(annotations: list) -> list:
+    """Copies keep their groups among themselves, under new group names: a copy is not one with what it came
+    from."""
+    names: dict[str, str] = {}
+    return [replace(a, group=names.setdefault(a.group, new_id())) if a.group else a for a in annotations]
 
 
 @dataclass(frozen=True, kw_only=True)
