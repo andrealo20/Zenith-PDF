@@ -701,7 +701,7 @@ class HomePage(QWidget):
         self.tools = ToolList()
         self.tools.tool_requested.connect(self._tool)
         self.tools.hide()
-        main.addWidget(self.tools, 1)
+        main.addWidget(self.tools, 1, Qt.AlignmentFlag.AlignLeft)  # a column on the left
 
         # Right column: the way into the guide
         self.aside = QFrame()

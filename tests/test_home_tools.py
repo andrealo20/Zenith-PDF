@@ -38,7 +38,7 @@ def test_every_tool_is_listed_by_group_and_the_search_finds_them(window):
     assert home.tools.isVisible() and not home.table.isVisible() and home.title.text() == "Tools"
     keys = {tile.key for tile in home.tools.tiles()}
     assert keys == {tool.key for tool in pdf_tools.TOOLS} | {key for key, *_ in CREATE}
-    groups = [title.text() for title, _, _ in home.tools.groups]
+    groups = [title.text() for title, _ in home.tools.groups]
     assert groups == ["Create", *pdf_tools.GROUPS]
     assert home.search.placeholderText() == "Search tools"
     home.search.setText("compress")
