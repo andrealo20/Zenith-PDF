@@ -23,13 +23,18 @@ In continuous development: new versions come out often.
 
 [![Build](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml/badge.svg)](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml)
 ![Windows, macOS, Linux](https://img.shields.io/badge/runs_on-Windows%20%7C%20macOS%20%7C%20Linux-555?style=flat-square)
-![Version 0.5.0](https://img.shields.io/badge/version-0.5.0-2E8BFF?style=flat-square)
+![Version 0.5.1](https://img.shields.io/badge/version-0.5.1-2E8BFF?style=flat-square)
 ![Free and open source](https://img.shields.io/badge/free-open_source-2EA44F?style=flat-square)
 ![In continuous development](https://img.shields.io/badge/development-active-2EA44F?style=flat-square)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-538%20passing-2EA44F?style=flat-square&logo=pytest&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-554%20passing-2EA44F?style=flat-square&logo=pytest&logoColor=white)
 ![Works offline](https://img.shields.io/badge/works-offline-6E40C9?style=flat-square)
-![Six languages](https://img.shields.io/badge/languages-EN%20%7C%20IT%20%7C%20FR%20%7C%20ES%20%7C%20DE%20%7C%20PT-E3A008?style=flat-square)
+![English](https://img.shields.io/badge/language-English-E3A008?style=flat-square)
+![Italian](https://img.shields.io/badge/language-Italian-E3A008?style=flat-square)
+![French](https://img.shields.io/badge/language-French-E3A008?style=flat-square)
+![Spanish](https://img.shields.io/badge/language-Spanish-E3A008?style=flat-square)
+![German](https://img.shields.io/badge/language-German-E3A008?style=flat-square)
+![Portuguese](https://img.shields.io/badge/language-Portuguese-E3A008?style=flat-square)
 
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Qt 6 with PySide6](https://img.shields.io/badge/Qt%206-PySide6-41CD52?style=flat-square&logo=qt&logoColor=white)
@@ -133,7 +138,7 @@ bars, the panels and the tabs away, and brings them back as they were.
 Menus, settings, help and the whole guide in English, Italian, French, Spanish, German or Portuguese. Zenith
 PDF speaks the system's language when it knows it; Settings > View & Layout picks another one.
 
-<img src="docs/images/settings-italian.png" alt="Settings in Italian, with the language chosen in View and Layout" width="100%">
+<img src="docs/images/settings-language.png" alt="Settings, View and Layout: the list of languages, open" width="100%">
 
 ### Flashcards, and two versions side by side
 
@@ -167,8 +172,9 @@ GPL. It is in continuous development, and each version lists its changes on the
 [releases page](https://github.com/andrealo20/Zenith-PDF/releases).
 
 **Windows.** Download [Zenith-PDF-Setup.exe](https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-Setup.exe) and run
-it. The installer asks where to put Zenith PDF and whether you want a desktop shortcut, then adds it to the
-Start menu and to Open with for PDF files. It uninstalls from Settings > Apps, like any other app. While the
+it. The installer asks where to put Zenith PDF, whether you want a desktop shortcut and whether it should
+open your PDF files, then adds it to the Start menu and to Open with. Windows lets no program make itself the
+default: for that, its Default apps settings open at Zenith PDF, and Set default there finishes it. It uninstalls from Settings > Apps, like any other app. While the
 installer is not signed yet, SmartScreen may say it protected your PC: choose More info, then Run anyway.
 
 **macOS.** Open [Zenith-PDF-macOS.dmg](https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-macOS.dmg) and drag
@@ -355,6 +361,10 @@ every change, and publishes them with each new version.
   fingerprints that installs when Zenith PDF closes. After each update a short
   tour shows what changed
 - One copy at a time: opening a PDF while Zenith PDF runs adds a tab to it
+- The default PDF reader, if you want: offered by the Windows installer and
+  the first time Zenith PDF starts, and in Settings > Files & Saving. Windows
+  confirms it in its own settings; macOS (Launch Services) and Linux
+  (xdg-mime) take it at once
 
 ## Keyboard shortcuts
 
@@ -411,7 +421,7 @@ On a Mac, Ctrl is ⌘ and Alt is ⌥, and three keys move because macOS keeps th
 | Search in every PDF | SQLite's full-text index (FTS5), kept on the computer |
 | Comparing versions | the words of both versions, lined up with Python's difflib |
 | Updates | GitHub's releases API; each download checked against the release's SHA256SUMS |
-| Tests | pytest on Qt's offscreen platform: 538 tests, run on Windows, macOS and Linux |
+| Tests | pytest on Qt's offscreen platform: 554 tests, run on Windows, macOS and Linux |
 | Downloads | PyInstaller, then an NSIS installer, a .dmg or an AppImage (`tools/build.py`), built by GitHub Actions |
 
 ```

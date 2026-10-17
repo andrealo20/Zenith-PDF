@@ -31,7 +31,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter
 from PySide6.QtCore import QMarginsF, QPoint, QPointF, QRectF, QSettings, Qt
 from PySide6.QtGui import QColor, QFont, QImage, QPageSize, QPainter, QPainterPath, QPdfWriter, QPen, QPolygonF
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QComboBox
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -41,12 +41,10 @@ from zenith_pdf.core import audio  # noqa: E402
 from zenith_pdf.core.annotations import (Attachment, FreeText, Ink, Line, Measurement, Note, Shape,  # noqa: E402
                                          Tape, TextMarkup)
 from zenith_pdf.core.document import Document  # noqa: E402
-from zenith_pdf.core.i18n import set_language  # noqa: E402
 from zenith_pdf.settings import Settings  # noqa: E402
 from zenith_pdf.ui import writing_dialogs  # noqa: E402
 from zenith_pdf.ui.compare import CompareWindow  # noqa: E402
 from zenith_pdf.ui.flashcards import FlashcardsDialog, StudyDialog  # noqa: E402
-from zenith_pdf.ui.settings_page import SettingsWindow  # noqa: E402
 
 W, H = 595.0, 842.0  # A4 in points
 LEFT, RIGHT = 72.0, 72.0
@@ -748,17 +746,17 @@ def main() -> None:
     save(to_pil(comparing.grab()), out, "compare.png", True)
     comparing.close()
 
-    settings.set("language", "it")
-    set_language("it")  # a window made now speaks Italian
-    italian = SettingsWindow(settings, window.tool_settings, window)
-    italian.resize(1100, 760)
-    italian.show()
-    italian.show_category("view")
+    settings_window = window.settings_window()  # the languages to choose from, the list open
+    settings_window.resize(1100, 760)
+    settings_window.show()
+    settings_window.show_category("view")
     settle(400)
-    save(to_pil(italian.grab()), out, "settings-italian.png", True)
-    italian.close()
-    set_language("en")
-    settings.set("language", "auto")
+    languages = next(box for box in settings_window.findChildren(QComboBox) if box.findData("it") >= 0)
+    languages.showPopup()
+    settle(400)
+    save(with_popups(settings_window, [languages.view().window()]), out, "settings-language.png", True)
+    languages.hidePopup()
+    settings_window.hide()
 
     for index in reversed(range(len(window.workspaces))):
         window.close_tab(index, confirm=False)
