@@ -191,6 +191,7 @@ def mac() -> Path:
         "NSHumanReadableCopyright": "Copyright (C) 2026 Andrea Loroni. GPL-3.0-or-later.",
         "NSMicrophoneUsageDescription": "Zenith PDF records the audio notes you add to a page.",
         "NSCameraUsageDescription": "Zenith PDF takes the photos you put on a page.",
+        "CFBundleURLTypes": [{"CFBundleURLName": "Zenith PDF link", "CFBundleURLSchemes": ["zenith-pdf"]}],
         "CFBundleDocumentTypes": [{
             "CFBundleTypeName": "PDF document",
             "CFBundleTypeRole": "Editor",

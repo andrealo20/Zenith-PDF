@@ -2,9 +2,9 @@
 Type=Application
 Name=Zenith PDF
 Comment=Read, mark up and study PDF documents
-Exec=zenith-pdf %F
+Exec=zenith-pdf %U
 Icon=zenith-pdf
 Terminal=false
 Categories=Office;Viewer;
-MimeType=application/pdf;
+MimeType=application/pdf;x-scheme-handler/zenith-pdf;
 StartupWMClass=Zenith-PDF

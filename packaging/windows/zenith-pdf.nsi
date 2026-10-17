@@ -144,6 +144,12 @@ Section "Install"
   WriteRegStr HKLM "Software\Classes\.pdf\OpenWithProgids" "${PROG_ID}" ""
   WriteRegStr HKLM "Software\Classes\Applications\${EXE}\shell\open\command" "" '"$INSTDIR\${EXE}" "%1"'
   WriteRegStr HKLM "Software\Classes\Applications\${EXE}\SupportedTypes" ".pdf" ""
+
+  ; zenith-pdf:// links, such as those in the notes sent to Obsidian, open a PDF at a page
+  WriteRegStr HKLM "Software\Classes\zenith-pdf" "" "URL:Zenith PDF link"
+  WriteRegStr HKLM "Software\Classes\zenith-pdf" "URL Protocol" ""
+  WriteRegStr HKLM "Software\Classes\zenith-pdf\DefaultIcon" "" "$INSTDIR\${EXE},0"
+  WriteRegStr HKLM "Software\Classes\zenith-pdf\shell\open\command" "" '"$INSTDIR\${EXE}" "%1"'
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 SectionEnd
 
@@ -162,5 +168,6 @@ Section "Uninstall"
   DeleteRegKey HKLM "Software\Classes\${PROG_ID}"
   DeleteRegValue HKLM "Software\Classes\.pdf\OpenWithProgids" "${PROG_ID}"
   DeleteRegKey HKLM "Software\Classes\Applications\${EXE}"
+  DeleteRegKey HKLM "Software\Classes\zenith-pdf"
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 SectionEnd

@@ -34,6 +34,7 @@ from .assistant import AccentButton, AssistantPanel
 from .dialogs import NewDocumentDialog, delete_template, edit_template, page_size
 from .doc_builder import DocBuilder
 from .help import badges, close_help_card, explain_menu
+from .instance import parse_target
 from .library import Library
 from .new_file import NewFilePanel
 from . import pdf_tools
@@ -476,6 +477,19 @@ class MainWindow(QMainWindow):
     def open_files(self, paths) -> None:
         for path in paths:
             self.open_file(path)
+
+    def open_targets(self, targets: list[str]) -> None:
+        """Open files and zenith-pdf links (a file at a page), as the command line or a later start gives them."""
+        for target in targets:
+            parsed = parse_target(target)
+            if parsed is None:
+                continue
+            path, page = parsed
+            self.open_file(path)
+            workspace = self.current_workspace()
+            if page is not None and workspace is not None and workspace.document.path == Path(path).resolve():
+                # After the file's own last position, which applies once the view has its size.
+                QTimer.singleShot(0, lambda view=workspace.view, index=page - 1: view.jump(index))
 
     def open_file(self, path) -> None:
         path = Path(path).resolve()

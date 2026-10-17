@@ -18,6 +18,7 @@ from .icons import icon
 from .settings import Settings
 from .theme import themes
 from .ui.help import badges
+from .ui.instance import Instance, forward, own_command, register_scheme
 from .ui.main_window import MainWindow
 from .ui.widgets import set_glass
 
@@ -105,9 +106,11 @@ class MacEvents(QObject):
             text = action.text()
             if text and (native := native_keys(text)) != text:
                 action.setText(native)
-        elif kind == QEvent.Type.FileOpen and event.file() and MainWindow.open_windows:
-            MainWindow.open_windows[-1].open_files([event.file()])
-            return True
+        elif kind == QEvent.Type.FileOpen and MainWindow.open_windows:
+            target = event.file() or event.url().toString()  # a PDF, or a zenith-pdf link
+            if target:
+                MainWindow.open_windows[-1].open_targets([target])
+                return True
         return False
 
 
@@ -154,10 +157,28 @@ def _default_glass(settings: Settings) -> None:
 def main(argv: list[str] | None = None) -> int:
     multiprocessing.freeze_support()  # lets render processes start from a frozen .exe too
     argv = sys.argv if argv is None else argv
+    targets = [arg for arg in argv[1:] if not arg.startswith("-")]
+    QApplication.instance() or QApplication(argv)
+    if forward(targets):  # Zenith PDF is already running: it opens them, in its own window
+        return 0
     app, window = create_app(argv)
+    instance = Instance(app)
+    instance.received.connect(lambda more: _bring_forward(more))
+    register_scheme(own_command())
     window.show()
-    files = [arg for arg in argv[1:] if not arg.startswith("-")]
-    if not files and window.settings.get("on_start") == "restore":
+    if not targets and window.settings.get("on_start") == "restore":
         window.restore_session()
-    window.open_files(files)
+    window.open_targets(targets)
     return app.exec()
+
+
+def _bring_forward(targets: list[str]) -> None:
+    """A later start handed these over: open them in the window used last, and bring it to the front."""
+    if not MainWindow.open_windows:
+        return
+    window = MainWindow.open_windows[-1]
+    if window.isMinimized():
+        window.showNormal()
+    window.raise_()
+    window.activateWindow()
+    window.open_targets(targets)
