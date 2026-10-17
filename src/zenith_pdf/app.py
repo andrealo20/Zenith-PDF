@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QMenu, QProxyStyle
 from . import __version__
 from .core.platforms import MAC, native_keys
 from .core.render import RenderPool
-from .icons import icon
+from .icons import icon, style as icon_style
 from .settings import Settings
 from .theme import themes
 from .ui.help import badges
@@ -133,6 +133,7 @@ def create_app(argv: list[str], settings: Settings | None = None) -> tuple[QAppl
     _default_glass(settings)
     set_glass(settings.get("glass"))
     set_glass_adaptive(settings.get("glass_adaptive"))
+    icon_style.colourful = bool(settings.get("icon_colours"))
     badges.set_mode(settings.get("help_badges"))
     badges.delay = settings.get("help_delay")
     # Windows takes its sizes from the .ico; macOS and Linux scale the picture.

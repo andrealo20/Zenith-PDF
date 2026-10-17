@@ -27,7 +27,7 @@ from ..core.document import Document, PdfiumError
 from ..core.platforms import key as platform_key
 from ..core.releases import RELEASES, since
 from ..core.render import RenderPool
-from ..icons import icon
+from ..icons import icon, style as icon_style
 from ..settings import Settings
 from ..theme import THEME_NAMES, themes
 from ..core import pages
@@ -799,6 +799,9 @@ class MainWindow(QMainWindow):
             set_glass(settings.get("glass"))
         elif key == "glass_adaptive":
             set_glass_adaptive(settings.get("glass_adaptive"))
+        elif key == "icon_colours":
+            icon_style.colourful = bool(settings.get("icon_colours"))
+            themes.apply(themes.current)  # every icon is drawn again
         elif key == "reading_full_screen":
             self.reading_mode.fill_screen(settings.get("reading_full_screen"))
         elif key == "help_badges":

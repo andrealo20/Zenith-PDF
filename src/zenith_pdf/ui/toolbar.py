@@ -16,7 +16,7 @@ from PySide6.QtGui import QColor, QCursor, QDrag, QIcon, QPainter
 from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QMenu, QToolButton, QWidget
 from shiboken6 import isValid
 
-from ..icons import icon, readable
+from ..icons import hue_colour, icon, readable
 from ..theme import qcolor as token_color, themes
 from .document_view import DocumentView
 from .help import attach_help
@@ -29,6 +29,13 @@ SHORTCUTS = {"select": "V", "hand": "H, or hold Space"}
 LONG_PRESS_MS = 500
 REPLAY_MS = 400  # what follows a press that closed a menu on its own button comes this soon after it
 VIEW_TOOLS = {"select", "hand", "lasso", "laser", "snapshot"}  # for documents that can only be viewed
+
+
+def ink_colour(settings: ToolSettings, key: str) -> str | None:
+    """A tool's own colour as it is, for the toolbar to make readable on whatever is under it."""
+    if "color" not in OPTIONS.get(base_of(key), ()):
+        return None
+    return QColor.fromRgbF(*settings.style(key).color[:3]).name()
 
 
 def tool_colour(settings: ToolSettings, key: str) -> str | None:
@@ -115,10 +122,13 @@ class ToolButton(QToolButton):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(token_color(fill))
             painter.drawRoundedRect(QRectF(self.rect()), 10, 10)
-        color = self.tint or (t.accent if self.active else t.text)
-        if self.tint and bar is not None:
-            # On glass the tool's colour is made readable on what shows through, as on the bar it was made for.
-            color = readable(QColor(self.tint).getRgbF()[:3], bar.surface().name(), t.text)
+        # A tool with an ink shows it, made readable on the bar (on glass, on what shows through it); the others
+        # take the colour of what they do, in the bar's own tone.
+        hue = hue_colour(self.spec.icon, t.name) if not self.active else None
+        color = self.tint or hue or (t.accent if self.active else t.text)
+        if self.tint:
+            surface = bar.surface().name() if bar is not None else t.raised
+            color = readable(QColor(self.tint).getRgbF()[:3], surface, t.text)
         mode = QIcon.Mode.Normal if self.isEnabled() else QIcon.Mode.Disabled
         self._icon(self.spec.icon, color).paint(painter, QRect(8, 8, self.ICON, self.ICON),
                                                 Qt.AlignmentFlag.AlignCenter, mode)
@@ -414,7 +424,7 @@ class AnnotationToolbar(FloatingBar):
         for key, button in self._buttons.items():
             on = key == active and not button.spec.action
             locked = on and base_of(key) in LOCKABLE and self._settings.is_locked(key)
-            resized = button.set_state(on, locked, tool_colour(self._settings, key)) or resized
+            resized = button.set_state(on, locked, ink_colour(self._settings, key)) or resized
             button.setToolTip(self._tip(key))
             detail = ", ".join(self._details(key))  # the help card has the name already
             button.setProperty("help_detail", detail[:1].upper() + detail[1:])

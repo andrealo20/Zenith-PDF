@@ -652,6 +652,9 @@ class SettingsWindow(QDialog):
         s.add(Row("Glass", "Clear lets the pages show through the floating bars, blurred; Balanced tints them more; "
                   "Solid makes them opaque. Their text stays readable over any page.",
                   glass, "transparency effects transparent blur frosted acrylic liquid clear balanced solid opaque"))
+        s.add(Row("Coloured icons", "Icons take a colour by what they do, as in Acrobat's list of tools: blue for "
+                  "files, purple for pens, red for making and removing, green for pages, orange for comments. Off, "
+                  "they take the text colour.", self._switch("icon_colours"), "icons colours colorful monochrome"))
         s.add(Row("Glass follows the page", "The bars turn light over a bright page and dark over dark content, "
                   "whatever the theme, so they stay clear: as Apple's Liquid Glass does.",
                   self._switch("glass_adaptive"), "liquid glass adaptive tone light dark bars"))

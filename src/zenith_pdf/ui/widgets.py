@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.platforms import native_keys
-from ..icons import icon
+from ..icons import hue_colour, icon
 from ..theme import Theme, qcolor, themes, tone_sheet
 
 GLASS_BLEED = 24  # logical px of backdrop sampled beyond the bar: the blur reaches its edges from what is there
@@ -445,11 +445,15 @@ class IconButton(QToolButton):
         self.setIcon(cached_icon(self._icon_name, self._color or self._tone_text()))
 
     def _tone_text(self) -> str | None:
-        """The text colour of the glass bar the button is on, when that bar changed tone; else None (the theme's)."""
+        """The icon's colour on the glass bar the button is on, when that bar changed tone (its hue, or the text
+        colour, in the bar's theme); else None (the app theme's)."""
         widget = self.parentWidget()
         while widget is not None and not widget.isWindow():
             if isinstance(widget, FloatingBar):
-                return widget.theme().text if widget.tone else None
+                if not widget.tone:
+                    return None
+                theme = widget.theme()
+                return hue_colour(self._icon_name, theme.name) or theme.text
             widget = widget.parentWidget()
         return None
 

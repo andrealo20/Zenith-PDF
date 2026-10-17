@@ -23,6 +23,7 @@ DEFAULTS: dict[str, object] = {
     "theme": "dark",  # dark, light or system
     "accent": "blue",  # a key of theme.ACCENTS
     "glass": "clear",  # the floating bars: "clear" or "balanced" frosted glass, or "solid"
+    "icon_colours": True,  # icons coloured by what they do, as Acrobat's tools are; off: the text colour
     "glass_adaptive": True,  # the bars turn light over a bright page and dark over dark content
     "reading_full_screen": False,  # reading mode also fills the screen
     "default_zoom": "width",  # width, page or actual
