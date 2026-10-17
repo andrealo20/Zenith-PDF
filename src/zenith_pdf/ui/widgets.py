@@ -48,21 +48,25 @@ from ..theme import Theme, qcolor, themes
 GLASS_BLEED = 24  # logical px of backdrop sampled beyond the bar: the blur reaches its edges from what is there
 GLASS_RADIUS = 14  # corner radius of tall glass panels, as the tool menu's; bars are capsules
 CAPSULE_MAX = 48  # px: a floating bar this tall or less is a capsule, its ends half circles
-BLUR_STEP = 3  # logical px per texel of the blurred backdrop, which the painter stretches smoothly
-BLUR_SIGMA = 5.0  # logical px: shapes and colours show through, words do not
+BLUR_STEP = 2  # logical px per texel of the blurred backdrop, which the painter stretches smoothly
+BLUR_SIGMA = 3.5  # logical px: lines of text show through as soft strokes, too soft to read
 STATS_STEP = 18  # logical px per sample when judging how strong the tint must be
 SHADOW_BLUR = 14  # logical px the shadow fades over, all round the bar
 SHADOW_OFFSET = 6  # the shadow falls this far below the bar
 BAR_BUTTON = 36  # icon buttons on the glass bars are squares this big
 TEXT_CONTRAST = 7.0  # text and icons on glass, over plain parts of what shows through: a page, the canvas
 BUSY_CONTRAST = 4.5  # and at least this over the worst spot of a busy backdrop, such as a bright patch of a photo
+# The Clear glass lets the page show, as Apple's Liquid Glass does: the tint rises only as far as WCAG AA asks,
+# 4.5:1 for text over plain parts and 3:1, as for icons, over a busy spot. Balanced keeps 7:1 and 4.5:1.
+CLEAR_TEXT_CONTRAST = 4.5
+CLEAR_BUSY_CONTRAST = 3.0
 PLAIN_SPREAD = 1.25  # samples this close to their neighbours (a contrast ratio) are a plain backdrop
 BUSY_SPREAD = 2.0  # and this far from them, a busy one; in between the contrast needed slides from 7 to 4.5
 CONTRAST_MARGIN = 0.15  # aimed above both, for the rounding of 8-bit colours and of the tint's opacity
 MOST_ALPHA = 0.92  # the glass never covers what is behind it completely
 ALPHA_STEP = 0.02
 GLASS_STYLES = ("clear", "balanced", "solid")
-SATURATION = {"clear": 1.45, "balanced": 1.2}  # colours behind the glass, lifted so the tint never turns them grey
+SATURATION = {"clear": 1.6, "balanced": 1.2}  # colours behind the glass, lifted so the tint never turns them grey
 NOISE_ALPHA = 4  # 0-255: the faint grain on the glass, which keeps its smooth gradients from banding
 NOISE_SIZE = 64  # device px of the grain's tile
 FADE_MS = 150  # floating bars and chips come and go this fast
@@ -129,6 +133,13 @@ def _over(top: QColor, alpha: float, bottom: QColor) -> QColor:
         (top.redF(), bottom.redF()), (top.greenF(), bottom.greenF()), (top.blueF(), bottom.blueF()))))
 
 
+def contrast_targets() -> tuple[float, float]:
+    """The contrast text and icons on the glass need, over plain parts and over a busy spot, in the style in use."""
+    if glass.style == "clear":
+        return CLEAR_TEXT_CONTRAST, CLEAR_BUSY_CONTRAST
+    return TEXT_CONTRAST, BUSY_CONTRAST
+
+
 def least_alpha(theme: Theme) -> float:
     """The tint's least opacity in the glass style in use: the clear glass shows more of what is behind it."""
     return theme.glass_clear_alpha if glass.style == "clear" else theme.glass_alpha
@@ -144,9 +155,11 @@ def _grained(color: QColor, light_text: bool) -> QColor:
     return QColor.fromRgbF(*(c * (1 - share) for c in channels))
 
 
-def glass_alpha(behind: QColor, theme: Theme, need: float = TEXT_CONTRAST, least: float | None = None) -> float:
+def glass_alpha(behind: QColor, theme: Theme, need: float | None = None, least: float | None = None) -> float:
     """The least opacity of the glass over `behind` that gives text and icons `need`:1 on every pixel, the grain's
-    included, from `least` up (the glass style's own least by default) and never above MOST_ALPHA."""
+    included (the style's contrast over plain parts by default), from `least` up (the style's own least by
+    default) and never above MOST_ALPHA."""
+    need = contrast_targets()[0] if need is None else need
     text = luminance(QColor(theme.text))
     light_text = text > 0.5
     alpha = least_alpha(theme) if least is None else least
@@ -161,10 +174,11 @@ def glass_alpha(behind: QColor, theme: Theme, need: float = TEXT_CONTRAST, least
 def column_needs(luminances: list[float]) -> list[float]:
     """The contrast text needs over each column of what is behind the glass, left to right.
 
-    TEXT_CONTRAST where the backdrop is plain on at least one side of the column, over its two neighbours
-    there: a page's margin, the canvas, a large patch of one colour, also right up to its edge. Sliding to
-    BUSY_CONTRAST where the column stands out from both sides, as a bright spot of a photo does.
+    The style's plain contrast where the backdrop is plain on at least one side of the column, over its two
+    neighbours there: a page's margin, the canvas, a large patch of one colour, also right up to its edge.
+    Sliding to its busy contrast where the column stands out from both sides, as a bright spot of a photo does.
     """
+    plain_need, busy_need = contrast_targets()
     shifted = [value + 0.05 for value in luminances]
     needs = []
     for index, value in enumerate(shifted):
@@ -172,14 +186,14 @@ def column_needs(luminances: list[float]) -> list[float]:
         # The largest contrast with a neighbour, on the side where the backdrop is evener.
         spread = min((max(max(side) / value, value / min(side)) for side in sides), default=1.0)
         plain = min(max((BUSY_SPREAD - spread) / (BUSY_SPREAD - PLAIN_SPREAD), 0.0), 1.0)
-        needs.append(BUSY_CONTRAST + (TEXT_CONTRAST - BUSY_CONTRAST) * plain)
+        needs.append(busy_need + (plain_need - busy_need) * plain)
     return needs
 
 
 _LINEAR8 = [_linear(value / 255) for value in range(256)]
 _ALPHAS: dict[tuple, float] = {}  # glass_alpha on a coarse grid of colours, by theme, need and least opacity
 GRID = 17  # the grid's step, in 8-bit channel values: 16 levels, 0 to 255
-NEED_LEVELS = 4  # the needs between BUSY_CONTRAST and TEXT_CONTRAST are rounded up to one of these steps
+NEED_LEVELS = 4  # the needs between the busy and the plain contrast are rounded up to one of these steps
 
 
 def alpha_profile(columns: list[tuple[int, int, int]], theme: Theme, least: float | None = None) -> list[float]:
@@ -199,22 +213,23 @@ def alpha_profile(columns: list[tuple[int, int, int]], theme: Theme, least: floa
     linear = _LINEAR8
     needs = column_needs([0.2126 * linear[r] + 0.7152 * linear[g] + 0.0722 * linear[b] for r, g, b in columns])
     up = luminance(QColor(theme.text)) > 0.5  # light text: brighter is harder to read on
-    step = (TEXT_CONTRAST - BUSY_CONTRAST) / NEED_LEVELS
+    plain_need, busy_need = contrast_targets()
+    step = (plain_need - busy_need) / NEED_LEVELS
     known = _ALPHAS
     if len(known) > 50_000:
         known.clear()
-    theme_key = (theme.text, theme.glass_base.rgba(), round(least, 4))
+    theme_key = (theme.text, theme.glass_base.rgba(), round(least, 4), plain_need, busy_need)
     alphas = []
     for (r, g, b), need in zip(columns, needs):
         if up:
             point = (min(255, -(-r // GRID) * GRID), min(255, -(-g // GRID) * GRID), min(255, -(-b // GRID) * GRID))
         else:
             point = (r // GRID * GRID, g // GRID * GRID, b // GRID * GRID)
-        level = min(NEED_LEVELS, max(0, math.ceil((need - BUSY_CONTRAST) / step - 1e-9)))
+        level = min(NEED_LEVELS, max(0, math.ceil((need - busy_need) / step - 1e-9)))
         key = (theme_key, point, level)
         alpha = known.get(key)
         if alpha is None:
-            alpha = known[key] = glass_alpha(QColor(*point), theme, BUSY_CONTRAST + level * step, least)
+            alpha = known[key] = glass_alpha(QColor(*point), theme, busy_need + level * step, least)
         alphas.append(alpha)
     count = len(alphas)
     grown = [max(alphas[max(0, i - 2):i + 3]) for i in range(count)]
@@ -672,6 +687,21 @@ class FloatingBar(QFrame):
     def radius(self) -> float:
         return (self.height() - 1) / 2 if self.height() <= CAPSULE_MAX else GLASS_RADIUS
 
+    def surface(self) -> QColor:
+        """The colour coloured icons stand on: the glass over the part of what is behind it hardest to read on
+        (the brightest under light text, the darkest under dark text), or the bar itself when it is solid."""
+        t = themes.current
+        if self._solid:
+            return QColor(t.raised)
+        first, last = self._under
+        columns = self._columns[first:last]
+        if self._backdrop is None or not columns:
+            return QColor(t.glass_solid)
+        light_text = luminance(QColor(t.text)) > 0.5
+        weight = (lambda c: 0.2126 * _LINEAR8[c[0]] + 0.7152 * _LINEAR8[c[1]] + 0.0722 * _LINEAR8[c[2]])
+        worst = (max if light_text else min)(columns, key=weight)
+        return _over(t.glass_base, self.tint_alpha, QColor(*worst))
+
     def set_backdrop(self, source: QWidget | None) -> None:
         self._source = source
         self.refresh_backdrop()
@@ -872,7 +902,7 @@ class FloatingBar(QFrame):
         t = themes.current
         width = max(1, int(ratio + 0.5))
         colours = (t.raised, t.border) if self._solid else (t.glass_highlight.rgba(), t.glass_border.rgba())
-        key = (size.width(), size.height(), radius, width, grain, self._solid, colours)
+        key = (size.width(), size.height(), radius, width, grain, self._solid, colours, glass.style)
         if self._overlay is not None and self._overlay[0] == key:
             return self._overlay[1]
         picture = QPixmap(size)
@@ -888,10 +918,20 @@ class FloatingBar(QFrame):
             painter.drawPath(shape)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         if not self._solid:
-            # Light along the top edge, fading down the corners: the second ring of pixels in.
-            light = QLinearGradient(QPointF(0, width), QPointF(0, width + radius))
+            # Light along the top edge, fading down the corners: the second ring of pixels in. The Clear glass
+            # catches some along the bottom too, as the rim of a lens does.
+            light = QLinearGradient(QPointF(0, width), QPointF(0, rect.height() - width))
+            fade = min(0.5, (radius + width) / max(rect.height(), 1.0))
+            clear = QColor(255, 255, 255, 0)
             light.setColorAt(0.0, t.glass_highlight)
-            light.setColorAt(1.0, QColor(255, 255, 255, 0))
+            light.setColorAt(fade, clear)
+            if glass.style == "clear":
+                rim = QColor(t.glass_highlight)
+                rim.setAlpha(rim.alpha() // 2)
+                light.setColorAt(1.0 - fade, clear)
+                light.setColorAt(1.0, rim)
+            else:
+                light.setColorAt(1.0, clear)
             inset = width * 1.5
             painter.setPen(QPen(QBrush(light), width))
             painter.drawRoundedRect(rect.adjusted(inset, inset, -inset, -inset), max(radius - inset, 0),

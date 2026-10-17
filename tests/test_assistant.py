@@ -16,6 +16,7 @@ from zenith_pdf.ui import writing_dialogs
 from zenith_pdf.ui.context_menu import build_context_menu
 from zenith_pdf.ui.dialogs import SHORTCUTS
 from zenith_pdf.ui.help import TOPICS
+from zenith_pdf.core.platforms import native_keys
 from zenith_pdf.ui.tips import FIRST_TIP, TOOL_TIPS
 from zenith_pdf.ui.tool_catalog import CATALOG
 
@@ -266,14 +267,14 @@ def test_a_tool_shows_its_tips_once(window, workspace):
     settle()
     card = tips.card
     assert card.isVisible() and card.title.text() == "Tips: Rectangle"
-    assert any(FIRST_TIP in label.text() for label in card.lines)  # the very first card says where to ask
+    assert any(native_keys(FIRST_TIP) in label.text() for label in card.lines)  # the very first card says where to ask
     assert "rectangle" in settings.get("tips_seen")
     toolbar_bottom = workspace.toolbar.geometry().bottom()
     assert card.geometry().top() > toolbar_bottom
     workspace.tool_settings.set_tool("ellipse")
     settle()
     assert card.isVisible() and card.title.text() == "Tips: Ellipse"
-    assert not any(FIRST_TIP in label.text() for label in card.lines)
+    assert not any(native_keys(FIRST_TIP) in label.text() for label in card.lines)
     QTest.mousePress(workspace.view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
                      QPoint(300, 400))
     QTest.mouseRelease(workspace.view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,

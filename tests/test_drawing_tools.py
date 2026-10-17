@@ -496,6 +496,7 @@ def test_cut_and_delete_leave_locked_annotations(workspace):
     row = menu.actions()[0]
     assert isinstance(row, QWidgetAction)
     buttons = {b.toolTip(): b.isEnabled() for b in row.defaultWidget().findChildren(IconButton)}
+    buttons = {key: on for tip, on in buttons.items() for key in {tip, tip.replace("⌘", "Ctrl+")}}
     assert not buttons["Cut (Ctrl+X)"] and not buttons["Delete (Del)"] and buttons["Copy (Ctrl+C)"]
     view.select([locked, loose])
     view.cut_annotations()

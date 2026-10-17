@@ -278,32 +278,38 @@ def test_glass_tint_keeps_text_readable_over_any_page(qt_app):
             widgets.set_glass(style)
             for theme in (DARK, LIGHT):
                 least = widgets.least_alpha(theme)
+                plain_need, busy_need = widgets.contrast_targets()
                 text = luminance(QColor(theme.text))
                 for color in behind:
                     alpha = glass_alpha(color, theme)
                     assert least <= alpha <= MOST_ALPHA
                     mixed = luminance(widgets._over(theme.glass_base, alpha, color))
-                    assert contrast(mixed, text) >= 7.0, (style, theme.name, color.name())
-                    busy = glass_alpha(color, theme, need=4.5)
+                    assert contrast(mixed, text) >= plain_need, (style, theme.name, color.name())
+                    busy = glass_alpha(color, theme, need=busy_need)
                     assert busy <= alpha  # a bright spot in a photo needs less than a plain page
-                    assert contrast(luminance(widgets._over(theme.glass_base, busy, color)), text) >= 4.5
+                    assert contrast(luminance(widgets._over(theme.glass_base, busy, color)), text) >= busy_need
                 # Over content like the glass itself nothing needs covering: the glass stays as clear as it gets.
                 assert glass_alpha(theme.glass_base, theme) == least
         assert DARK.glass_clear_alpha < DARK.glass_alpha and LIGHT.glass_clear_alpha < LIGHT.glass_alpha
+        widgets.set_glass("balanced")
+        assert widgets.contrast_targets() == (7.0, 4.5)  # Balanced reads at AAA
+        widgets.set_glass("clear")
+        assert widgets.contrast_targets() == (4.5, 3.0)  # Clear shows more of the page, at AA
     finally:
         widgets.set_glass("clear")
 
 
 def test_the_tint_rises_only_where_reading_needs_it(qt_app):
     white, canvas, spot = (255, 255, 255), (19, 20, 23), (230, 220, 160)
-    # A plain page needs 7:1 right up to its edge; a lone bright spot of a photo 4.5:1.
-    assert widgets.column_needs([1.0] * 4 + [0.007] * 4) == [7.0] * 8
+    # A plain page needs the style's plain contrast right up to its edge; a lone bright spot of a photo the busy one.
+    plain_need, busy_need = widgets.contrast_targets()
+    assert widgets.column_needs([1.0] * 4 + [0.007] * 4) == [plain_need] * 8
     needs = widgets.column_needs([0.01, 0.01, 0.01, 0.7, 0.01, 0.01, 0.01])
-    assert needs[3] == 4.5 and needs[0] == 7.0
+    assert needs[3] == busy_need and needs[0] == plain_need
     # The bar is clearer over the canvas than over the page beside it, and each column keeps what it needs.
     columns = [white] * 6 + [canvas] * 8
     profile = widgets.alpha_profile(columns, DARK)
-    assert profile[0] > 0.7 and profile[-1] == pytest.approx(widgets.least_alpha(DARK))
+    assert profile[0] > 0.5 and profile[-1] == pytest.approx(widgets.least_alpha(DARK))
     text = luminance(QColor(DARK.text))
     for colour, alpha, need in zip(columns, profile, widgets.column_needs(
             [luminance(QColor(*c)) for c in columns])):
@@ -311,7 +317,7 @@ def test_the_tint_rises_only_where_reading_needs_it(qt_app):
     assert widgets.needed_alpha([QColor(*spot)], DARK) >= widgets.needed_alpha([QColor(*canvas)], DARK)
 
 
-def test_glass_over_a_white_page_reads_at_seven_to_one(window, workspace):
+def test_glass_over_a_white_page_reads_as_the_style_asks(window, workspace):
     view, counter = workspace.view, workspace.page_counter
     for name in ("dark", "light"):
         window.set_theme(name)
@@ -333,7 +339,8 @@ def test_glass_over_a_white_page_reads_at_seven_to_one(window, workspace):
                    for x in range(geometry.left() + 20, geometry.right() - 20, 3)]
         t = themes.current
         worst = max(surface) if name == "dark" else min(surface)
-        assert contrast(worst, luminance(QColor(t.text))) >= 7.0, name  # on every pixel, the grain's too
+        need = widgets.contrast_targets()[0]
+        assert contrast(worst, luminance(QColor(t.text))) >= need, name  # on every pixel, the grain's too
         # Muted text on the glass over the pages takes the full text colour.
         note = widgets.muted_label("muted")
         counter.layout().addWidget(note)

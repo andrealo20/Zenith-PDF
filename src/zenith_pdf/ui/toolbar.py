@@ -86,6 +86,13 @@ class ToolButton(QToolButton):
         self._icons.clear()
         self.update()
 
+    def _glass(self) -> FloatingBar | None:
+        """The glass bar this button stands on, if it is glass."""
+        parent = self.parentWidget()
+        while parent is not None and not isinstance(parent, FloatingBar):
+            parent = parent.parentWidget()
+        return parent if parent is not None and not parent.solid else None
+
     def _icon(self, name: str, color: str) -> QIcon:
         cached = self._icons.get((name, color))
         if cached is None:
@@ -108,6 +115,9 @@ class ToolButton(QToolButton):
             painter.setBrush(token_color(fill))
             painter.drawRoundedRect(QRectF(self.rect()), 10, 10)
         color = self.tint or (t.accent if self.active else t.text)
+        if self.tint and (bar := self._glass()) is not None:
+            # On glass the tool's colour is made readable on what shows through, as on the bar it was made for.
+            color = readable(QColor(self.tint).getRgbF()[:3], bar.surface().name(), t.text)
         mode = QIcon.Mode.Normal if self.isEnabled() else QIcon.Mode.Disabled
         self._icon(self.spec.icon, color).paint(painter, QRect(8, 8, self.ICON, self.ICON),
                                                 Qt.AlignmentFlag.AlignCenter, mode)

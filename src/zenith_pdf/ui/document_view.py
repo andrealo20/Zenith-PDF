@@ -1413,8 +1413,8 @@ class DocumentView(QGraphicsView):
         accepted = dialog.exec() == QDialog.DialogCode.Accepted
         source, new_size = dialog.equation()
         dialog.deleteLater()
-        if not accepted:
-            return
+        if not accepted or (source == stamp.equation and new_size == size):
+            return  # nothing to change: the picture stays exactly as it was drawn
         # As big as before, relative to its natural size: a picture the user made larger stays larger.
         _, natural_w, natural_h = equation_picture(stamp.equation, size, color)
         data, fresh_w, fresh_h = equation_picture(source, new_size, color)

@@ -287,7 +287,7 @@ every change, and publishes them with each new version.
   pinned folders
 - Floating bars of frosted glass that blur the pages scrolling under them,
   with their colours lifted; the tint rises only where the page under a bar
-  needs it for text to read at 7:1 (4.5:1 over a bright spot of a photo).
+  needs it for text to read at 4.5:1 in the Clear glass, 7:1 in the Balanced.
   Clear, Balanced or Solid in the settings; menus and panels are solid
 - Reading mode (Ctrl+H): only the pages, with the bars, the side panel and the
   tabs out of the way. Scrolling, zoom, links, Back and the page keys work as
@@ -416,15 +416,17 @@ Qt can't blur what lies behind a widget, so each floating bar samples it
 (`ui/widgets.py`, `FloatingBar`).
 
 - The pages under the bar and 24 px round it are grabbed, reduced to one texel
-  every 3 logical px, blurred with a gaussian (sigma 5 px, as three box passes)
+  every 2 logical px, blurred with a gaussian (sigma 3.5 px, as three box passes)
   and given back some of the colour a tint takes away. The painter stretches
-  the texels smoothly: shapes and colours show through, words don't.
+  the texels smoothly: lines of text show through as soft strokes, as through
+  Apple's Liquid Glass, but too soft to read under the icons.
 - A scroll moves the picture with the pages at once, so it never lags a frame;
   a fresh sample follows at most once a frame, and at once after a jump past
   the area sampled. A zoom or newly rendered tiles under a bar resample it too.
 - The tint is worked out column by column: as clear as the glass style allows,
-  rising only where text and icons would read under 7:1 over plain parts of
-  the page or the canvas, or under 4.5:1 over the worst spot of a busy picture.
+  rising only where text and icons would read under 4.5:1 (Clear) or 7:1
+  (Balanced) over plain parts of the page or the canvas, or under 3:1 or 4.5:1
+  over the worst spot of a busy picture.
   The faint grain that keeps the glass from banding is counted in.
 - The edge and the line of light along the top are drawn in device pixels,
   whole pixels wide at every scaling from 100% to 200%.

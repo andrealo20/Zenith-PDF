@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication
 from zenith_pdf.app import create_app
 from zenith_pdf.core.annotations import Link, new_id
 from zenith_pdf.core.document import Document
+from zenith_pdf.core.platforms import native_keys
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui.commands import ChangeAnnotations
 from zenith_pdf.ui.history import LIMIT, History, Spot
@@ -116,7 +117,7 @@ def test_a_link_lands_on_its_spot_and_back_returns_exactly(workspace):
     settle()
     assert view.current_page == 2 and readable(view, 2, 592)
     assert counter.back_button.isVisible() and "page 1" in counter.back_button.toolTip()
-    assert "Alt+Left" in counter.back_button.toolTip()
+    assert native_keys("Alt+Left") in counter.back_button.toolTip()
 
     view.back()
     settle()

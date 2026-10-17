@@ -311,10 +311,16 @@ class _Enchant:
             if len(word) < 2 or word.isupper() or _known(dictionary, word):
                 continue  # single letters and acronyms (PDF, OCR) are left alone
             issues.append(Issue(match.start(), len(word), word, "suggest",
-                                tuple(dictionary.suggest(word)[:SUGGESTIONS])))
+                                tuple(_swaps_first(word, dictionary.suggest(word))[:SUGGESTIONS])))
             if len(issues) >= limit:
                 break
         return _with_doubled(text, issues)
+
+
+def _swaps_first(word: str, suggestions: list[str]) -> list[str]:
+    """The suggestions with the same letters as `word` first: two swapped letters are the commonest slip."""
+    letters = sorted(word.lower())
+    return sorted(suggestions, key=lambda suggestion: sorted(suggestion.lower()) != letters)
 
 
 def _known(dictionary, word: str) -> bool:

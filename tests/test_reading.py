@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication
 
 from zenith_pdf.app import create_app
 from zenith_pdf.core.annotations import Shape
+from zenith_pdf.core.platforms import key
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui import reading
 from zenith_pdf.ui.document_view import HOLD_MS
@@ -77,7 +78,7 @@ def test_only_the_pages_show_and_everything_comes_back(window, workspace):
     shown = {name for name, widget in chrome(window, workspace).items() if widget.isVisible()}
     assert shown == set(chrome(window, workspace))
     window.setFocus()
-    QTest.keyClick(window, Qt.Key.Key_H, Qt.KeyboardModifier.ControlModifier)
+    QTest.keySequence(window, QKeySequence(key("Ctrl+H")))
     faded()
     assert window.reading_mode.active
     assert not any(widget.isVisible() for widget in chrome(window, workspace).values())
@@ -101,7 +102,7 @@ def test_only_the_pages_show_and_everything_comes_back(window, workspace):
 
 
 def test_one_shortcut_and_three_ways_in(window, workspace):
-    bound = [a for a in window.actions() if a.shortcut() == QKeySequence("Ctrl+H")]
+    bound = [a for a in window.actions() if a.shortcut() == QKeySequence(key("Ctrl+H"))]
     assert len(bound) == 1  # nothing else answers to Ctrl+H
     workspace.zoom_bar.reading_button.click()
     assert window.reading_mode.active

@@ -22,6 +22,7 @@ dependencies = [
     "winrt-Windows.Graphics.Imaging>=3; sys_platform == 'win32'",
     "winrt-Windows.Storage.Streams>=3; sys_platform == 'win32'",
     "winrt-Windows.Globalization>=3; sys_platform == 'win32'",
+    "winrt-Windows.Foundation>=3; sys_platform == 'win32'",
     "winrt-Windows.Foundation.Collections>=3; sys_platform == 'win32'",
     # Audio notes and the camera on macOS and Linux
     "PySide6-Addons>=6.8; sys_platform != 'win32'",

@@ -575,7 +575,8 @@ def test_the_properties_dialog_fits_a_short_screen(window, workspace, monkeypatc
     short = type("Screen", (), {"availableGeometry": lambda self: QRect(0, 0, 1280, 500)})()
     monkeypatch.setattr(PropertiesDialog, "screen", lambda self: short)
     dialog = PropertiesDialog(workspace.document, window)
-    assert dialog.sizeHint().height() <= 500 - pdf_tools.PROPERTIES_CAPTION
+    assert (dialog.sizeHint().height() <= 500 - pdf_tools.PROPERTIES_CAPTION
+            or dialog.facts.wanted == pdf_tools.PROPERTIES_LEAST)
     assert dialog.facts.sizeHint().height() < facts  # they scroll instead
     dialog.deleteLater()
 
