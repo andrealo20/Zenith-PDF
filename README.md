@@ -1,10 +1,126 @@
+<div align="center">
+
+<img src="src/zenith_pdf/assets/zenith.svg" width="104" alt="Zenith PDF logo">
+
 # Zenith PDF
 
-A PDF viewer and markup app for Windows, built on Qt (PySide6) and PDFium.
+**Read, mark up and study PDF documents on Windows.**<br>
+Thirty-five markup tools with a menu each, page management, PDF tools, text recognition, voice notes,<br>
+and an assistant that understands six languages. Everything runs on your PC.
 
-Early stage, but already usable for reading, marking up and reorganising PDFs.
+<a href="https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF.exe"><img src="https://img.shields.io/badge/Download_for_Windows-Zenith--PDF.exe-2E8BFF?style=for-the-badge" alt="Download Zenith-PDF.exe for Windows" height="38"></a>
+&nbsp;
+<a href="https://github.com/andrealo20/Zenith-PDF/releases"><img src="https://img.shields.io/badge/All_releases-555?style=for-the-badge" alt="All releases" height="38"></a>
 
-## Features so far
+<sub>One file, nothing to install: download it and double-click. Windows 10 and 11, 64-bit.</sub>
+
+<br>
+
+![Windows 10 and 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square)
+![Version 0.3.0](https://img.shields.io/badge/version-0.3.0-2E8BFF?style=flat-square)
+![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-480%20passing-2EA44F?style=flat-square&logo=pytest&logoColor=white)
+![Works offline](https://img.shields.io/badge/works-offline-6E40C9?style=flat-square)
+
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
+![Qt 6 with PySide6](https://img.shields.io/badge/Qt%206-PySide6-41CD52?style=flat-square&logo=qt&logoColor=white)
+![PDFium through pypdfium2](https://img.shields.io/badge/PDFium-pypdfium2-4285F4?style=flat-square)
+![qpdf through pikepdf](https://img.shields.io/badge/qpdf-pikepdf-B0413E?style=flat-square)
+![Pillow](https://img.shields.io/badge/images-Pillow-F5C400?style=flat-square)
+![Phosphor icons](https://img.shields.io/badge/icons-Phosphor%20%2B%20QtAwesome-333?style=flat-square)
+![Windows OCR](https://img.shields.io/badge/OCR-Windows.Media.Ocr-0078D4?style=flat-square)
+![pytest](https://img.shields.io/badge/tested_with-pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white)
+![PyInstaller](https://img.shields.io/badge/packaged_with-PyInstaller-4B8BBE?style=flat-square)
+
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/editor-dark.png">
+  <img src="docs/images/editor-light.png" alt="Zenith PDF with a lecture open: highlights, a pen loop, a callout and notes on the page, the toolbar on frosted glass" width="100%">
+</picture>
+
+</div>
+
+## A quick tour
+
+### Every tool has its own menu
+
+Click the tool that is on, and its menu opens under it: colour, thickness, opacity, line style and ends,
+fill, pens that thin out when you go fast, ink that turns into clean lines and shapes. The lock keeps a tool
+on to draw again, or lets it go back to Pan after one use. The pin keeps the menu open while you draw.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/tool-menu-dark.png">
+  <img src="docs/images/tool-menu-light.png" alt="The pen's menu: basic, pro and calligraphy pens, colours, thickness, opacity and smart ink" width="100%">
+</picture>
+
+### Thirty-five tools, your toolbar
+
+Pens, highlighter, eraser, study tape and a laser pointer; lines, arrows, shapes and clouds; text marks, text
+boxes, callouts and redaction; distance, perimeter and area at a drawing's scale; notes, signatures, pictures,
+links, voice notes and LaTeX equations. Pick the ones you use, drag them where you want them, keep copies of
+a tool with different styles.
+
+<img src="docs/images/tool-chooser.png" alt="The tool chooser, on the Free-form tools" width="100%">
+
+### Ask for anything: Ctrl+K
+
+Type what you want to do, in English, Italian, French, Spanish, German or Portuguese, and press Enter. The
+assistant finds tools, commands, settings, keyboard shortcuts and chapters of the guide, forgives typos, and
+remembers what you use. It needs no internet and no language model.
+
+<img src="docs/images/assistant.png" alt="The assistant: an Italian question finds Rotate page" width="100%">
+
+### Made for studying
+
+Every highlight and underline, with the text under it and your comments, becomes study notes by page or by
+colour, ready to save as Markdown. Text boxes and notes get a spelling and punctuation check, with the
+spell checker built into Windows. Tape hides answers until you peel it back.
+
+<img src="docs/images/study-notes.png" alt="Study notes gathered from the highlights of a lecture" width="100%">
+
+<img src="docs/images/spelling.png" alt="Spelling and punctuation check of a text box, each change shown in context" width="100%">
+
+### Pages, and only the pages
+
+The page manager reorders, rotates, duplicates, extracts and deletes pages. Reading mode (Ctrl+H) takes the
+bars, the panels and the tabs away, and brings them back as they were.
+
+<img src="docs/images/page-manager.png" alt="The page manager" width="100%">
+
+<img src="docs/images/reading-mode.png" alt="Reading mode, with tape over the answers and a voice note" width="100%">
+
+### Home and settings
+
+The home page lists every file you opened, with stars, tags and pinned folders. Settings apply the moment
+you change them: theme, accent colour, how clear the glass is, tools, navigation, saving, text recognition.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/home-dark.png">
+  <img src="docs/images/home-light.png" alt="The home page with recent files, stars and tags" width="100%">
+</picture>
+
+<img src="docs/images/settings.png" alt="Settings, View and Layout" width="100%">
+
+## Download and run
+
+**The quick way.** Download [Zenith-PDF.exe](https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF.exe)
+and double-click it. It is a single file with everything inside, so it starts in a few seconds while it
+unpacks itself. Windows may say it protects your PC because the file is not signed: choose
+**More info**, then **Run anyway**.
+
+**From source**, with Python 3.11 or later:
+
+```
+python -m venv .venv
+.venv\Scripts\pip install -e .[dev]
+.venv\Scripts\python -m zenith_pdf [file.pdf ...]
+```
+
+To build the executable yourself: `.venv\Scripts\pip install pyinstaller`, then
+`.venv\Scripts\python tools/build_exe.py`. It lands in `dist\Zenith-PDF.exe`.
+
+## Everything it does
 
 - Several windows: drag a tab out of the strip and the document opens in a
   window of its own; drop it on another window to move it there (or right-click
@@ -31,7 +147,7 @@ Early stage, but already usable for reading, marking up and reorganising PDFs.
 - A toolbar you arrange: add tools from the chooser or by dragging them on,
   reorder by dragging, remove from the tool's menu; extra tools fold into a
   menu on narrow windows
-- Every tool has its own menu, in the style of Drawboard's: click the tool
+- Every tool has its own menu: click the tool
   that is on (or right-click, or hold it) to open it. The header has the
   tool's name, a lock, remove, more (duplicate, reset, move, help) and a pin
   that keeps the menu open while drawing; under it the subject the tool's
@@ -94,7 +210,7 @@ Early stage, but already usable for reading, marking up and reorganising PDFs.
 - Page thumbnails show the annotations
 - A guide to the whole editor (F1), written from the same data as the in-app
   help, plus what's new and the keyboard shortcuts
-- Settings in the style of Drawboard's: categories, search, and changes that
+- Settings with categories, search, and changes that
   apply at once (theme or follow Windows, accent colour, glass, opening
   zoom and layout, every tool's menu and lock, tool styles that are
   remembered, mouse wheel and scrolling speed, autosave, reopening the last
@@ -132,15 +248,7 @@ Early stage, but already usable for reading, marking up and reorganising PDFs.
 - Password-protected documents (encryption is kept when saving)
 - Dark and light themes
 
-## Running
-
-```
-python -m venv .venv
-.venv\Scripts\pip install -e .[dev]
-.venv\Scripts\python -m zenith_pdf [file.pdf ...]
-```
-
-## Shortcuts
+## Keyboard shortcuts
 
 | Keys | Action |
 | --- | --- |
@@ -173,17 +281,36 @@ python -m venv .venv
 | Enter, double-click / Backspace | Finish a polyline, polygon, perimeter or area / take back a point |
 | Alt while moving or drawing | Place freely, without snapping |
 
-## Layout
+## How it's built
+
+| Part | Built on |
+| --- | --- |
+| Window, widgets, painting | Qt 6 through PySide6, the Fusion style with its own style sheet, dark and light |
+| Reading and drawing pages | PDFium through pypdfium2, in a pool of processes sharing the file through shared memory |
+| Writing the PDF | qpdf through pikepdf: standard annotations with appearance streams, encryption kept |
+| Pictures and compression | Pillow |
+| Icons | Phosphor through QtAwesome, plus a few drawn by hand |
+| Text recognition | the OCR engine built into Windows (Windows.Media.Ocr, through the winrt packages) |
+| Spelling | the spell checker built into Windows (ISpellChecker), called through ctypes |
+| Voice notes | waveIn and MCI from winmm, called through ctypes: no extra package |
+| Assistant | its own search over a vocabulary in six languages: no language model, nothing sent anywhere |
+| Tests | pytest on Qt's offscreen platform: 480 tests |
+| Executable | PyInstaller, one file (`tools/build_exe.py`) |
 
 ```
 src/zenith_pdf/
   core/       PDFium wrapper, coordinate mapping, render queue, PDF tools,
               the equation renderer, ink geometry, audio recording and
-              playback (no widgets)
-  ui/         main window, page canvas, tools, their menus and the tool
-              chooser, side panels, home, settings, guide, audio recorder
+              playback, spelling, writing helpers, the assistant's search
+              and its vocabulary (no widgets)
+  ui/         main window and its windows, page canvas, tools, their menus
+              and the tool chooser, side panels, home, settings, guide,
+              assistant, tips, audio recorder
 tests/        pytest suite; the UI tests run on Qt's offscreen platform
-tools/        snapshot.py renders the window to a PNG
+tools/        build_exe.py makes the one-file executable; screenshots.py the
+              pictures of this README; make_icon.py the icon; bench_zoom.py
+              times zooming; snapshot.py renders the window to a PNG
+docs/images/  the pictures of this README
 ```
 
 ### Rendering
@@ -239,6 +366,9 @@ Qt can't blur what lies behind a widget, so each floating bar samples it
   The faint grain that keeps the glass from banding is counted in.
 - The edge and the line of light along the top are drawn in device pixels,
   whole pixels wide at every scaling from 100% to 200%.
+
+The pictures in this README are made by `tools/screenshots.py`: it writes a demo lecture, marks it up with
+the app's own tools and draws each screen offscreen, so they show no one's files.
 
 ## License
 
