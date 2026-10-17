@@ -103,3 +103,46 @@ def test_the_arrange_menu_aligns_and_undo_puts_them_back(workspace):
     view.select(shapes[:2])
     QTest.qWait(30)
     assert not menu["Distribute"].isEnabled()  # two have no gap between them to even out
+
+
+def test_hatched_fills_are_drawn_alike_on_screen_and_in_the_pdf(tmp_path, sample_pdf):
+    import pypdfium2 as pdfium
+    from PySide6.QtGui import QPainter
+
+    from zenith_pdf.core.annotations import Poly, pattern_marks
+    from zenith_pdf.core.document import Document
+    from zenith_pdf.ui.annotation_items import paint_annotation
+
+    path = tmp_path / "doc.pdf"
+    shutil.copy(sample_pdf, path)
+    square = Shape(page=0, rect=(100, 300, 120, 90), fill=(0.0, 0.0, 1.0), color=(1.0, 0.0, 0.0), pattern="diagonal")
+    star = Poly(page=0, points=((300, 300), (420, 300), (360, 400)), closed=True, fill=(0.0, 0.6, 0.0),
+                pattern="dots")
+    lines, dots = pattern_marks(square.rect, "cross")
+    assert len(lines) > 2 * (120 + 90) / 6 and not dots
+    document = Document(path)
+    document.save([square, star])
+    document.close()
+    reopened = Document(path)
+    assert {a.pattern for a in reopened.annotations} == {"diagonal", "dots"}
+    reopened.close()
+
+    pdf = pdfium.PdfDocument(str(path))
+    page = pdf[0]
+    rendered = page.render(scale=1, draw_annots=True).to_pil().convert("RGB")
+    pdf.close()
+    screen = QImage(rendered.width, rendered.height, QImage.Format.Format_RGB32)
+    screen.fill(QColor("white"))
+    painter = QPainter(screen)
+    paint_annotation(painter, square)
+    painter.end()
+
+    def blue(image_pixel) -> bool:
+        r, g, b = image_pixel
+        return b > 150 and r < 120 and g < 120
+
+    inside = [(x, y) for x in range(110, 210) for y in range(310, 380)]
+    pdf_blue = {p for p in inside if blue(rendered.getpixel(p))}
+    screen_blue = {p for p in inside if blue(screen.pixelColor(*p).getRgb()[:3])}
+    assert 0.1 * len(inside) < len(pdf_blue) < 0.6 * len(inside)  # hatched: lines with white between
+    assert len(pdf_blue ^ screen_blue) < 0.12 * len(inside)  # the same lines in both

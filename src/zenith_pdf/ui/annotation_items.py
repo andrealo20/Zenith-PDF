@@ -13,6 +13,8 @@ from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem
 from ..core import images, inking, textlayout
 from ..core.annotations import (
     NOTE_SIZE,
+    PATTERN_WIDTH,
+    PATTERNS,
     Annotation,
     Attachment,
     Caret,
@@ -39,6 +41,7 @@ from ..core.annotations import (
     normalized,
     note_ink,
     note_marks,
+    pattern_marks,
     quarter_turn,
     round_dash_caps,
     squiggle,
@@ -80,12 +83,33 @@ def _cloud_border(w: float, h: float, width: float, dash: str) -> QPainterPath:
     return stroker.createStroke(cloud_path((0.0, 0.0, w, h)))
 
 
+def paint_pattern(painter: QPainter, area: QPainterPath, rect, pattern: str, fill) -> None:
+    """A hatched fill, as the saved appearance draws it: pattern_marks over `rect`, clipped to `area`."""
+    lines, dots = pattern_marks(rect, pattern)
+    painter.save()
+    painter.setClipPath(area, Qt.ClipOperation.IntersectClip)
+    painter.setPen(pen(qcolor(fill), PATTERN_WIDTH, Qt.PenCapStyle.FlatCap))
+    for start, end in lines:
+        painter.drawLine(QPointF(*start), QPointF(*end))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(qcolor(fill))
+    for x, y in dots:
+        painter.drawEllipse(QPointF(x, y), PATTERN_WIDTH, PATTERN_WIDTH)
+    painter.restore()
+
+
+def hatched(a) -> bool:
+    return getattr(a, "fill", None) is not None and getattr(a, "pattern", "solid") in PATTERNS[1:]
+
+
 def paint_cloud(painter: QPainter, a: Shape) -> None:
     """A cloud: its fill, then its border, both from paths kept for its size."""
     x, y, w, h = a.rect
     painter.save()
+    if hatched(a):
+        paint_pattern(painter, cloud_path(a.rect), a.rect, a.pattern, a.fill)
     painter.translate(x, y)
-    if a.fill is not None:
+    if a.fill is not None and not hatched(a):
         painter.fillPath(cloud_path((0.0, 0.0, w, h)), qcolor(a.fill))
     if a.border and a.width > 0:
         painter.fillPath(_cloud_border(round(w, 3), round(h, 3), a.width, a.dash), qcolor(a.color))
@@ -221,11 +245,13 @@ def paint_annotation(painter: QPainter, a: Annotation) -> None:
                                       Qt.PenJoinStyle.MiterJoin))
         else:
             painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(qcolor(a.fill) if a.fill is not None else Qt.BrushStyle.NoBrush)
-        if a.shape == "Circle":
-            painter.drawPath(ellipse_path(x, y, w, h))
-        else:
-            painter.drawRect(QRectF(x, y, w, h))
+        painter.setBrush(qcolor(a.fill) if a.fill is not None and not hatched(a) else Qt.BrushStyle.NoBrush)
+        outline = ellipse_path(x, y, w, h) if a.shape == "Circle" else QPainterPath()
+        if a.shape != "Circle":
+            outline.addRect(QRectF(x, y, w, h))
+        if hatched(a):
+            paint_pattern(painter, outline, a.rect, a.pattern, a.fill)
+        painter.drawPath(outline)
     elif isinstance(a, Line):
         color = qcolor(a.color)
         painter.setPen(dashed_pen(color, a.width, a.dash, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
@@ -261,8 +287,13 @@ def paint_annotation(painter: QPainter, a: Annotation) -> None:
         color = qcolor(a.color)
         border = dashed_pen(color, a.width, a.dash, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         if a.closed:
+            if hatched(a):
+                area = QPainterPath()
+                area.addPolygon(qpolygon(a.points))
+                area.closeSubpath()
+                paint_pattern(painter, area, a.bounds(), a.pattern, a.fill)
             painter.setPen(border if a.border else QPen(Qt.PenStyle.NoPen))
-            painter.setBrush(qcolor(a.fill) if a.fill is not None else Qt.BrushStyle.NoBrush)
+            painter.setBrush(qcolor(a.fill) if a.fill is not None and not hatched(a) else Qt.BrushStyle.NoBrush)
             painter.drawPolygon(qpolygon(a.points))
         else:
             painter.setPen(border)

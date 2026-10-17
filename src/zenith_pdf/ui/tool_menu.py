@@ -141,6 +141,7 @@ ENDING_NAMES = {"None": "None", "Square": "Square", "Circle": "Circle", "Diamond
                 "OpenArrow": "Open arrow", "ClosedArrow": "Closed arrow", "Butt": "Bar",
                 "ROpenArrow": "Reversed open arrow", "RClosedArrow": "Reversed closed arrow", "Slash": "Slash"}
 DASH_NAMES = {"solid": "Solid", "dotted": "Dotted", "dashed": "Dashed", "dashdot": "Dash and dot"}
+PATTERN_NAMES = {"solid": "Solid fill", "diagonal": "Hatched", "cross": "Cross-hatched", "dots": "Dotted fill"}
 NOTE_ICON_GLYPHS = {"Comment": ("chat-centered-text", "Comment"), "Note": ("note", "Note"), "Help": ("question", "Help"),
                     "Key": ("key", "Key"), "Insert": ("z-note-insert", "Insert"), "Paragraph": ("z-paragraph", "Paragraph")}
 CLEAN_GLYPHS = {"highlight": ("z-text-highlight", "Highlight"), "underline": ("text-underline", "Underline"),
@@ -152,8 +153,8 @@ NO_SUBJECT = {"eraser", "laser", "snapshot", "cleaner", "select", "lasso", "hand
 GROUPED = {"dash": "Line style", "endings": "Line endings", "highlight": "Advanced", "ink_to_line": "Smart ink",
            "ink_to_shape": "Smart ink"}
 OPEN_AT_FIRST = {"Line style": True, "Line endings": True, "Smart ink": True, "Advanced": False}
-SELECTION_ORDER = ("color", "fill", "width", "opacity", "font_size", "text_format", "note_icon", "dash", "endings",
-                   "highlight")
+SELECTION_ORDER = ("color", "fill", "width", "opacity", "font_size", "text_format", "note_icon", "pattern", "dash",
+                   "endings", "highlight")
 FONT_NAMES = {"Helvetica": "Sans serif", "Times": "Serif", "Courier": "Monospace"}
 TEXT_STYLES = {"bold": ("text-bolder", "Bold"), "italic": ("text-italic", "Italic"),
                "underline": ("text-underline", "Underline")}
@@ -1702,13 +1703,13 @@ def preview_annotation(base: str, style: ToolStyle, measure: tuple | None = None
         rect = (w / 2 - 50, 12, 100, h - 24) if base == "cloud" else (w / 2 - 44, 12, 88, h - 24)
         return Shape(shape="Circle" if base == "ellipse" else "Square", rect=rect, width=min(s.width, 16.0),
                      fill=s.fill, cloudy=base == "cloud", dash=s.dash, border=s.border, highlight=s.highlight,
-                     **common)
+                     pattern=s.pattern, **common)
     if base == "polygon":
         cx, cy, r = w / 2, h / 2 + 2, 28
         corners = tuple((cx + r * 1.25 * math.cos(math.radians(-90 + 72 * i)), cy + r * math.sin(math.radians(-90 + 72 * i)))
                         for i in range(5))
         return Poly(points=corners, closed=True, width=min(s.width, 16.0), fill=s.fill, dash=s.dash, border=s.border,
-                    highlight=s.highlight, **common)
+                    highlight=s.highlight, pattern=s.pattern, **common)
     if base in MARKUP_STYLES:
         rect = _sample_rect()
         return TextMarkup(style=MARKUP_STYLES[base], quads=((rect.x() - 2, rect.y(), rect.width() + 4, rect.height()),),
@@ -2203,6 +2204,22 @@ class StyleEditor(QWidget):
         self._load("stamp_detail", lambda s: row.set_checked(s.stamp_detail))
         return row
 
+    def _build_pattern(self, base: str) -> QWidget:
+        grid = OptionGrid([(name, f"z-fill-{name}", None, label) for name, label in PATTERN_NAMES.items()], 4)
+        grid.chosen.connect(lambda v: self._emit("pattern", pattern=v))
+        block = self._block("Fill pattern", grid)
+
+        def load(s: ToolStyle) -> None:
+            grid.set_value(s.pattern)
+            shown = s.fill is not None  # with no fill there is nothing to hatch
+            if block.isHidden() == shown:
+                block.setVisible(shown)
+                if self.host is not None:
+                    QTimer.singleShot(0, self.host.refit)
+
+        self._load("pattern", load)
+        return block
+
     def _build_dash(self, base: str) -> QWidget:
         grid = OptionGrid([(name, f"z-dash-{name}", None, label) for name, label in DASH_NAMES.items()], 4)
         grid.chosen.connect(lambda v: self._emit("dash", dash=v))
@@ -2423,11 +2440,11 @@ def _options_of(a: Annotation) -> set[str]:
     if isinstance(a, TextMarkup):
         return {"color", "opacity"}
     if isinstance(a, Shape):
-        return {"color", "fill", "width", "opacity", "highlight"} | (set() if a.cloudy else {"dash"})
+        return {"color", "fill", "width", "opacity", "highlight", "pattern"} | (set() if a.cloudy else {"dash"})
     if isinstance(a, Line):
         return {"color", "width", "opacity", "dash", "endings", "highlight"}
     if isinstance(a, Poly):
-        return {"color", "width", "opacity", "dash", "highlight"} | ({"fill"} if a.closed else {"endings"})
+        return {"color", "width", "opacity", "dash", "highlight"} | ({"fill", "pattern"} if a.closed else {"endings"})
     if isinstance(a, (Ink, Measurement, Tape)):
         return {"color", "width"} | ({"opacity"} if isinstance(a, Ink) else set())
     if isinstance(a, FreeText):
@@ -2466,6 +2483,7 @@ def selection_style(a: Annotation) -> ToolStyle:
         head_start=getattr(a, "head_start", "None"),
         head_end=getattr(a, "head_end", "None"),
         highlight=bool(getattr(a, "highlight", False)),
+        pattern=getattr(a, "pattern", "solid"),
         note_icon=a.icon if isinstance(a, Note) else "Comment",
         **({"font": a.font, "bold": a.bold, "italic": a.italic, "underline": a.underline, "align": a.align}
            if isinstance(a, FreeText) else {}),

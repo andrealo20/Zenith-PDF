@@ -120,6 +120,7 @@ class Shape(Annotation):
     dash: str = "solid"  # one of DASHES
     border: bool = True  # False: only the fill is drawn
     highlight: bool = False  # drawn like a highlighter: darkens, never covers the text
+    pattern: str = "solid"  # how the fill is drawn: one of PATTERNS
 
     @property
     def kind(self) -> str:
@@ -474,6 +475,7 @@ class Poly(Annotation):
     dash: str = "solid"  # one of DASHES
     border: bool = True  # False: only the fill is drawn
     highlight: bool = False
+    pattern: str = "solid"  # how a polygon's fill is drawn: one of PATTERNS
     head_start: str = "None"  # one of ENDINGS, drawn only when the polyline is open
     head_end: str = "None"
 
@@ -806,6 +808,34 @@ def drawn_dashes(dash: str, width: float) -> tuple[float, ...]:
 def round_dash_caps(dash: str) -> bool:
     """Whether the dashes need round caps: dots are dashes of no length, round caps make them show."""
     return dash in ("dotted", "dashdot")
+
+
+PATTERNS = ("solid", "diagonal", "cross", "dots")  # a fill all over, or hatching in the fill's colour
+PATTERN_STEP = 6.0  # points between the lines, or the dots, of a hatched fill
+PATTERN_WIDTH = 0.8
+
+
+def pattern_marks(rect: Rect, pattern: str) -> tuple[list[tuple[Point, Point]], list[Point]]:
+    """The lines and dots of a hatched fill over `rect`, to be clipped to the shape: diagonal lines rising to
+    the right, those and the falling ones for "cross", a grid of dots for "dots"."""
+    x, y, w, h = rect
+    lines: list[tuple[Point, Point]] = []
+    dots: list[Point] = []
+    if pattern in ("diagonal", "cross"):
+        steps = int((w + h) / PATTERN_STEP) + 2
+        for i in range(steps):
+            offset = i * PATTERN_STEP
+            lines.append(((x + offset - h, y + h), (x + offset, y)))  # rising: bottom-left to top-right
+            if pattern == "cross":
+                lines.append(((x + offset - h, y), (x + offset, y + h)))
+    elif pattern == "dots":
+        rows, columns = int(h / PATTERN_STEP) + 1, int(w / PATTERN_STEP) + 1
+        for row in range(rows):
+            for column in range(columns):
+                shift = PATTERN_STEP / 2 if row % 2 else 0.0  # every other row half a step along
+                dots.append((x + PATTERN_STEP / 2 + column * PATTERN_STEP + shift - PATTERN_STEP / 4,
+                             y + PATTERN_STEP / 2 + row * PATTERN_STEP))
+    return lines, dots
 
 
 def upright_size(rect: Rect, turns: int) -> tuple[float, float]:

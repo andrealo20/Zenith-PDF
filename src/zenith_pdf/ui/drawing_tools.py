@@ -575,7 +575,7 @@ class PointsTool(Tool):
             return Measurement(points=tuple(points), mode=self.name, scale=scale, unit=unit, **common)
         closed = self.name == "polygon"
         if closed:
-            ends = dict(fill=s.fill, border=s.border)
+            ends = dict(fill=s.fill, border=s.border, pattern=s.pattern)
         else:
             ends = dict(head_start=s.head_start, head_end=s.head_end)
         return Poly(points=tuple(points), closed=closed, opacity=s.opacity, dash=s.dash, highlight=s.highlight,

@@ -46,6 +46,7 @@ from .annotations import (
     TextStamp,
     markup_stroke,
 )
+from .annotations import PATTERN_WIDTH, PATTERNS, pattern_marks
 from .geometry import PageGeometry
 
 BOUNDS_PAD = 2.0  # points added around the drawing so antialiased edges aren't clipped
@@ -251,6 +252,25 @@ def _line(text: str, size: float, x: float, baseline: float, color, face: textla
     return ops + ([_rgb(color, stroke=False)] + shapes if shapes else [])
 
 
+def _filled(path: list[str], fill, pattern: str, border: bool, area) -> list[str]:
+    """A closed path filled and stroked in the colours already set: the fill all over, or hatched in its
+    colour (pattern_marks over `area`, clipped to the path), then the border on top."""
+    if fill is None or pattern not in PATTERNS[1:]:
+        if fill is not None:
+            path = [_rgb(fill, stroke=False)] + path
+        paint = ("B" if fill is not None else "S") if border else ("f" if fill is not None else "")
+        return path + [paint] if paint else []
+    lines, dots = pattern_marks(area, pattern)
+    ops = ["q"] + path + ["W n", f"{_rgb(fill, stroke=True)} {num(PATTERN_WIDTH)} w 0 J [] 0 d"]
+    ops += [f"{num(p[0])} {num(p[1])} m {num(q[0])} {num(q[1])} l" for p, q in lines] + (["S"] if lines else [])
+    if dots:
+        r = PATTERN_WIDTH
+        ops += [_rgb(fill, stroke=False)] + [" ".join(_ellipse(dx - r, dy - r, 2 * r, 2 * r)) for dx, dy in dots]
+        ops.append("f")
+    ops.append("Q")
+    return ops + (path + ["S"] if border else [])
+
+
 def _rounded(x: float, y: float, w: float, h: float, r: float) -> list[str]:
     """A rectangle with rounded corners, as a closed path."""
     r = max(min(r, w / 2, h / 2), 0.0)
@@ -286,20 +306,16 @@ def _draw(annotation: Annotation) -> tuple[list[str], bool]:
             inset = a.width / 2
             x, y, w, h = x + inset, y + inset, max(w - 2 * inset, 0), max(h - 2 * inset, 0)
             ops += [_stroke_style(a.dash, a.width, 0), _rgb(a.color, stroke=True)]
-        if a.fill is not None:
-            ops.append(_rgb(a.fill, stroke=False))
-        # With no border and no fill there is nothing to draw.
-        paint = ("B" if a.fill is not None else "S") if a.border else ("f" if a.fill is not None else "")
-        if paint and a.cloudy:
+        if a.cloudy:
             curves = cloud_bumps(*a.rect)
-            path = [f"{num(curves[0][0][0])} {num(curves[0][0][1])} m"]
+            path = ["1 j", f"{num(curves[0][0][0])} {num(curves[0][0][1])} m"]
             path += [f"{num(c1[0])} {num(c1[1])} {num(c2[0])} {num(c2[1])} {num(p1[0])} {num(p1[1])} c"
-                     for _, c1, c2, p1 in curves]
-            ops += ["1 j"] + path + ["h " + paint]
-        elif paint and a.shape == "Circle":
-            ops += _ellipse(x, y, w, h) + [paint]
-        elif paint:
-            ops.append(f"{num(x)} {num(y)} {num(w)} {num(h)} re {paint}")
+                     for _, c1, c2, p1 in curves] + ["h"]
+        elif a.shape == "Circle":
+            path = _ellipse(x, y, w, h)
+        else:
+            path = [f"{num(x)} {num(y)} {num(w)} {num(h)} re"]
+        ops += _filled(path, a.fill, a.pattern, a.border, a.rect)
     elif isinstance(a, Line):
         ops += ["1 j", _stroke_style(a.dash, a.width, 1), _rgb(a.color, stroke=True), _rgb(a.color, stroke=False)]
         ops.append(f"{num(a.start[0])} {num(a.start[1])} m {num(a.end[0])} {num(a.end[1])} l S")
@@ -346,11 +362,7 @@ def _draw(annotation: Annotation) -> tuple[list[str], bool]:
     elif isinstance(a, Poly):
         ops += ["1 j", _stroke_style(a.dash, a.width, 1), _rgb(a.color, stroke=True)]
         if a.closed:
-            if a.fill is not None:
-                ops.append(_rgb(a.fill, stroke=False))
-            paint = ("B" if a.fill is not None else "S") if a.border else ("f" if a.fill is not None else "")
-            if paint:
-                ops.append(_polyline(a.points) + " h " + paint)
+            ops += _filled([_polyline(a.points) + " h"], a.fill, a.pattern, a.border, a.bounds())
         else:
             ops += [_rgb(a.color, stroke=False), _polyline(a.points) + " S"]
             ops += _endings(a.endings(), a.dash != "solid")

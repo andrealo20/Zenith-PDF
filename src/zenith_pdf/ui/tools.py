@@ -18,6 +18,7 @@ from ..core.annotations import (
     ENDINGS,
     NOTE_ICONS,
     NOTE_SIZE,
+    PATTERNS,
     STAMPS,
     UNITS,
     Color,
@@ -92,6 +93,7 @@ class ToolStyle:
     italic: bool = False
     underline: bool = False
     align: str = "left"  # TEXT_ALIGNS
+    pattern: str = "solid"  # how a shape's fill is drawn: PATTERNS
     stamp: str = "Approved"  # one of STAMPS, or words of the user's own
     stamp_detail: bool = True  # a line under the stamp: who stamped it, and when
 
@@ -158,7 +160,7 @@ DEFAULT_STYLES = {
 # The options each tool's menu shows, in order. Most edit ToolStyle fields (OPTION_FIELDS),
 # a few edit preferences in Settings (SETTING_OPTIONS), and "scale" edits ToolSettings.measure.
 _LINES = ("color", "width", "opacity", "dash", "endings", "highlight")
-_SHAPES = ("color", "fill", "width", "opacity", "dash", "highlight")
+_SHAPES = ("color", "fill", "width", "opacity", "pattern", "dash", "highlight")
 _MARKUP = ("color", "opacity")
 _MEASURE = ("color", "width", "scale")
 _TEXT = ("color", "font_size", "text_format", "fill")
@@ -174,7 +176,7 @@ OPTIONS: dict[str, tuple[str, ...]] = {
     "arrow": _LINES,
     "rectangle": _SHAPES,
     "ellipse": _SHAPES,
-    "cloud": ("color", "fill", "width", "opacity", "highlight"),
+    "cloud": ("color", "fill", "width", "opacity", "pattern", "highlight"),
     "polygon": _SHAPES,
     "highlight": _MARKUP,
     "underline": _MARKUP,
@@ -212,7 +214,7 @@ OPTION_FIELDS: dict[str, tuple[str, ...]] = {
 } | {name: (name,) for name in (
     "fill", "width", "opacity", "font_size", "dash", "highlight", "ink_to_line", "ink_to_shape", "erase",
     "tape_start", "laser_size", "laser_fade", "clean_kinds", "note_icon", "image_size", "link_border",
-    "snapshot_scale", "snapshot_annotations", "lasso_pick", "audio_source", "stamp_detail")}
+    "snapshot_scale", "snapshot_annotations", "lasso_pick", "audio_source", "stamp_detail", "pattern")}
 SETTING_OPTIONS = {name: name for name in ("select_new", "snap_annotations", "snap_content", "wheel", "scroll_speed",
                                            "signatures")}  # option -> Settings key
 BORDER_TOOLS = frozenset({"rectangle", "ellipse", "cloud", "polygon"})  # colour titled Border, with No colour
@@ -327,6 +329,7 @@ FIELD_CHECKS = {
     "italic": _flag,
     "underline": _flag,
     "align": _one_of(TEXT_ALIGNS),
+    "pattern": _one_of(PATTERNS),
     "stamp": _stamp_words,
     "stamp_detail": _flag,
 }
@@ -747,7 +750,7 @@ class DragShapeTool(Tool):
         shape = "Circle" if self.name == "ellipse" else "Square"
         cloud = self.name == "cloud"
         return Shape(shape=shape, rect=normalized(*a, *b), cloudy=cloud, fill=s.fill, border=s.border,
-                     dash="solid" if cloud else s.dash, **common)
+                     dash="solid" if cloud else s.dash, pattern=s.pattern, **common)
 
     def press(self, page, pos, event) -> bool:
         self.cancel()

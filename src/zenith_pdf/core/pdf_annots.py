@@ -21,6 +21,7 @@ from .annotations import (
     DASHES,
     ENDINGS,
     NOTE_ICONS,
+    PATTERNS,
     STAMP_NAMES,
     STAMPS,
     Annotation,
@@ -59,7 +60,7 @@ IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 MANAGED_KEYS = ("/RD", "/IC", "/LE", "/AS", "/IT", "/CL", "/BE", "/Measure", "/Vertices", "/Subj", "/Name",
                 "/ZenithHighlighter", "/ZenithWidths", "/ZenithBorderColor", "/ZenithBorderWidth", "/ZenithRotation",
                 "/ZenithEquationSize", "/ZenithEquationColor", "/ZenithGroup", "/ZenithStampText",
-                "/ZenithStampDetail", "/ZenithStampName")
+                "/ZenithStampDetail", "/ZenithStampName", "/ZenithPattern")
 ALIGNS = ("left", "center", "right")  # a text box's /Q: 0, 1 and 2
 FLAG_HIDDEN = 2
 FLAG_PRINT = 4
@@ -239,6 +240,7 @@ def read_annotation(obj, page: int, geometry: PageGeometry, pages: dict | None =
             cloudy=subtype == "/Square" and isinstance(effect, Dictionary) and effect.get("/S") == Name.C,
             dash=_dash(obj),
             highlight=highlight,
+            pattern=_pattern(obj),
             **_border_extras(obj, color, (0.0, 0.0, 0.0)),
             **common,
         )
@@ -270,7 +272,8 @@ def read_annotation(obj, page: int, geometry: PageGeometry, pages: dict | None =
         style = _border_extras(obj, color, (0.0, 0.0, 0.0)) if closed else dict(
             width=_border_width(obj), color=color or (0.0, 0.0, 0.0))
         return Poly(points=points, closed=closed, fill=_color(obj.get("/IC")) if closed else None, dash=_dash(obj),
-                    highlight=highlight, head_start=head_start, head_end=head_end, **style, **common)
+                    highlight=highlight, head_start=head_start, head_end=head_end, pattern=_pattern(obj), **style,
+                    **common)
 
     if subtype == "/Link":
         return _read_link(obj, geometry, common, color, pages or {})
@@ -386,6 +389,11 @@ def read_annotation(obj, page: int, geometry: PageGeometry, pages: dict | None =
 
 
 DISPLAY_TURNS = {(1, 0, 0, -1): 0, (0, 1, 1, 0): 1, (-1, 0, 0, 1): 2, (0, -1, -1, 0): 3}  # display_matrix, by /Rotate
+
+
+def _pattern(obj) -> str:
+    name = str(obj.get("/ZenithPattern", "/solid"))[1:]
+    return name if name in PATTERNS else "solid"
 
 
 def _text_turns(obj, geometry: PageGeometry) -> int:
@@ -700,6 +708,8 @@ def write_annotation(pdf: pikepdf.Pdf, obj: Dictionary, annotation: Annotation, 
         _set_border(obj, a.width, a.dash, a.border)
         if a.fill is not None:
             obj.IC = _array(a.fill)
+            if a.pattern != "solid":
+                obj.ZenithPattern = Name("/" + a.pattern)
         if a.cloudy:
             obj.BE = Dictionary(S=Name.C, I=1)
         # Rect carries padding for antialiasing; RD says where the shape itself is.
@@ -762,6 +772,8 @@ def write_annotation(pdf: pikepdf.Pdf, obj: Dictionary, annotation: Annotation, 
         obj.Vertices = _flat(a.points, geometry)
         if a.closed and a.fill is not None:
             obj.IC = _array(a.fill)
+            if a.pattern != "solid":
+                obj.ZenithPattern = Name("/" + a.pattern)
         elif not a.closed:
             obj.LE = _ending_names(a.head_start, a.head_end)
             obj.IC = _array(a.color)  # fills closed endings

@@ -32,7 +32,7 @@ from PySide6.QtGui import (
     QPolygonF,
 )
 
-from .core.annotations import DASHES, ENDINGS, dash_array, line_ending, round_dash_caps
+from .core.annotations import DASHES, ENDINGS, PATTERNS, dash_array, line_ending, round_dash_caps
 from .core.inking import calligraphy_widths, stroke_polygons
 from .core.platforms import math_font, ui_font
 from .theme import themes
@@ -133,6 +133,35 @@ def _dash(name: str):
             pen.setCapStyle(Qt.PenCapStyle.RoundCap if round_dash_caps(name) else Qt.PenCapStyle.FlatCap)
         p.setPen(pen)
         p.drawLine(QPointF(3, 12), QPointF(21, 12))
+    return draw
+
+
+def _fill(name: str):
+    """A square filled one of the ways a shape's fill can be drawn (PATTERNS)."""
+    def draw(p: QPainter) -> None:
+        box = QRectF(4, 4, 16, 16)
+        area = QPainterPath()
+        area.addRoundedRect(box, 2, 2)
+        p.save()
+        p.setClipPath(area)
+        color = p.pen().color()
+        if name == "solid":
+            p.fillRect(box, color)
+        elif name == "dots":
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(color)
+            for row in range(4):
+                for column in range(4):
+                    p.drawEllipse(QPointF(6 + column * 4 + (2 if row % 2 else 0), 6 + row * 4), 0.9, 0.9)
+        else:
+            thin = QPen(color, 1.2)
+            p.setPen(thin)
+            for i in range(-4, 9):
+                p.drawLine(QPointF(4 + i * 4, 20), QPointF(20 + i * 4, 4))
+                if name == "cross":
+                    p.drawLine(QPointF(4 + i * 4, 4), QPointF(20 + i * 4, 20))
+        p.restore()
+        p.drawRoundedRect(box, 2, 2)
     return draw
 
 
@@ -272,6 +301,7 @@ CUSTOM = {
     "z-text-highlight": _text_highlight,
 }
 CUSTOM |= {f"z-dash-{name}": _dash(name) for name in DASHES}
+CUSTOM |= {f"z-fill-{name}": _fill(name) for name in PATTERNS}
 CUSTOM |= {f"z-end-{name}": _ending(name, start=False) for name in ENDINGS}
 CUSTOM |= {f"z-start-{name}": _ending(name, start=True) for name in ENDINGS}
 
