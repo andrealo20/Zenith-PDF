@@ -375,6 +375,9 @@ MENU_TIPS = {
     "Check spelling…": "Typos, doubled words, spacing and punctuation in this text, fixed in one step you can undo.",
     "Key points of the selection…": "The sentences that carry the selected text, to read or keep as a note.",
     "Full screen": "Give the whole screen to the window. F11 again goes back.",
+    "Read aloud": "Read the selected text, or the pages from this one on, with the system's voices.",
+    "Compare with another version…": "Two versions of a PDF side by side, with what was added, removed or changed "
+                                     "lit on both.",
 }
 
 

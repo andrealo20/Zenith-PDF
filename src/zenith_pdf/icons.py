@@ -385,7 +385,7 @@ _HUE_NAMES = {
     "orange": "chat-centered-text chat-teardrop-text note note-blank bookmark-simple bookmarks tag tag-simple "
               "star star-fill lightbulb lightbulb-filament notebook cards z-squiggle text-underline "
               "text-strikethrough",
-    "teal": "check-circle info graduation-cap question keyboard speaker-high gauge sparkle wrench "
+    "teal": "git-diff check-circle info graduation-cap question keyboard speaker-high gauge sparkle wrench "
             "first-aid-kit rocket-launch book-open z-reading magnet",
 }
 HUES = {name: hue for hue, names in _HUE_NAMES.items() for name in names.split()}

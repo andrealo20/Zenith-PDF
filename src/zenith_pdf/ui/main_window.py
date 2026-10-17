@@ -192,6 +192,8 @@ class MainWindow(QMainWindow):
         ("app-window", "New window\tCtrl+Shift+N", "new_window"),
         None,  # View
         ("z-reading", f"Reading mode\t{READING_SHORTCUT}", "toggle_reading_mode"),
+        ("speaker-high", "Read aloud", "command_read_aloud"),
+        ("git-diff", "Compare with another version…", "command_compare"),
         ("corners-out", "Full screen\tF11", "toggle_full_screen"),
         "theme",
         None,
@@ -968,6 +970,29 @@ class MainWindow(QMainWindow):
 
     def command_assistant(self) -> None:
         self.show_assistant()
+
+    def command_compare(self) -> None:
+        """Compare the open document with another version of it, or two files when none is open."""
+        from .compare import compare_files
+
+        workspace = self.current_workspace()
+        start = str(workspace.document.path.parent) if workspace is not None else self._settings.get("last_directory")
+        older, _ = QFileDialog.getOpenFileName(self, "Compare with which version?", start, "PDF documents (*.pdf)")
+        if not older:
+            return
+        if workspace is None:
+            newer, _ = QFileDialog.getOpenFileName(self, "And the newer version?", start, "PDF documents (*.pdf)")
+            if not newer:
+                return
+            document = Document(Path(newer))
+        else:
+            current = workspace.document
+            document = Document(current.path, password=current.password, data=current.data)  # as it is now
+        try:
+            self._compare_window = compare_files(self, Path(older), document)
+        except Exception as error:
+            document.close()
+            messages.warn(self, "Can't compare", f"{Path(older).name} could not be opened.", detail=str(error))
 
     def command_search_all(self) -> None:
         """Search inside every PDF: the home page's search box asks the index too."""
