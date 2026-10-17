@@ -5,7 +5,7 @@ import shutil
 import pikepdf
 import pypdfium2 as pdfium
 import pytest
-from PySide6.QtCore import QDate, QDateTime, QPointF, QSettings, QTime
+from PySide6.QtCore import QDate, QDateTime, QLocale, QPointF, QSettings, QTime
 from PySide6.QtTest import QTest
 
 from zenith_pdf.app import create_app
@@ -30,7 +30,9 @@ def pdf_copy(sample_pdf, tmp_path):
 def test_the_words_of_a_stamp():
     when = QDateTime(QDate(2026, 10, 17), QTime(15, 30))
     text, detail, name = stamp_words(DEFAULT_STYLES["stamp"], "Andrea", when=when)
-    assert text == "APPROVED" and name == "Approved" and detail.startswith("Andrea, ") and "15" in detail
+    locale = QLocale()
+    shown = f"{locale.toString(when.date(), QLocale.FormatType.ShortFormat)} "             f"{locale.toString(when.time(), QLocale.FormatType.ShortFormat)}"  # as the system writes dates
+    assert (text, name, detail) == ("APPROVED", "Approved", f"Andrea, {shown}")
     own = DEFAULT_STYLES["stamp"].__class__(color=(0, 0, 0), stamp="Checked by {author} on page {page}",
                                             stamp_detail=False)
     assert stamp_words(own, "Bo", page=2, when=when) == ("Checked by Bo on page 3", "", "")
