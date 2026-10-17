@@ -50,6 +50,7 @@ DEFAULTS: dict[str, object] = {
     "update_auto": False,  # download new versions in the background and install them when the app closes
     "update_skipped": "",  # a version the user chose to skip
     "update_last_check": 0.0,  # when GitHub was last asked (seconds since 1970)
+    "default_app_asked": False,  # the first start asked whether Zenith PDF should open PDF files
     # Annotation
     "author": "",
     "remember_styles": True,

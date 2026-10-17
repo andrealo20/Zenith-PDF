@@ -183,6 +183,9 @@ SYNONYMS: dict[str, str] = {
         lernkarten karteikarte anki""",
     "every": "ogni tutti tutte qualsiasi tous toutes chaque todos todas cada alle jede jeder",
     "inside": "dentro interno interni dans interieur innerhalb",
+    "default": """predefinito predefinita predefiniti impostare principale defaut predetermine predeterminado
+        predeterminada principal padrao standard standardprogramm standardmassig""",
+    "reader": "lettore visualizzatore lecteur visionneuse lector visor leitor visualizador leser betrachter viewer",
     "forms": """modulo moduli compila compilare compilazione campi campo formulaire formulaires remplir champ champs
         formulario formularios rellenar cumplimentar campos preencher formular formulare ausfullen felder""",
 }

@@ -146,6 +146,9 @@ def _commands(window, workspace) -> list[Found]:
                  "sparkle", "", lambda: window.show_whats_new()),
         _command("check_updates", "Check for updates", "update new version upgrade download",
                  "arrow-circle-up", "", window.check_for_updates),
+        _command("default_app", "Make Zenith PDF the default PDF reader",
+                 "default app reader open pdf files double click associate standard", "file-pdf", "",
+                 window.make_default_app),
         _command("new_window", "New window", "window another second side by side", "app-window", "Ctrl+Shift+N",
                  window.new_window),
     ]

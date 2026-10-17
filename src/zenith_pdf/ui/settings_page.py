@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from .. import __version__
-from ..core import ocr
+from ..core import default_app, ocr
 from ..core.i18n import LANGUAGES, system_language, tr, tr_in
 from ..core.platforms import SYSTEM_NAME, native_keys
 from ..icons import icon, readable
@@ -55,6 +55,11 @@ GLASS_TIPS = {"clear": "The pages show through, blurred, with a light tint.",
 LOGO = ASSETS / "zenith.svg"  # drawn at every size, so it stays sharp on any screen
 CONTROL_WIDTH = 280  # combos and fields on the right of a setting
 FLASH_MS = 1600  # how long a setting the assistant opened stays lit
+DEFAULT_APP_TEXT = {
+    "win32": "Double-clicking a PDF opens it in Zenith PDF. Windows asks you to confirm, on a page of its own "
+             "settings: choose Set default there.",
+    "": "Double-clicking a PDF opens it in Zenith PDF.",
+}
 CATEGORIES = [
     ("view", "View & Layout", "layout"),
     ("templates", "Templates", "note-blank"),
@@ -795,6 +800,12 @@ class SettingsWindow(QDialog):
 
     def _build_files(self) -> None:
         s = self._section("files")
+        self._default_app = QPushButton()
+        self._default_app.setFixedWidth(CONTROL_WIDTH)
+        self._default_app.clicked.connect(self._make_default_app)
+        s.add(Row("Default PDF reader", DEFAULT_APP_TEXT.get(sys.platform, DEFAULT_APP_TEXT[""]), self._default_app,
+                  "default app reader open pdf files double click associate standard"))
+        self._show_default_app()
         s.add(Row("Save automatically", "Saves open documents that have changes. New documents wait for their "
                   "first save, so they never land somewhere unexpected.",
                   self._combo("autosave_minutes", {0: "Off", 1: "Every minute", 2: "Every 2 minutes",
@@ -845,6 +856,27 @@ class SettingsWindow(QDialog):
                   "obsidian folder notes"))
         s.add(Row("Show the notes in Obsidian", "Once sent, the note opens in Obsidian.",
                   self._switch("obsidian_open"), "obsidian open notes"))
+
+    def _show_default_app(self) -> None:
+        """The button says whether PDF files open here already: asked again whenever this window comes back,
+        as on Windows the choice is made in Windows' own settings."""
+        if default_app.is_default():
+            self._default_app.setText(tr("Zenith PDF opens them"))
+            self._default_app.setEnabled(False)
+        else:
+            self._default_app.setText(tr("Make it the default"))
+            self._default_app.setEnabled(default_app.can_set())
+
+    def _make_default_app(self) -> None:
+        window = self.parent()
+        if hasattr(window, "make_default_app"):
+            window.make_default_app()
+        self._show_default_app()
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow():
+            self._show_default_app()
 
     def _clear_index(self) -> None:
         window = self.parent()

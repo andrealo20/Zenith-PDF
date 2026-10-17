@@ -25,6 +25,9 @@ SetCompressor /SOLID lzma
 !define WEBSITE "https://github.com/andrealo20/Zenith-PDF"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\ZenithPDF"
 !define PROG_ID "ZenithPDF.Document"
+!define REGISTERED "ZenithPDF"
+; Windows' Default apps page for Zenith PDF: Windows 11 shows a Set default button at its top
+!define DEFAULT_APPS "ms-settings:defaultapps?registeredAppMachine=${REGISTERED}"
 
 !ifdef SIGN
   !finalize '"${SIGN}" "%1"'
@@ -58,11 +61,14 @@ VIAddVersionKey "LegalCopyright" "Copyright (C) 2026 ${PUBLISHER}. GPL-3.0-or-la
 
 Var ShortcutWanted
 Var ShortcutBox
+Var DefaultWanted
+Var DefaultBox
+Var DefaultAsked
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "${LICENSE}"
 !insertmacro MUI_PAGE_DIRECTORY
-Page custom ShortcutPage ShortcutPageLeave
+Page custom OptionsPage OptionsPageLeave
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Start ${APP}"
@@ -89,6 +95,18 @@ Function .onInit
   ${AndIf} $0 == 0
     StrCpy $ShortcutWanted ${BST_UNCHECKED}
   ${EndIf}
+  StrCpy $DefaultWanted ${BST_CHECKED}
+  ClearErrors
+  ReadRegDWORD $0 HKLM "Software\ZenithPDF" "DefaultPdf"
+  ${IfNot} ${Errors}
+  ${AndIf} $0 == 0
+    StrCpy $DefaultWanted ${BST_UNCHECKED}
+  ${EndIf}
+  ; Whether the question was put already, here or in the app: then the app doesn't put it again.
+  ReadRegDWORD $DefaultAsked HKLM "Software\ZenithPDF" "DefaultAsked"
+  ${If} $DefaultAsked == ""
+    StrCpy $DefaultAsked 0
+  ${EndIf}
 FunctionEnd
 
 Function .onInstSuccess
@@ -99,14 +117,20 @@ Function .onInstSuccess
     ; Through Explorer, so the app starts as the user, without the installer's administrator rights.
     Exec '"$WINDIR\explorer.exe" "$INSTDIR\${EXE}"'
   ${EndIf}
+  ; Windows lets no program make itself the default: its own page opens on Zenith PDF, for one click there.
+  ; Through Explorer, so it opens as the user. Never in a silent update, which asks nothing.
+  ${IfNot} ${Silent}
+  ${AndIf} $DefaultWanted == ${BST_CHECKED}
+    Exec '"$WINDIR\explorer.exe" "${DEFAULT_APPS}"'
+  ${EndIf}
 FunctionEnd
 
 Function un.onInit
   SetRegView 64
 FunctionEnd
 
-Function ShortcutPage
-  !insertmacro MUI_HEADER_TEXT "Desktop Shortcut" "Create a shortcut on your desktop."
+Function OptionsPage
+  !insertmacro MUI_HEADER_TEXT "Options" "A desktop shortcut, and the app that opens PDF files."
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
@@ -115,11 +139,19 @@ Function ShortcutPage
   ${NSD_CreateCheckbox} 0 12u 100% 12u "Create a desktop shortcut for ${APP}"
   Pop $ShortcutBox
   ${NSD_SetState} $ShortcutBox $ShortcutWanted
+  ${NSD_CreateCheckbox} 0 36u 100% 12u "Make ${APP} the default app for PDF files"
+  Pop $DefaultBox
+  ${NSD_SetState} $DefaultBox $DefaultWanted
+  ${NSD_CreateLabel} 12u 52u 95% 30u "Windows asks you to confirm: when the installation ends, its Default apps \
+settings open at ${APP}. Choose Set default there (on Windows 10, pick ${APP} for .pdf files)."
+  Pop $0
   nsDialogs::Show
 FunctionEnd
 
-Function ShortcutPageLeave
+Function OptionsPageLeave
   ${NSD_GetState} $ShortcutBox $ShortcutWanted
+  ${NSD_GetState} $DefaultBox $DefaultWanted
+  StrCpy $DefaultAsked 1
 FunctionEnd
 
 Section "Install"
@@ -149,6 +181,8 @@ Section "Install"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKLM "Software\ZenithPDF" "InstallDir" "$INSTDIR"
   WriteRegDWORD HKLM "Software\ZenithPDF" "DesktopShortcut" $ShortcutWanted
+  WriteRegDWORD HKLM "Software\ZenithPDF" "DefaultPdf" $DefaultWanted
+  WriteRegDWORD HKLM "Software\ZenithPDF" "DefaultAsked" $DefaultAsked
 
   CreateShortcut "$SMPROGRAMS\${APP}.lnk" "$INSTDIR\${EXE}"
   ${If} $ShortcutWanted == ${BST_CHECKED}
@@ -170,13 +204,34 @@ Section "Install"
   IntFmt $0 "0x%08X" $0
   WriteRegDWORD HKLM "${UNINSTALL_KEY}" "EstimatedSize" "$0"
 
-  ; "Open with" for PDF files; the default app stays the user's choice
+  ; "Open with" for PDF files; the default app is the user's choice, made in Windows' settings
+  ; with the name and logo Windows shows in the list of apps it suggests for a PDF
   WriteRegStr HKLM "Software\Classes\${PROG_ID}" "" "PDF document"
+  WriteRegStr HKLM "Software\Classes\${PROG_ID}" "FriendlyTypeName" "PDF document"
   WriteRegStr HKLM "Software\Classes\${PROG_ID}\DefaultIcon" "" "$INSTDIR\${EXE},0"
+  WriteRegStr HKLM "Software\Classes\${PROG_ID}\Application" "ApplicationName" "${APP}"
+  WriteRegStr HKLM "Software\Classes\${PROG_ID}\Application" "ApplicationIcon" "$INSTDIR\${EXE},0"
+  WriteRegStr HKLM "Software\Classes\${PROG_ID}\Application" "ApplicationCompany" "${PUBLISHER}"
+  WriteRegStr HKLM "Software\Classes\${PROG_ID}\shell\open" "FriendlyAppName" "${APP}"
   WriteRegStr HKLM "Software\Classes\${PROG_ID}\shell\open\command" "" '"$INSTDIR\${EXE}" "%1"'
   WriteRegStr HKLM "Software\Classes\.pdf\OpenWithProgids" "${PROG_ID}" ""
+  WriteRegStr HKLM "Software\Classes\Applications\${EXE}" "FriendlyAppName" "${APP}"
+  WriteRegStr HKLM "Software\Classes\Applications\${EXE}\DefaultIcon" "" "$INSTDIR\${EXE},0"
   WriteRegStr HKLM "Software\Classes\Applications\${EXE}\shell\open\command" "" '"$INSTDIR\${EXE}" "%1"'
   WriteRegStr HKLM "Software\Classes\Applications\${EXE}\SupportedTypes" ".pdf" ""
+  ; A copy run from source may have written these names for this user, pointing at Python: they would hide
+  ; the installed ones. Its own names (ZenithPDF.Source) stay.
+  DeleteRegKey HKCU "Software\Classes\${PROG_ID}"
+  DeleteRegValue HKCU "Software\Classes\.pdf\OpenWithProgids" "${PROG_ID}"
+  DeleteRegKey HKCU "Software\ZenithPDF"
+  DeleteRegValue HKCU "Software\RegisteredApplications" "${REGISTERED}"
+  DeleteRegKey HKCU "Software\Classes\zenith-pdf"
+  ; Listed in Settings > Apps > Default apps, where the user can make it the default
+  WriteRegStr HKLM "Software\ZenithPDF\Capabilities" "ApplicationName" "${APP}"
+  WriteRegStr HKLM "Software\ZenithPDF\Capabilities" "ApplicationDescription" "Read, mark up and study PDF documents"
+  WriteRegStr HKLM "Software\ZenithPDF\Capabilities" "ApplicationIcon" "$INSTDIR\${EXE},0"
+  WriteRegStr HKLM "Software\ZenithPDF\Capabilities\FileAssociations" ".pdf" "${PROG_ID}"
+  WriteRegStr HKLM "Software\RegisteredApplications" "${REGISTERED}" "Software\ZenithPDF\Capabilities"
 
   ; zenith-pdf:// links, such as those in the notes sent to Obsidian, open a PDF at a page
   WriteRegStr HKLM "Software\Classes\zenith-pdf" "" "URL:Zenith PDF link"
@@ -198,6 +253,7 @@ Section "Uninstall"
 
   DeleteRegKey HKLM "${UNINSTALL_KEY}"
   DeleteRegKey HKLM "Software\ZenithPDF"
+  DeleteRegValue HKLM "Software\RegisteredApplications" "${REGISTERED}"
   DeleteRegKey HKLM "Software\Classes\${PROG_ID}"
   DeleteRegValue HKLM "Software\Classes\.pdf\OpenWithProgids" "${PROG_ID}"
   DeleteRegKey HKLM "Software\Classes\Applications\${EXE}"
