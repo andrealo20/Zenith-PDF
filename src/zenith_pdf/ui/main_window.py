@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 from pathlib import Path
 
 from PySide6.QtCore import QEventLoop, QPoint, QRect, Qt, QTimer
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from .. import __version__
+from ..core import convert
 from ..core.document import Document, PdfiumError
 from ..core.i18n import tr
 from ..core.platforms import key as platform_key
@@ -173,6 +175,11 @@ class MainWindow(QMainWindow):
         self.home.tools_requested.connect(self.show_tools_panel)
         self.home.tool_requested.connect(self.run_tool_from_home)
         tool_menu.colour_picker = self.pick_colour
+        from .annotation_items import Handle
+
+        Handle.touch = bool(self._settings.get("touch_mode"))
+        self._settings.changed.connect(
+            lambda key: setattr(Handle, "touch", bool(self._settings.get("touch_mode"))) if key == "touch_mode" else None)
         self.home.compare_requested.connect(self.command_compare)
         self.home.images_requested.connect(lambda: pdf_tools.images_to_pdf(self))
         self.home.guide_requested.connect(self.open_guide)
@@ -499,7 +506,8 @@ class MainWindow(QMainWindow):
 
     def open_dialog(self, folder: str | None = None) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Open PDF", folder or self._settings.last_directory, "PDF documents (*.pdf);;All files (*)"
+            self, "Open", folder or self._settings.last_directory,
+            f"{tr('Documents')} ({convert.FILTER});;{tr('PDF documents')} (*.pdf);;{tr('All files')} (*)"
         )
         if paths:
             self._settings.last_directory = str(Path(paths[0]).parent)
@@ -546,11 +554,16 @@ class MainWindow(QMainWindow):
 
     def open_file(self, path) -> None:
         path = Path(path).resolve()
+        converted = path.suffix.lower() != ".pdf" and convert.can_convert(path)
+        target = path.with_suffix(".pdf") if converted else path  # a converted file is a new PDF beside it
         for index, workspace in enumerate(self.workspaces):
-            if isinstance(workspace, Workspace) and workspace.document.path == path:
+            if isinstance(workspace, Workspace) and workspace.document.path == target and                     (not converted or workspace.document.unsaved):
                 self.tabs.setCurrentIndex(index)
                 self._show_tab(index)
                 return
+        if converted:
+            self.open_converted(path)
+            return
         document = self._load(path)
         if document is not None:
             workspace = self.open_document(document)
@@ -560,6 +573,55 @@ class MainWindow(QMainWindow):
             state = self._settings.file_state(path)
             if state:
                 workspace.apply_view_state(state)
+
+    def open_converted(self, path: Path) -> Workspace | None:
+        """A text, web or office file, made a PDF and opened as a new document: saving asks where the PDF goes,
+        and the file itself is left as it was."""
+        data = self._convert(path)
+        if data is None:
+            return None
+        try:
+            document = Document(path.with_suffix(".pdf"), data=data)
+        except Exception as error:
+            self._cannot_open(path, error)
+            return None
+        workspace = self.open_document(document)
+        QTimer.singleShot(0, lambda: workspace.notify(f"{path.name} is a PDF now. Save it to keep it."))
+        return workspace
+
+    def _convert(self, path: Path) -> bytes | None:
+        """The PDF the file makes, worked out in the background while a dialog waits; None if it failed or
+        was cancelled, after saying why."""
+        progress = QProgressDialog(tr(f"Making {path.name} a PDF…"), tr("Cancel"), 0, 0, self)
+        progress.setWindowTitle(tr("Opening"))
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(400)
+        cancel = threading.Event()
+        result: list = []
+        failure: list[Exception] = []
+
+        def work():
+            try:
+                result.append(convert.convert(path, cancel))
+            except Exception as error:  # reported on the GUI thread below
+                failure.append(error)
+
+        worker = threading.Thread(target=work, name="convert", daemon=True)
+        worker.start()
+        while worker.is_alive():
+            QApplication.processEvents()
+            if progress.wasCanceled():
+                cancel.set()
+            worker.join(0.05)
+        progress.close()
+        progress.deleteLater()
+        if failure and not isinstance(failure[0], convert.Cancelled):
+            error = failure[0]
+            if isinstance(error, convert.ConversionError):
+                messages.warn(self, "Can't open the file", str(error))
+            else:
+                self._cannot_open(path, error)
+        return result[0] if result else None
 
     def open_document(self, document: Document) -> Workspace:
         workspace = Workspace(document, self._renderer, self.tool_settings, self._settings, self.library)
@@ -791,7 +853,7 @@ class MainWindow(QMainWindow):
         if workspace is None:
             return False
         document = workspace.document
-        if document.read_only:
+        if not document.can_save:
             messages.inform(self, "View only",
                             f"{document.path.name} could not be fully parsed, so it can be viewed but not saved.")
             return False
@@ -817,13 +879,18 @@ class MainWindow(QMainWindow):
 
     # Drag and drop ------------------------------------------------------
 
+    @staticmethod
+    def _openable(url) -> bool:
+        name = url.toLocalFile().lower()
+        return name.endswith(".pdf") or convert.can_convert(name)
+
     def dragEnterEvent(self, event) -> None:
-        if any(url.toLocalFile().lower().endswith(".pdf") for url in event.mimeData().urls()):
+        if any(self._openable(url) for url in event.mimeData().urls()):
             event.acceptProposedAction()
 
     def dropEvent(self, event) -> None:
         for url in event.mimeData().urls():
-            if url.toLocalFile().lower().endswith(".pdf"):
+            if self._openable(url):
                 self.open_file(url.toLocalFile())
 
     # Misc ---------------------------------------------------------------
