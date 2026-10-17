@@ -65,6 +65,7 @@ from ..theme import qcolor, themes
 from .library_search import InsideResults
 from . import messages
 from .help import attach_help
+from .home_tools import ToolList
 from .widgets import IconButton, muted_label
 
 INFO_LIMIT = 400  # files whose page count and author are remembered
@@ -546,6 +547,8 @@ class HomePage(QWidget):
     new_requested = Signal()
     builder_requested = Signal()
     tools_requested = Signal()
+    tool_requested = Signal(str)  # a PDF tool of the list, by key
+    compare_requested = Signal()
     images_requested = Signal()
     guide_requested = Signal(str)  # chapter, "" for the start
     settings_requested = Signal()
@@ -598,7 +601,8 @@ class HomePage(QWidget):
         # Search, open, new
         self.search = QLineEdit()
         self.search.setObjectName("SettingsSearch")
-        self.search.setPlaceholderText(tr("Search your files or tags"))
+        self._files_placeholder = "Search your files or tags"
+        self.search.setPlaceholderText(tr(self._files_placeholder))
         self._search_icon = self.search.addAction(icon("magnifying-glass"), QLineEdit.ActionPosition.LeadingPosition)
         self.search.setClearButtonEnabled(True)
         self.search.setFixedHeight(BUTTON_HEIGHT)
@@ -694,6 +698,10 @@ class HomePage(QWidget):
         self.inside = InsideResults()
         self.inside.page_requested.connect(self.page_requested)
         main.addWidget(self.inside, 1)
+        self.tools = ToolList()
+        self.tools.tool_requested.connect(self._tool)
+        self.tools.hide()
+        main.addWidget(self.tools, 1)
 
         # Right column: the way into the guide
         self.aside = QFrame()
@@ -829,6 +837,12 @@ class HomePage(QWidget):
         else:
             self.empty.setText(tr("Files you open will appear here. Open one, or drop PDFs on the window."))
         self.tip.setText(native_keys(tr(random.choice(TIPS))))
+        self.search.setPlaceholderText(tr(self._files_placeholder))
+        if self.scope == "tools":
+            self._show_tools()
+        else:
+            self.tools.hide()
+            self.inside.show_for(self.search.text())
 
     def _on_loaded(self, path: str, info: dict, image: QImage) -> None:
         if info:
@@ -869,13 +883,36 @@ class HomePage(QWidget):
             self.refresh()
 
     def _search(self, text: str) -> None:
+        if self.scope == "tools":
+            shown = self.tools.filter(text)
+            self.summary.setText(tr(f"{shown} tool{'s' if shown != 1 else ''}"))
+            return
         self.proxy.set_text(text)
         self.inside.show_for(text)
+
+    def _tool(self, key: str) -> None:
+        signals = {"new": self.new_requested, "builder": self.builder_requested, "compare": self.compare_requested}
+        if key in signals:
+            signals[key].emit()
+        else:
+            self.tool_requested.emit(key)
+
+    def _show_tools(self) -> None:
+        """The list of tools in place of the files: the search box looks among the tools."""
+        self.title.setText(tr("Tools"))
+        self.table.hide()
+        self.empty.hide()
+        self.inside.hide()
+        self.tools.show()
+        self.search.setPlaceholderText(tr("Search tools"))
+        shown = self.tools.filter(self.search.text())
+        self.summary.setText(tr(f"{shown} tool{'s' if shown != 1 else ''}"))
 
     def set_indexer(self, indexer) -> None:
         """Search inside the documents too, with the app's index."""
         self.inside.indexer = indexer
-        self.search.setPlaceholderText(tr("Search your files, their tags, or the words inside them"))
+        self._files_placeholder = "Search your files, their tags, or the words inside them"
+        self.search.setPlaceholderText(tr(self._files_placeholder))
         indexer.indexed.connect(self._on_indexed)
 
     def _on_indexed(self, _path: str) -> None:
@@ -897,6 +934,7 @@ class HomePage(QWidget):
         starred = [p for p in self._settings.get("starred") if Path(p).exists()]
         self._nav_add(NavButton("files", "All files", "all"), str(len(recent)))
         self._nav_add(NavButton("star", "Starred", "starred"), str(len(starred)))
+        self._nav_add(NavButton("wrench", "Tools", "tools"), str(self.tools.count()))
         self._dynamic.addSpacing(14)
         self._dynamic.addWidget(self._heading("Folders", "push-pin", "Pin a folder", self.pin_requested.emit))
         for folder in self._settings.pinned_folders:

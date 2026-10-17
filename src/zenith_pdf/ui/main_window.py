@@ -170,6 +170,8 @@ class MainWindow(QMainWindow):
         self.home.new_requested.connect(self.new_document_dialog)
         self.home.builder_requested.connect(self.open_builder)
         self.home.tools_requested.connect(self.show_tools_panel)
+        self.home.tool_requested.connect(self.run_tool_from_home)
+        self.home.compare_requested.connect(self.command_compare)
         self.home.images_requested.connect(lambda: pdf_tools.images_to_pdf(self))
         self.home.guide_requested.connect(self.open_guide)
         self.home.settings_requested.connect(self.open_settings)
@@ -501,6 +503,22 @@ class MainWindow(QMainWindow):
             self._settings.last_directory = str(Path(paths[0]).parent)
         for path in paths:
             self.open_file(path)
+
+    def run_tool_from_home(self, key: str) -> None:
+        """A tool picked from the home page's list. One that works on a document asks for the PDF first, opens
+        it, then goes to work on it, as a tool picked with the document open would."""
+        tool = next(t for t in pdf_tools.TOOLS if t.key == key)
+        if tool.needs_document:
+            path, _ = QFileDialog.getOpenFileName(self, tr(tool.title), self._settings.last_directory,
+                                                  tr("PDF documents (*.pdf);;All files (*)"))
+            if not path:
+                return
+            self._settings.last_directory = str(Path(path).parent)
+            self.open_file(path)
+            workspace = self.current_workspace()
+            if workspace is None or workspace.document.path != Path(path).resolve():
+                return  # it didn't open, and opening said why
+        tool.run(self)
 
     def open_files(self, paths) -> None:
         for path in paths:

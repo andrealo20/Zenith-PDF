@@ -371,7 +371,7 @@ PALETTE = {
 }
 _HUE_NAMES = {
     "blue": "cursor hand folder-open folder-simple files file file-pdf export floppy-disk download-simple "
-            "arrow-square-out "
+            "arrow-square-out article "
             "copy copy-simple printer app-window browsers house shield-check lock-simple lock-simple-fill "
             "clipboard clipboard-text paperclip link arrows-clockwise arrow-circle-up desktop",
     "purple": "pen-nib pencil-simple pencil-line z-signature z-pen-basic z-pen-pro z-pen-calligraphy "
@@ -379,9 +379,10 @@ _HUE_NAMES = {
     "pink": "eraser note-pencil text-t text-aa z-paragraph z-note-insert z-text-highlight marker-circle "
             "highlighter-circle",
     "red": "file-plus trash eye-slash warning-circle warning microphone microphone-slash stop "
-           "arrows-in z-laser z-cleaner record x-circle",
+           "arrows-in z-laser z-cleaner record x-circle lock-key file-search stack-simple",
     "green": "plus-circle squares-four image image-square camera magnifying-glass books bounding-box path ruler "
-             "line-segment arrow-up-right square circle cloud z-lasso z-snapshot",
+             "line-segment arrow-up-right square circle cloud z-lasso z-snapshot crop frame-corners list-numbers "
+             "arrows-down-up file-x scissors",
     "orange": "chat-centered-text chat-teardrop-text note note-blank bookmark-simple bookmarks tag tag-simple "
               "star star-fill lightbulb lightbulb-filament notebook cards z-squiggle text-underline "
               "text-strikethrough",
