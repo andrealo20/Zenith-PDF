@@ -367,6 +367,34 @@ def test_study_notes_gather_the_marked_text(window, workspace, monkeypatch):
     assert "needle" in seen["markdown"] and "Note: key word" in seen["markdown"]
 
 
+def test_marked_text_reads_as_words_when_a_pdf_places_letters_one_by_one(qt_app, tmp_path):
+    """Qt's own PDF writer, like many others, places text in small pieces: a search hit comes back as dozens of
+    rectangles. The text under them must still read as the words, once, with their spaces."""
+    from PySide6.QtCore import QMarginsF, QRectF
+    from PySide6.QtGui import QFont, QPageSize, QPainter, QPdfWriter
+
+    from zenith_pdf.core.document import Document
+
+    path = tmp_path / "pieces.pdf"
+    writer = QPdfWriter(str(path))
+    writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
+    writer.setPageMargins(QMarginsF(0, 0, 0, 0))
+    writer.setResolution(72)
+    painter = QPainter(writer)
+    font = QFont("Georgia")
+    font.setPointSizeF(11)
+    painter.setFont(font)
+    painter.drawText(QRectF(72, 72, 300, 200), int(Qt.TextFlag.TextWordWrap),
+                     "A solar cell converts sunlight directly into electricity, about 6.4 kWh a day.")
+    painter.end()
+    document = Document(path)
+    for phrase in ("converts sunlight directly", "6.4 kWh"):
+        hit = next(document.iter_search(phrase, False, False))
+        assert document.text_in(0, hit.rects) == phrase
+        assert document.text_in(0, hit.rects + hit.rects) == phrase  # overlapping marks: each letter once
+    assert document.text_in(0, [(400.0, 600.0, 50.0, 20.0)]) == ""  # nothing there
+
+
 def test_the_assistant_is_explained_and_has_its_shortcut():
     assert "assistant" in TOPICS
     assert any(keys == "Ctrl+K" for _, entries in SHORTCUTS for keys, _ in entries)

@@ -738,15 +738,31 @@ class Document:
         return self._raw_texts[index]
 
     def text_in(self, index: int, rects) -> str:
-        """Text inside display-space rectangles, e.g. the words under a highlight."""
-        parts = []
+        """Text inside display-space rectangles, e.g. the words under a highlight.
+
+        Every character whose middle lies in one of the rectangles counts, once, in reading order, so a PDF that
+        places each letter on its own (one rectangle per letter) or rectangles that overlap read as plain words.
+        """
         with PDFIUM_LOCK:
             geometry = self.geometry(index)
             textpage = self._textpage(index)
-            for rect in rects:
-                left, bottom, right, top = pdf_rect(geometry, rect)
-                parts.append(textclean.clean(textpage.get_text_bounded(left, bottom, right, top)).strip())
-        return " ".join(p for p in parts if p)
+            areas = [pdf_rect(geometry, rect) for rect in rects]
+            inside = []
+            for char in range(textpage.count_chars()):
+                left, bottom, right, top = textpage.get_charbox(char)
+                if right <= left and top <= bottom:
+                    continue  # a space or line break PDFium made up: it has no box
+                x, y = (left + right) / 2, (bottom + top) / 2
+                if any(a <= x <= c and b <= y <= d for a, b, c, d in areas):
+                    inside.append(char)
+            runs = []  # unbroken runs of characters, each read as PDFium spells it
+            for char in inside:
+                if runs and char == runs[-1][1] + 1:
+                    runs[-1][1] = char
+                else:
+                    runs.append([char, char])
+            parts = [textpage.get_text_range(first, last - first + 1) for first, last in runs]
+        return " ".join(" ".join(textclean.clean(part).split()) for part in parts if part.strip())
 
     def display_y(self, index: int, point: Point | None) -> float | None:
         """How far down page `index` a destination's spot is, in display points; None stays None."""
