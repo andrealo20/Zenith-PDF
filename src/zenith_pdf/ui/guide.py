@@ -126,6 +126,9 @@ def chapters(document: QTextDocument) -> list[tuple[str, str, str, str]]:
 <p>Open files from the home page, with {_keys('Ctrl+O')}, or by dropping PDF files onto the window. Each
 document opens in its own tab. The <b>+</b> next to the tabs makes new documents, from templates too, and starts
 the Doc Builder.</p>
+<p>Word, Excel, PowerPoint, OpenDocument and RTF files open too, and so do text, Markdown and web pages: each
+becomes a new PDF, which saving puts beside the file, and the file itself stays as it was. Office files need
+LibreOffice or Microsoft Office on the computer to lay them out.</p>
 <p>To read two documents side by side, drag a tab out of the strip: it opens in a window of its own. Drop a tab on
 another Zenith PDF window to move it there, or right-click a tab for Move to new window. {_keys('Ctrl+Shift+N')}
 opens an empty window. Every window shares the same tools and styles.</p>
@@ -134,7 +137,8 @@ opens an empty window. Every window shares the same tools and styles.</p>
 <li><b>Toolbar</b>, at the top: the tools you picked. Click the tool that is on for its menu: colour, size and
 the rest of its options.</li>
 <li><b>Page counter</b>, top right: where you are; the grid button opens the page manager.</li>
-<li><b>Zoom bar</b>, bottom right: page layout, page colours, snapping, zoom, and reading mode.</li>
+<li><b>Zoom bar</b>, bottom right: page layout, page colours, the view menu, snapping, zoom, and reading
+mode.</li>
 <li><b>Undo and redo</b>, bottom left.</li>
 <li><b>Side panel</b>, on the left: pages, bookmarks, search, the list of annotations and the markup library.</li>
 </ul>
@@ -179,9 +183,14 @@ again.</p>"""),
 <li>Scroll with the mouse wheel; hold {_keys('Space')} or the middle button and drag to pan with any tool.</li>
 <li>Zoom with {_keys('Ctrl')} and the wheel, round the pointer; {_keys('Ctrl+=')} and {_keys('Ctrl+-')} step
 in and out. Pages stay sharp at every zoom.</li>
-<li>{_keys('Ctrl+2')} fits the width, {_keys('Ctrl+0')} the whole page, {_keys('Ctrl+1')} shows actual size.</li>
+<li>{_keys('Ctrl+2')} fits the width, {_keys('Ctrl+0')} the whole page, {_keys('Ctrl+1')} shows actual size;
+the zoom menu fits the height too.</li>
 <li>The zoom bar switches between one page, two pages side by side, and a book with the cover alone, and shows
 pages inverted for the dark or in sepia.</li>
+<li>The eye in the zoom bar opens the view menu: hide the annotations to see the pages alone, put a grid,
+ruled lines or dots over the pages to write straight (on screen only), show or hide the PDF's layers, lock the
+zoom, make the document read only so nothing changes by accident, and touch mode, where a finger moves the pages
+and the pen draws.</li>
 <li>Type a page number in the page counter, or press {_keys('Ctrl+G')}.</li>
 <li>Search all the text with {_keys('Ctrl+F')}; {_keys('F3')} goes to the next result.</li>
 <li>Click links in the document to follow them. Web addresses ask first. Links and bookmarks land on the line
@@ -201,6 +210,9 @@ below it when the toolbar leaves no room above:</p>
 <li><b>Highlight</b>, <b>Underline</b>, <b>Strikethrough</b> and <b>Squiggle</b> mark the text in their tools'
 colours, which their icons show. The dot beside Highlight opens its colours: the one you pick marks the text and
 stays for the next highlights.</li>
+<li>The pencil holds the proofreading marks: <b>Insert text</b> puts a caret after the text with what to add,
+<b>Replace the text</b> strikes it out and puts what replaces it on a caret, the two as one group, and
+<b>Redact</b> marks it to black out.</li>
 <li><b>Copy</b> copies the text, as {_keys('Ctrl+C')} does. <b>Note</b> highlights it with a note you write;
 point at the highlight to read it. <b>Search</b> finds every place the words occur.</li>
 </ul>
@@ -262,8 +274,13 @@ straight, <b>Ink to shape</b> turns a drawn rectangle, ellipse or polygon into a
 <h2>Lines and shapes</h2>
 <p>Lines, arrows, polylines and shapes can be solid, dotted, dashed or dash and dot. Each end of a line can be
 plain, an open or closed arrow, a reversed arrow, a square, a circle, a diamond, a bar or a slash. Shapes have a
-border and a fill colour; either can be none, not both. <b>Highlight mode</b> darkens what is under the shape
-instead of covering it, like a highlighter.</p>
+border and a fill colour; either can be none, not both. The fill can be solid, hatched, cross-hatched or dotted.
+<b>Highlight mode</b> darkens what is under the shape instead of covering it, like a highlighter.</p>
+<h2>Text boxes and stamps</h2>
+<p>A text box can be in Helvetica, Times or Courier, bold, italic or underlined, with its lines on the left,
+centred or on the right: the text tool's menu sets them for new boxes, the selection's Style for the ones you
+have. Stamps put a framed word on the page, APPROVED, DRAFT, CONFIDENTIAL and more, or words of your own, with
+who stamped it and when on a line under it.</p>
 {tools}"""),
         ("editing", "Changing annotations", "cursor", f"""
 <h1>Changing annotations</h1>
@@ -273,10 +290,16 @@ several. The lasso selects by drawing a loop.</p>
 <li>Drag a selection to move it, or its handles to resize it. Lines, polylines and measurements have a handle
 on every point; a callout has one on its arrow's tip.</li>
 <li>A small bar appears over the selection: <b>Style</b> opens the same options as the tools' menus, for
-everything selected at once; then duplicate, drawing order, lock, and a menu with properties, flatten, add to
-the markup library, apply to other pages, copy as a picture and paste; delete is last.</li>
+everything selected at once; then the brush, duplicate, arrange, lock, and a menu with properties, copy and paste
+style, flatten, add to the markup library, apply to other pages, copy as a picture and paste; delete is last.</li>
+<li>The <b>brush</b> copies the selection's look: the next annotation you click takes its colour, thickness, line
+style, fill and font. Copy style and Paste style, in the bar's menu, give it to a whole selection.</li>
+<li><b>Arrange</b> changes the drawing order, lines the selection up by an edge or its middle, spaces three or
+more out evenly, flips them across or down, and groups them: a group is picked, moved, copied and deleted as
+one until it is ungrouped.</li>
+<li>The colour menus' eyedropper takes the colour of any spot on the page.</li>
 <li>Double-click a text box or note to edit it, a strip of tape to peel it back, an equation to change it,
-an audio note to play it.</li>
+an audio note to play it, a stamp to change its words, a volume to change its depth.</li>
 <li>{_keys('Ctrl+C')}, {_keys('Ctrl+X')} and {_keys('Ctrl+V')} copy, cut and paste, also between documents.</li>
 </ul>
 <h2>Snapping</h2>
