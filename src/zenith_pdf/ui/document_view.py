@@ -68,6 +68,7 @@ from ..core.annotations import (
     regrouped,
     union,
 )
+from ..core import arrange
 from ..core.document import Document, SearchHit
 from ..core.i18n import tr
 from ..core.render import RenderPool, render_scale
@@ -1775,6 +1776,28 @@ class DocumentView(QGraphicsView):
         name = new_id()
         self.undo_stack.push(ChangeAnnotations(self.store, selected, [replace(a, group=name) for a in selected],
                                                "Group"))
+
+    def align_selected(self, how: str) -> None:
+        """Line the selection up by one edge or middle: left, centre, right, top, middle or bottom."""
+        self._rearrange(arrange.aligned(self.selected_annotations(), how), f"Align {how}")
+
+    def distribute_selected(self, axis: str) -> None:
+        """Spread the selection out evenly, across ("h") or down ("v")."""
+        self._rearrange(arrange.distributed(self.selected_annotations(), axis),
+                        "Distribute horizontally" if axis == "h" else "Distribute vertically")
+
+    def flip_selected(self, axis: str) -> None:
+        self._rearrange(arrange.flipped(self.selected_annotations(), axis),
+                        "Flip horizontally" if axis == "h" else "Flip vertically")
+
+    def _rearrange(self, moved: list[Annotation], label: str) -> None:
+        if self.document.read_only:
+            return
+        before = {a.id: a for a in self.selected_annotations()}
+        old = [before[a.id] for a in moved if a.id in before and before[a.id] != a]
+        new = [a for a in moved if a.id in before and before[a.id] != a]
+        if new:
+            self.undo_stack.push(ChangeAnnotations(self.store, old, [self._clamped(a, a.page) for a in new], label))
 
     def ungroup_selected(self) -> None:
         grouped = [a for a in self.selected_annotations() if a.group]

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QRect
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QMenu, QToolButton
 
+from ..core import arrange
 from ..core.annotations import TextMarkup
 from ..core.i18n import tr
 from ..icons import icon
@@ -45,6 +46,24 @@ class SelectionBar(FloatingBar):
             ("caret-up", "Bring forward", lambda: view.arrange("forward")),
             ("caret-down", "Send backward", lambda: view.arrange("backward")),
             ("arrow-line-down", "Send to back", lambda: view.arrange("back")),
+            None,
+            ("align-left", "Align", [
+                ("align-left", "Left", lambda: view.align_selected("left")),
+                ("align-center-horizontal", "Centre", lambda: view.align_selected("centre")),
+                ("align-right", "Right", lambda: view.align_selected("right")),
+                None,
+                ("align-top", "Top", lambda: view.align_selected("top")),
+                ("align-center-vertical", "Middle", lambda: view.align_selected("middle")),
+                ("align-bottom", "Bottom", lambda: view.align_selected("bottom")),
+            ]),
+            ("columns", "Distribute", [
+                ("columns", "Horizontally", lambda: view.distribute_selected("h")),
+                ("rows", "Vertically", lambda: view.distribute_selected("v")),
+            ]),
+            ("arrows-left-right", "Flip", [
+                ("arrows-left-right", "Horizontally", lambda: view.flip_selected("h")),
+                ("arrows-down-up", "Vertically", lambda: view.flip_selected("v")),
+            ]),
             None,
             ("selection-all", "Group", view.group_selected),
             ("squares-four", "Ungroup", view.ungroup_selected),
@@ -90,13 +109,20 @@ class SelectionBar(FloatingBar):
             button.clicked.connect(slot)
         return button
 
-    def _menu(self, entries) -> QMenu:
-        menu = QMenu(self)
+    def _menu(self, entries, parent=None) -> QMenu:
+        """A menu of (icon, text, slot) entries; a list in place of the slot is a submenu, None a line."""
+        menu = QMenu(parent or self)
         for entry in entries:
             if entry is None:
                 menu.addSeparator()
+                continue
+            icon_name, text, slot = entry
+            if isinstance(slot, list):
+                submenu = self._menu(slot, menu)
+                submenu.setTitle(tr(text))
+                submenu.setIcon(icon(icon_name))
+                menu.addMenu(submenu)
             else:
-                icon_name, text, slot = entry
                 menu.addAction(icon(icon_name), tr(text), slot)
         return explain_menu(menu)
 
@@ -140,11 +166,13 @@ class SelectionBar(FloatingBar):
         self.lock.set_icon_name("lock-simple-open" if locked else "lock-simple")
         movable = [a for a in selected if not isinstance(a, TextMarkup)]
         self.style_button.setEnabled(not read_only and bool(selection_options(selected)))
+        units = arrange.units([a for a in selected if a.page == selected[0].page]) if selected else []
+        enabled = {"Group": self._workspace.view.can_group(), "Ungroup": any(a.group for a in selected),
+                   "Align": len(units) > 1, "Distribute": len(units) > 2, "Flip": bool(units)}
         for action in self.arrange.menu().actions():
-            if action.text() == tr("Group"):
-                action.setEnabled(not read_only and self._workspace.view.can_group())
-            elif action.text() == tr("Ungroup"):
-                action.setEnabled(not read_only and any(a.group for a in selected))
+            for name, on in enabled.items():
+                if action.text() == tr(name):
+                    action.setEnabled(not read_only and on)
         for button in (self.arrange, self.lock):
             button.setEnabled(not read_only)
         self.duplicate.setEnabled(bool(movable) and not read_only)
