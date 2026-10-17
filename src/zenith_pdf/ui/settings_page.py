@@ -652,6 +652,9 @@ class SettingsWindow(QDialog):
         s.add(Row("Glass", "Clear lets the pages show through the floating bars, blurred; Balanced tints them more; "
                   "Solid makes them opaque. Their text stays readable over any page.",
                   glass, "transparency effects transparent blur frosted acrylic liquid clear balanced solid opaque"))
+        s.add(Row("Glass follows the page", "The bars turn light over a bright page and dark over dark content, "
+                  "whatever the theme, so they stay clear: as Apple's Liquid Glass does.",
+                  self._switch("glass_adaptive"), "liquid glass adaptive tone light dark bars"))
         s.add(Row("Open documents at", "The zoom a document opens with.",
                   self._combo("default_zoom", {"width": "Fit width", "page": "Fit page", "actual": "Actual size"}),
                   "zoom"))
