@@ -812,6 +812,13 @@ class SettingsWindow(QDialog):
         layout.addWidget(clear)
         s.add(Row("Files on the home page", "How many recently opened files the home page lists.", recent,
                   "history home recent"))
+        s.add(Row("Search inside every PDF", "Keeps an index of the words of each PDF you open, on this computer, "
+                  "so the home page's search finds them in all of them at once.", self._switch("search_index"),
+                  "search index full text inside all documents words"))
+        forget = QPushButton("Clear the index")
+        forget.clicked.connect(self._clear_index)
+        s.add(Row("Search index", "Forget the words of every PDF: they are read again as you open them.", forget,
+                  "search index clear rebuild"))
         vault = QPushButton()
         vault.setFixedWidth(CONTROL_WIDTH)
         self._watch("obsidian_vault", vault, lambda: vault.setText(
@@ -828,6 +835,13 @@ class SettingsWindow(QDialog):
                   "obsidian folder notes"))
         s.add(Row("Show the notes in Obsidian", "Once sent, the note opens in Obsidian.",
                   self._switch("obsidian_open"), "obsidian open notes"))
+
+    def _clear_index(self) -> None:
+        window = self.parent()
+        indexer = getattr(type(window), "indexer", None) if window is not None else None
+        if indexer is not None:
+            indexer.clear()
+        self.sender().setText("Cleared")
 
     def _choose_vault(self) -> None:
         from .writing_dialogs import choose_vault

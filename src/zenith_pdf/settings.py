@@ -78,6 +78,7 @@ DEFAULTS: dict[str, object] = {
     "file_tags": {},  # path -> tag names
     "tag_colors": {},  # tag name -> colour
     "file_info": {},  # path -> {"mtime", "size", "pages", "author", "title"}, for the home page
+    "search_index": True,  # keep an index of every PDF opened, for searching inside all of them
     "new_folder": "",  # "" means the last folder used
     "last_directory": str(Path.home() / "Documents"),
     # Performance

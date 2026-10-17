@@ -59,6 +59,7 @@ REMEMBER_STYLES_MS = 300  # tool styles are written this long after the last cha
 class MainWindow(QMainWindow):
     open_windows: list[MainWindow] = []  # every window of the app that is open, the oldest first
     updater = None  # the app's Updater (ui/updates.py), made by main() or the first check by hand
+    indexer = None  # the app's Indexer (ui/library_search.py): the text of every PDF opened, made by main()
 
     def __init__(self, renderer: RenderPool, settings: Settings, tool_settings: ToolSettings | None = None,
                  library: Library | None = None):
@@ -147,6 +148,9 @@ class MainWindow(QMainWindow):
         self.home = HomePage(settings)
         self.home.open_requested.connect(self.open_dialog)
         self.home.file_requested.connect(self.open_file)
+        self.home.page_requested.connect(self.open_at_page)
+        if MainWindow.indexer is not None:
+            self.home.set_indexer(MainWindow.indexer)
         self.home.new_requested.connect(self.new_document_dialog)
         self.home.builder_requested.connect(self.open_builder)
         self.home.tools_requested.connect(self.show_tools_panel)
@@ -508,6 +512,8 @@ class MainWindow(QMainWindow):
         if document is not None:
             workspace = self.open_document(document)
             self._settings.add_recent(path)
+            if MainWindow.indexer is not None:
+                MainWindow.indexer.add([path])
             state = self._settings.file_state(path)
             if state:
                 workspace.apply_view_state(state)
@@ -762,6 +768,8 @@ class MainWindow(QMainWindow):
             return False
         self._settings.add_recent(document.path)
         self._update_titles(workspace)
+        if MainWindow.indexer is not None:
+            MainWindow.indexer.add([document.path])  # what it says now is what a search finds
         return True
 
     # Drag and drop ------------------------------------------------------
@@ -957,6 +965,42 @@ class MainWindow(QMainWindow):
 
     def command_assistant(self) -> None:
         self.show_assistant()
+
+    def command_search_all(self) -> None:
+        """Search inside every PDF: the home page's search box asks the index too."""
+        self.show_home()
+        self.home.search.setFocus()
+        self.home.search.selectAll()
+
+    def open_at_page(self, path, page: int, query: str = "") -> None:
+        """Open `path` at `page` (from 0), with the words of a search inside all documents lit on it."""
+        self.open_file(path)
+        workspace = self.current_workspace()
+        if workspace is None or workspace.document.path != Path(path).resolve():
+            return
+
+        def land() -> None:
+            workspace.view.jump(page)
+            if query:
+                workspace.side.show_panel("search")
+                workspace.search.field.setText(query)
+                workspace.search.start()
+
+        QTimer.singleShot(0, land)  # after the file's own last position, which applies once the view has a size
+
+    @classmethod
+    def make_indexer(cls, settings: Settings):
+        """The app's one Indexer, shared by the home pages of every window."""
+        from PySide6.QtWidgets import QApplication
+
+        from .library_search import Indexer
+
+        if cls.indexer is None:
+            cls.indexer = Indexer(settings, QApplication.instance())
+            QApplication.instance().aboutToQuit.connect(cls.indexer.stop)
+            for window in cls.open_windows:
+                window.home.set_indexer(cls.indexer)
+        return cls.indexer
 
     def command_study_notes(self) -> None:
         workspace = self.current_workspace()

@@ -248,6 +248,9 @@ def main(argv: list[str] | None = None) -> int:
         window.restore_session()
     window.open_targets(targets)
     QTimer.singleShot(700, window.after_update)  # once the window is up: the tour after an update
+    indexer = MainWindow.make_indexer(window.settings)
+    # The files on the home page, a while after starting: searching inside them works from then on.
+    QTimer.singleShot(15000, lambda: indexer.add(window.settings.recent_files()))
     updater = MainWindow.make_updater(window.settings)
     if updater.due():
         QTimer.singleShot(8000, updater.check)  # a moment after starting, never in the way of it

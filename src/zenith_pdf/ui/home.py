@@ -61,6 +61,7 @@ from ..core.platforms import native_keys
 from ..icons import icon
 from ..settings import Settings
 from ..theme import qcolor, themes
+from .library_search import InsideResults
 from . import messages
 from .help import attach_help
 from .widgets import IconButton, muted_label
@@ -540,6 +541,7 @@ class QuickCard(QFrame):
 class HomePage(QWidget):
     open_requested = Signal()
     file_requested = Signal(Path)
+    page_requested = Signal(Path, int, str)  # a page found inside a document: file, page from 0, the words
     new_requested = Signal()
     builder_requested = Signal()
     tools_requested = Signal()
@@ -688,6 +690,9 @@ class HomePage(QWidget):
         main.addLayout(title_row)
         main.addWidget(self.empty)
         main.addWidget(self.table, 1)
+        self.inside = InsideResults()
+        self.inside.page_requested.connect(self.page_requested)
+        main.addWidget(self.inside, 1)
 
         # Right column: the way into the guide
         self.aside = QFrame()
@@ -864,6 +869,17 @@ class HomePage(QWidget):
 
     def _search(self, text: str) -> None:
         self.proxy.set_text(text)
+        self.inside.show_for(text)
+
+    def set_indexer(self, indexer) -> None:
+        """Search inside the documents too, with the app's index."""
+        self.inside.indexer = indexer
+        self.search.setPlaceholderText("Search your files, their tags, or the words inside them")
+        indexer.indexed.connect(self._on_indexed)
+
+    def _on_indexed(self, _path: str) -> None:
+        if self.inside.query and self.isVisible():
+            self.inside.show_for(self.search.text())  # a file just read may hold the words
 
     # Left column ------------------------------------------------------------
 
