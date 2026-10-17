@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.document import Document, SearchHit
+from ..core.i18n import tr
 from ..icons import icon
 from ..theme import qcolor, themes
 from .widgets import muted_label, panel_title
@@ -59,7 +60,7 @@ class ResultDelegate(QStyledItemDelegate):
         metrics = option.fontMetrics
         inner = rect.adjusted(8, 5, -8, -5)
         painter.setPen(QColor(t.text_muted))
-        painter.drawText(QRect(inner.x(), inner.y(), inner.width(), metrics.height()), 0, self._panel.page_label(hit.page))
+        painter.drawText(QRect(inner.x(), inner.y(), inner.width(), metrics.height()), 0, tr(self._panel.page_label(hit.page)))
 
         # Context line with the match in bold, trimmed so the match stays visible.
         before, match, after = _split_context(hit.context, self._panel.query)
@@ -108,14 +109,14 @@ class SearchPanel(QWidget):
         self._relay.done.connect(self._on_done)
 
         self.field = QLineEdit()
-        self.field.setPlaceholderText("Search in document")
+        self.field.setPlaceholderText(tr("Search in document"))
         self.field.setClearButtonEnabled(True)
         self.field.addAction(icon("magnifying-glass", themes.current.text_muted), QLineEdit.ActionPosition.LeadingPosition)
         self.field.returnPressed.connect(self._on_return)
         self.field.textChanged.connect(self._on_text_changed)
 
-        self.match_case = QCheckBox("Match case")
-        self.whole_word = QCheckBox("Whole words")
+        self.match_case = QCheckBox(tr("Match case"))
+        self.whole_word = QCheckBox(tr("Whole words"))
         for box in (self.match_case, self.whole_word):
             box.setObjectName("Muted")
             box.toggled.connect(self.start)
@@ -161,7 +162,7 @@ class SearchPanel(QWidget):
         if not self.query:
             self.status.setText("")
             return
-        self.status.setText("Searching…")
+        self.status.setText(tr("Searching…"))
         args = (self._generation, self.query, self.match_case.isChecked(), self.whole_word.isChecked(), self._cancel)
         threading.Thread(target=self._worker, args=args, daemon=True, name="search").start()
 
@@ -179,13 +180,13 @@ class SearchPanel(QWidget):
         self.hit_found.emit(hit)
         if self.results.count() == 1:
             self.results.setCurrentRow(0)
-        self.status.setText(f"{self.results.count()} results so far…")
+        self.status.setText(tr(f"{self.results.count()} results so far…"))
 
     def _on_done(self, generation: int) -> None:
         if generation != self._generation:
             return
         count = self.results.count()
-        self.status.setText("No results" if count == 0 else "1 result" if count == 1 else f"{count} results")
+        self.status.setText(tr("No results" if count == 0 else "1 result" if count == 1 else f"{count} results"))
 
     def _on_text_changed(self, text: str) -> None:
         if not text:

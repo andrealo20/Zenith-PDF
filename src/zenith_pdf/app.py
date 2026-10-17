@@ -12,6 +12,7 @@ from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QMenu, QProxyStyle, QStyleFactory, QWidget
 
 from . import __version__
+from .core.i18n import set_language
 from .core.platforms import MAC, native_keys
 from .core.render import RenderPool
 from .icons import icon, style as icon_style
@@ -129,6 +130,7 @@ def create_app(argv: list[str], settings: Settings | None = None) -> tuple[QAppl
 
     settings = settings or Settings()
     settings.upgrade()
+    set_language(settings.get("language"))  # before any window: every text is shown in it
     themes.choose(settings.theme, settings.get("accent"))
     _default_glass(settings)
     set_glass(settings.get("glass"))
@@ -187,6 +189,12 @@ def self_test() -> int:
         lines.append(f"voices: {', '.join(QTextToSpeech.availableEngines()) or 'none'}")
     except ImportError as error:
         problems.append(f"text to speech: {error}")
+    from .core.i18n import LANGUAGES, set_language, tr
+
+    for code in LANGUAGES:  # the translations travel with the app
+        if code != "en" and (set_language(code) != code or tr("Settings") == "Settings"):
+            problems.append(f"the {LANGUAGES[code]} texts are missing")
+    set_language("en")
     problems += _self_test_window()
     lines.insert(0, f"Zenith PDF {__version__}: {len(modules)} modules, platform {app.platformName()}")
     lines += problems or ["all well"]

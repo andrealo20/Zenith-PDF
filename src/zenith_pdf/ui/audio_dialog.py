@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from ..core.annotations import AUDIO_SUFFIXES
 from ..core.audio import MAX_SECONDS, AudioError, Recorder, default_player as Player, input_device_count, temp_folder
+from ..core.i18n import tr
 from ..core.platforms import MAC, WINDOWS, settings_place
 from ..icons import icon
 from ..theme import themes
@@ -124,7 +125,7 @@ class _RoundButton(QAbstractButton):
 
     def set_kind(self, kind: str) -> None:
         self.kind = kind
-        self.setToolTip(self.TIPS[kind])
+        self.setToolTip(tr(self.TIPS[kind]))
         self.setAccessibleName(self.TIPS[kind])
         self.update()
 
@@ -183,7 +184,7 @@ class RecordDialog(QDialog):
 
     def __init__(self, parent=None, recorder: Recorder | None = None, player_factory=Player, start_dir: str = ""):
         super().__init__(parent)
-        self.setWindowTitle("Audio note")
+        self.setWindowTitle(tr("Audio note"))
         self.setFixedWidth(DIALOG_WIDTH)
         self._real_device = recorder is None
         self.recorder = recorder if recorder is not None else Recorder()
@@ -216,14 +217,14 @@ class RecordDialog(QDialog):
                                             | Qt.TextInteractionFlag.LinksAccessibleByKeyboard)
         self.status.linkActivated.connect(_open_link)
 
-        self.again_button = QPushButton("Record again")
+        self.again_button = QPushButton(tr("Record again"))
         self.again_button.clicked.connect(self.record_again)
-        self.attach_button = QPushButton("Attach a file…")
-        self.attach_button.setToolTip("Attach a sound file instead of recording")
+        self.attach_button = QPushButton(tr("Attach a file…"))
+        self.attach_button.setToolTip(tr("Attach a sound file instead of recording"))
         self.attach_button.clicked.connect(self.attach)
-        cancel = QPushButton("Cancel")
+        cancel = QPushButton(tr("Cancel"))
         cancel.clicked.connect(self.reject)
-        self.add_button = QPushButton("Add note")
+        self.add_button = QPushButton(tr("Add note"))
         self.add_button.setObjectName("Primary")
         self.add_button.clicked.connect(self._add)
         for button in (self.again_button, self.attach_button, cancel, self.add_button):
@@ -231,9 +232,9 @@ class RecordDialog(QDialog):
         self._refresh_icons()
         themes.changed.connect(self._refresh_icons)
 
-        heading = QLabel("Audio note")
+        heading = QLabel(tr("Audio note"))
         heading.setObjectName("DialogTitle")
-        intro = QLabel("Record from the microphone, or attach a sound file.")
+        intro = QLabel(tr("Record from the microphone, or attach a sound file."))
         intro.setObjectName("DialogBody")
         intro.setWordWrap(True)
         readout = QVBoxLayout()
@@ -332,7 +333,7 @@ class RecordDialog(QDialog):
     def _unavailable(self, reason: str, link: tuple[str, str] | None = PRIVACY_SETTINGS) -> None:
         self._can_record = False
         self.record_button.setEnabled(False)
-        self.record_button.setToolTip("Recording is not available")
+        self.record_button.setToolTip(tr("Recording is not available"))
         self._say(reason, problem=True, link=link)
         self.attach_button.setFocus()
 
@@ -346,7 +347,7 @@ class RecordDialog(QDialog):
     def _show_time(self) -> None:
         if self.state == "playing" and self._player is not None:
             position, length = self._player.position, self._player.length
-            self.time_label.setText(f"{clock(position)} / {clock(length)}")
+            self.time_label.setText(tr(f"{clock(position)} / {clock(length)}"))
             self.meter.set_fraction(position / length if length else 0.0)
         else:
             self.time_label.setText(clock(self.recorder.seconds))
@@ -544,8 +545,8 @@ def choose_audio_file(parent, start_dir: str) -> tuple[str, bytes] | None:
 def _ask_source(parent, global_pos) -> str | None:
     """The menu of the "ask" setting: "record", "file", or None if it was dismissed."""
     menu = QMenu(parent)
-    record = menu.addAction(icon("microphone"), "Record from the microphone…")
-    attach = menu.addAction(icon("paperclip"), "Attach an audio file…")
+    record = menu.addAction(icon("microphone"), tr("Record from the microphone…"))
+    attach = menu.addAction(icon("paperclip"), tr("Attach an audio file…"))
     chosen = menu.exec(global_pos if global_pos is not None else QCursor.pos())
     menu.deleteLater()
     return "record" if chosen is record else "file" if chosen is attach else None
@@ -652,7 +653,7 @@ class AudioPopover(FloatingBar):
         self.player = player
         self._name = Path(name).stem or name
         self.title = QLabel()
-        self.title.setToolTip(name)
+        self.title.setToolTip(tr(name))
         self._show_title()
         self.close_button = IconButton("x", "Close", icon_size=14)
         self.close_button.setFixedSize(24, 24)
@@ -693,7 +694,7 @@ class AudioPopover(FloatingBar):
         self.title.setText(self.title.fontMetrics().elidedText(problem or self._name, Qt.TextElideMode.ElideMiddle,
                                                                self.NAME_WIDTH))
         if problem:
-            self.title.setToolTip(problem)
+            self.title.setToolTip(tr(problem))
 
     def show_at(self, global_pos=None) -> None:
         """Show just below and to the right of `global_pos`, kept on its screen."""
@@ -748,8 +749,8 @@ class AudioPopover(FloatingBar):
             self.bar.update()
         shown = self.bar.value() / 1000 if self.bar.isSliderDown() else position
         self.play_button.set_icon_name("pause-fill" if playing else "play-fill")
-        self.play_button.setToolTip("Pause" if playing else "Play")
-        self.time_label.setText(f"{clock(shown)} / {clock(self.player.length)}")
+        self.play_button.setToolTip(tr("Pause" if playing else "Play"))
+        self.time_label.setText(tr(f"{clock(shown)} / {clock(self.player.length)}"))
 
     def keyPressEvent(self, event) -> None:
         key = event.key()

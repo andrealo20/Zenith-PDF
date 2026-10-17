@@ -64,6 +64,7 @@ from ..core.annotations import (
     union,
 )
 from ..core.document import Document, SearchHit
+from ..core.i18n import tr
 from ..core.render import RenderPool, render_scale
 from ..core.store import AnnotationStore
 from ..icons import icon
@@ -387,6 +388,8 @@ class DocumentView(QGraphicsView):
 
     def _apply_theme(self, theme) -> None:
         self.setBackgroundBrush(QColor(theme.canvas))
+        if getattr(self, "forms", None) is not None:
+            self.forms.recolour()
 
     def _page_at(self, view_pos: QPointF) -> tuple[PageItem | None, QPointF | None]:
         scene_pos = self.mapToScene(view_pos.toPoint())
@@ -1566,8 +1569,8 @@ class DocumentView(QGraphicsView):
             for record in saved:
                 menu.addAction(signature_icon(record), record["name"]).setData(record)
             menu.addSeparator()
-            new = menu.addAction(icon("plus"), "New signature…")
-            remove = menu.addMenu(icon("trash"), "Delete a signature")
+            new = menu.addAction(icon("plus"), tr("New signature…"))
+            remove = menu.addMenu(icon("trash"), tr("Delete a signature"))
             for position, record in enumerate(saved):
                 remove.addAction(record["name"]).setData(position)
             from .help import explain_menu

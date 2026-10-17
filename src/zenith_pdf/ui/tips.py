@@ -10,6 +10,7 @@ from __future__ import annotations
 from PySide6.QtCore import QEvent, QObject, QPoint, QRect, Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from ..core.i18n import tr
 from ..core.platforms import WINDOWS, native_keys
 from ..theme import themes
 from .tool_catalog import BY_KEY, base_of
@@ -124,10 +125,10 @@ class TipCard(FloatingBar):
         self.lines: list[QLabel] = []
         self._body = QVBoxLayout()
         self._body.setSpacing(6)
-        self.off_button = QPushButton("Don't show tips")
+        self.off_button = QPushButton(tr("Don't show tips"))
         self.off_button.setObjectName("Link")
         self.off_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.got_button = QPushButton("Got it")
+        self.got_button = QPushButton(tr("Got it"))
         self.got_button.setObjectName("Primary")
         self.got_button.clicked.connect(self.dismiss)
         footer = QHBoxLayout()
@@ -152,7 +153,7 @@ class TipCard(FloatingBar):
     def fill(self, key: str, lines: tuple[str, ...]) -> None:
         self.key = key
         spec = BY_KEY.get(base_of(key))
-        self.title.setText(f"Tips: {spec.title if spec else key}")
+        self.title.setText(tr(f"Tips: {spec.title if spec else key}"))
         while self._body.count():
             item = self._body.takeAt(0)
             if item.widget() is not None:
@@ -161,7 +162,7 @@ class TipCard(FloatingBar):
                 item.widget().deleteLater()
         self.lines = []
         for text in lines:
-            row = QLabel(f"•  {native_keys(text)}")
+            row = QLabel(f"•  {native_keys(tr(text))}")
             row.setObjectName("TipText")
             row.setWordWrap(True)
             row.setTextFormat(Qt.TextFormat.PlainText)

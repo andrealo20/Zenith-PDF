@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from ..core import inking, textlayout
+from ..core.i18n import tr
 from ..core.platforms import WINDOWS, math_font, native_keys, ui_font
 from ..core.annotations import (
     NOTE_SIZE,
@@ -611,7 +612,7 @@ class Popover(QWidget):
 
 
 def _label(text: str, name: str, wrap: bool = False) -> QLabel:
-    label = QLabel(text)
+    label = QLabel(tr(text))
     label.setObjectName(name)
     label.setTextFormat(Qt.TextFormat.PlainText)
     if wrap:
@@ -623,7 +624,7 @@ class IconPushButton(QPushButton):
     """A push button with an icon that follows the theme: icons are drawn in its colours when made."""
 
     def __init__(self, icon_name: str, text: str, parent: QWidget | None = None):
-        super().__init__(text, parent)
+        super().__init__(tr(text), parent)
         self._icon_name = icon_name
         self._refresh()
         themes.changed.connect(self._refresh)
@@ -963,11 +964,11 @@ class PalettePopover(Popover):
         row.setSpacing(8)
         self.hex = QLineEdit(hex_of(current) if current is not None else "")
         self.hex.setObjectName("SubjectEdit")
-        self.hex.setPlaceholderText("#RRGGBB")
+        self.hex.setPlaceholderText(tr("#RRGGBB"))
         self.hex.setMaxLength(7)
         self.hex.setFixedHeight(32)
         self.hex.returnPressed.connect(self._typed)
-        more = QPushButton("More…")
+        more = QPushButton(tr("More…"))
         more.setFixedHeight(32)
         more.clicked.connect(self._more)
         row.addWidget(self.hex, 1)
@@ -1096,7 +1097,7 @@ class OptionGrid(QWidget):
                 painter.setFont(font)
                 painter.setPen(QColor(color))
                 painter.drawText(QRectF(x, rect.top(), rect.right() - x, rect.height()),
-                                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, words)
+                                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tr(words))
         self.paint_focus(painter, 8)
 
     def paint_focus(self, painter: QPainter, radius: float) -> None:
@@ -1183,12 +1184,12 @@ class OptionCards(OptionGrid):
             painter.setFont(font)
             painter.setPen(QColor(t.text))
             painter.drawText(QRectF(rect.left() + 4, 38, rect.width() - 8, 20), Qt.AlignmentFlag.AlignCenter,
-                             QFontMetricsF(font).elidedText(title, Qt.TextElideMode.ElideRight, rect.width() - 8))
+                             QFontMetricsF(font).elidedText(tr(title), Qt.TextElideMode.ElideRight, rect.width() - 8))
             font = _font(self, 8.0)
             painter.setFont(font)
             painter.setPen(QColor(t.text_muted))
             painter.drawText(QRectF(rect.left() + 3, 57, rect.width() - 6, 18), Qt.AlignmentFlag.AlignCenter,
-                             QFontMetricsF(font).elidedText(caption, Qt.TextElideMode.ElideRight, rect.width() - 6))
+                             QFontMetricsF(font).elidedText(tr(caption), Qt.TextElideMode.ElideRight, rect.width() - 6))
         self.paint_focus(painter, 10)
 
 
@@ -1265,7 +1266,7 @@ class Ticks(QWidget):
             width = metrics.horizontalAdvance(text) + 2
             x = self.HANDLE / 2 + self.scale.position(tick) / self.scale.maximum * usable
             left = min(max(x - width / 2, 0.0), self.width() - width)  # the end ones stay whole
-            painter.drawText(QRectF(left, 0, width, self.HEIGHT), Qt.AlignmentFlag.AlignCenter, text)
+            painter.drawText(QRectF(left, 0, width, self.HEIGHT), Qt.AlignmentFlag.AlignCenter, tr(text))
 
 
 class SliderRow(QWidget):
@@ -1418,7 +1419,7 @@ class _SectionHeader(QWidget):
         painter.setFont(_font(self, 10, QFont.Weight.DemiBold))
         painter.setPen(QColor(t.text))
         painter.drawText(QRectF(0, 0, self.width() - 24, self.height()),
-                         Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.title)
+                         Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tr(self.title))
         glyph = "caret-down" if self.open else "caret-right"
         icon(glyph, t.text_muted).paint(painter, QRect(self.width() - 16, (self.height() - 14) // 2, 14, 14))
         if keyboard_focus(self):  # round the caret: the title lines up with the other titles, so no room left of it
@@ -1553,7 +1554,7 @@ class _SignatureRow(QFrame):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
-        self.setToolTip(f"{name}. Delete removes it from the saved signatures.")
+        self.setToolTip(tr(f"{name}. Delete removes it from the saved signatures."))
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
@@ -1777,7 +1778,7 @@ class ToolPreview(QWidget):
             font.setItalic(True)
             painter.setFont(font)
             painter.setPen(QColor.fromRgbF(*s.color))
-            painter.drawText(QRectF(0, 0, w, h), Qt.AlignmentFlag.AlignCenter, "a² + b² = c²")
+            painter.drawText(QRectF(0, 0, w, h), Qt.AlignmentFlag.AlignCenter, tr("a² + b² = c²"))
             return
         annotation = preview_annotation(base, s, self.measure)
         if annotation is None:
@@ -2184,7 +2185,7 @@ class StyleEditor(QWidget):
         def load(s: ToolStyle) -> None:
             value = self.prefs.get(prefs_key) if prefs_key else getattr(s, field or option)
             segments.set_value(value)
-            caption.setText(captions.get(value, ""))
+            caption.setText(tr(captions.get(value, "")))
 
         if prefs_key:
             segments.chosen.connect(lambda v: (self.prefs.set(prefs_key, v), load(self._style)))
@@ -2311,10 +2312,10 @@ class StyleEditor(QWidget):
     def _build_scale(self, base: str) -> QWidget:
         button = IconPushButton("ruler", "")
         button.setObjectName("MenuButtonWide")
-        button.setToolTip("Change the scale of the drawing")
+        button.setToolTip(tr("Change the scale of the drawing"))
         button.clicked.connect(self.scale_requested.emit)
         self.scale_button = button
-        self._load("scale", lambda s: button.setText(f"  {scale_text(self._measure or (1.0, 'cm', 1.0, 'cm'))}"))
+        self._load("scale", lambda s: button.setText(tr(f"  {scale_text(self._measure or (1.0, 'cm', 1.0, 'cm'))}")))
         return self._block("Scale of the drawing", button)
 
 
@@ -2629,7 +2630,7 @@ class ToolMenu(_Menu):
         row.addStretch()
         self.header_layout.addWidget(self.subject_row)
 
-        self.bookmark_button = QPushButton(" Add a bookmark for this page")
+        self.bookmark_button = QPushButton(tr(" Add a bookmark for this page"))
         self.bookmark_button.setObjectName("Primary")
         self.bookmark_button.setFixedHeight(32)
         self.bookmark_button.clicked.connect(self._add_bookmark)
@@ -2661,7 +2662,7 @@ class ToolMenu(_Menu):
         self.editor.set_options(OPTIONS.get(base, ()), self.settings.style(key), measure=self.settings.measure,
                                 base=base, prefs=self.prefs, author=self.settings.author)
         self.bookmark_button.setVisible(base == "bookmark" and self.toolbar is not None)
-        self.hint.setText(native_keys(HINTS.get(base, "")))
+        self.hint.setText(native_keys(tr(HINTS.get(base, ""))))
         self.hint.setVisible(base in HINTS)
         was_visible = self.isVisible()
         self.reposition(animate=was_visible and changed_key)
@@ -2701,7 +2702,7 @@ class ToolMenu(_Menu):
         tinted = "color" in OPTIONS.get(base, ())
         color = readable(style.color, t.raised, t.text) if tinted else t.text
         self.glyph.setPixmap(icon(spec.icon, color).pixmap(QSize(20, 20), self.devicePixelRatioF()))
-        self.title.setText(instance_title(key))
+        self.title.setText(tr(instance_title(key)))
         self.bookmark_button.setIcon(icon("bookmark-simple", t.accent_text))
         on_toolbar = self.toolbar is not None and key in self.toolbar.keys()
         self.lock_button.setVisible(base in LOCKABLE)
@@ -2710,15 +2711,15 @@ class ToolMenu(_Menu):
         self.lock_button.set_icon_name("lock-simple" if locked else "lock-simple-open")
         back = "Select" if (self.settings.after_drawing == "select" or self.settings.select_new
                             or (self.toolbar is not None and "hand" not in self.toolbar.keys())) else "Pan"
-        self.lock_button.setToolTip("Locked: stays on after each use. Click to unlock." if locked else
-                                    f"Unlocked: goes back to {back} after one use. Click to lock.")
+        self.lock_button.setToolTip(tr("Locked: stays on after each use. Click to unlock." if locked else
+                                    f"Unlocked: goes back to {back} after one use. Click to lock."))
         self.remove_button.setVisible(on_toolbar and key not in ALWAYS)
         self.more_button.setVisible(True)
         self.pin_button.setVisible(self.toolbar is not None)
         self.pin_button.setChecked(self.pinned)
         self.pin_button.set_icon_name("push-pin-fill" if self.pinned else "push-pin")
-        self.pin_button.setToolTip("Unpin: close the menu when you click elsewhere" if self.pinned else
-                                   "Pin the menu open while you draw")
+        self.pin_button.setToolTip(tr("Unpin: close the menu when you click elsewhere" if self.pinned else
+                                   "Pin the menu open while you draw"))
         self.subject_row.setVisible(base not in NO_SUBJECT)
         subject = self.settings.subject(key)
         shown = QFontMetricsF(self.subject_caption.font()).elidedText(
@@ -2749,7 +2750,7 @@ class ToolMenu(_Menu):
     def edit_subject(self) -> None:
         self._editing = True
         self.subject_edit.setText(self.settings.subject(self.key))
-        self.subject_edit.setPlaceholderText(BY_KEY[base_of(self.key)].title)
+        self.subject_edit.setPlaceholderText(tr(BY_KEY[base_of(self.key)].title))
         self.subject_caption.hide()
         self.subject_pencil.hide()
         self.subject_edit.show()
@@ -2784,24 +2785,24 @@ class ToolMenu(_Menu):
         key, base = self.key, base_of(self.key)
         toolbar = self.toolbar
         if toolbar is not None and base in DUPLICABLE:
-            menu.addAction(icon("copy-simple"), "Duplicate", self._duplicate)
-        menu.addAction(icon("arrow-counter-clockwise"), "Reset to default", self._reset)
+            menu.addAction(icon("copy-simple"), tr("Duplicate"), self._duplicate)
+        menu.addAction(icon("arrow-counter-clockwise"), tr("Reset to default"), self._reset)
         if toolbar is not None and key in toolbar.keys():
             keys = toolbar.keys()
             position = keys.index(key)
             menu.addSeparator()
-            menu.addAction(icon("caret-left"), "Move left",
+            menu.addAction(icon("caret-left"), tr("Move left"),
                            lambda: toolbar.move_tool(key, position - 1)).setEnabled(position > 0)
-            menu.addAction(icon("caret-right"), "Move right",
+            menu.addAction(icon("caret-right"), tr("Move right"),
                            lambda: toolbar.move_tool(key, position + 1)).setEnabled(position < len(keys) - 1)
         if toolbar is not None:
             menu.addSeparator()
-            menu.addAction(icon("plus-circle"), "Add tools…", self._add_tools)
-            menu.addAction(icon("arrows-counter-clockwise"), "Reset toolbar", self._reset_toolbar)
+            menu.addAction(icon("plus-circle"), tr("Add tools…"), self._add_tools)
+            menu.addAction(icon("arrows-counter-clockwise"), tr("Reset toolbar"), self._reset_toolbar)
         menu.addSeparator()
-        menu.addAction(icon("question"), "Help", self._help)
+        menu.addAction(icon("question"), tr("Help"), self._help)
         if toolbar is not None:
-            menu.addAction(icon("gear-six"), "All tool settings…", self._all_settings)
+            menu.addAction(icon("gear-six"), tr("All tool settings…"), self._all_settings)
         return explain_menu(menu)
 
     def _show_more(self) -> None:
@@ -2943,7 +2944,7 @@ class SelectionMenu(_Menu):
         options = selection_options(annotations)
         palette = _selection_palette(annotations)
         wide = any(isinstance(a, Tape) or (isinstance(a, Ink) and a.highlighter) for a in annotations)
-        self.title.setText(selection_title(annotations))
+        self.title.setText(tr(selection_title(annotations)))
         self.editor.set_options(options, selection_style(annotations[0]), wide=wide, base=palette, live=False,
                                 rules=_selection_rules(annotations), preview=False)
         self.empty.setVisible(not options)

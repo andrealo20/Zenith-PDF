@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..core.i18n import tr
 from ..core.library_index import Hit, LibraryIndex, query_terms
 from ..settings import Settings
 from ..theme import qcolor, themes
@@ -116,13 +117,13 @@ class _HitDelegate(QStyledItemDelegate):
         bold.setWeight(bold.Weight.DemiBold)
         painter.setFont(bold)
         painter.drawText(rect.adjusted(0, 0, 0, -rect.height() // 2), Qt.AlignmentFlag.AlignLeft,
-                         f"{hit.path.stem}   ·   p. {hit.page + 1}")
+                         tr(f"{hit.path.stem}   ·   p. {hit.page + 1}"))
         painter.restore()
         painter.save()
         words = hit.snippet.replace("&", "&amp;").replace("<", "&lt;").replace("[", "<b>").replace("]", "</b>")
         text = QTextDocument()
         text.setDefaultFont(option.font)
-        text.setHtml(f'<span style="color:{t.text_muted}">{words}</span>')
+        text.setHtml(tr(f'<span style="color:{t.text_muted}">{words}</span>'))
         text.setTextWidth(rect.width())
         painter.translate(rect.left() - 4, rect.top() + rect.height() // 2 - 4)
         text.drawContents(painter)
@@ -141,7 +142,7 @@ class InsideResults(QFrame):
         super().__init__(parent)
         self.indexer = indexer
         self.query = ""
-        title = QLabel("Inside the documents")
+        title = QLabel(tr("Inside the documents"))
         title.setObjectName("HomeSection")
         self.count = muted_label()
         row = QHBoxLayout()
@@ -178,8 +179,8 @@ class InsideResults(QFrame):
             item.setToolTip(str(hit.path))
             self.list.addItem(item)
         files = len({hit.path for hit in hits})
-        self.count.setText(f"{len(hits)} page{'s' if len(hits) != 1 else ''} in {files} file{'s' if files != 1 else ''}"
-                           if hits else "No page holds all these words")
+        self.count.setText(tr(f"{len(hits)} page{'s' if len(hits) != 1 else ''} in {files} file{'s' if files != 1 else ''}"
+                           if hits else "No page holds all these words"))
         self.show()
 
     def _open(self, item: QListWidgetItem) -> None:

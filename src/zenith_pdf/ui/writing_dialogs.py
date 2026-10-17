@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from ..core import obsidian, spelling, textlayout, writing
 from ..core.annotations import NOTE_SIZE, FreeText, Note, TextMarkup
+from ..core.i18n import tr
 from ..core.platforms import LINUX, SYSTEM_NAME, settings_place
 from ..theme import themes
 from . import messages
@@ -104,7 +105,7 @@ class SpellingDialog(messages.MessageDialog):
         detected = writing.detect_language(text, user_language()) or "en"
         for code in writing.LANGUAGES:
             name = spelling.NAMES[code] + ("" if spelling.available(code) else " (spacing and punctuation only)")
-            self.language.addItem(name, code)
+            self.language.addItem(tr(name), code)
         self.language.setCurrentIndex(max(self.language.findData(detected), 0))
         self.language.currentIndexChanged.connect(self._refresh)
         self.add_field(self.language, full_width=False)
@@ -161,7 +162,7 @@ class SpellingDialog(messages.MessageDialog):
                 target: QWidget = choice
             else:
                 self.choices.append(None)
-                target = QLabel(self._in_context(change, change.replacement) if change.options else "no suggestion")
+                target = QLabel(tr(self._in_context(change, change.replacement) if change.options else "no suggestion"))
                 target.setTextFormat(Qt.TextFormat.RichText)
                 if not change.options:
                     target.setObjectName("Muted")
@@ -225,11 +226,11 @@ class SpellingDialog(messages.MessageDialog):
                          "to check its spelling too.")
             else:
                 text += f" Add {name} in {settings_place('languages')} to check its spelling too."
-        self.intro.setText(text)
+        self.intro.setText(tr(text))
         button = self.button("apply")
         if button is not None:
             button.setEnabled(chosen > 0)
-            button.setText(f"Apply {chosen} change{'s' if chosen != 1 else ''}" if chosen else "Apply changes")
+            button.setText(tr(f"Apply {chosen} change{'s' if chosen != 1 else ''}" if chosen else "Apply changes"))
 
     def chosen(self) -> list[writing.Fix]:
         fixes = []
@@ -308,8 +309,8 @@ class SummaryDialog(messages.MessageDialog):
 
     def _refresh(self, *_) -> None:
         self.points = writing.key_sentences(self.text, SENTENCES[self.length.value], self.language)
-        self.view.setHtml("".join(f'<p style="margin: 0 0 8px 0;">•&nbsp;&nbsp;{html.escape(point)}</p>'
-                                  for point in self.points))
+        self.view.setHtml(tr("".join(f'<p style="margin: 0 0 8px 0;">•&nbsp;&nbsp;{html.escape(point)}</p>'
+                                  for point in self.points)))
 
     def as_text(self) -> str:
         return "\n".join(f"• {point}" for point in self.points)

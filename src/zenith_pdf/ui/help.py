@@ -16,6 +16,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QMenu, QVBoxLayout, QWidget
 from shiboken6 import isValid
 
+from ..core.i18n import source, tr
 from ..core.platforms import SYSTEM_NAME, WINDOWS, native_keys
 from ..theme import themes
 from .widgets import FloatingBar
@@ -385,19 +386,19 @@ def explain_menu(menu: QMenu) -> QMenu:
     """Show a short explanation when hovering the entries of `menu` and its submenus."""
     menu.setToolTipsVisible(True)
     for action in menu.actions():
-        text = action.text().split("\t")[0].replace("&", "")
+        text = source(action.text().split("\t")[0].replace("&", ""))
         if action.menu() is not None:
             explain_menu(action.menu())
         if text in MENU_TIPS:
-            action.setToolTip(MENU_TIPS[text])
+            action.setToolTip(tr(MENU_TIPS[text]))
         elif text.startswith("Add page"):
-            action.setToolTip("Add a blank page after this one.")
+            action.setToolTip(tr("Add a blank page after this one."))
         elif text.startswith("Delete page"):
-            action.setToolTip("Remove this page from the document.")
+            action.setToolTip(tr("Remove this page from the document."))
         elif text.startswith("Page "):
-            action.setToolTip("Add, copy, turn or remove this page.")
+            action.setToolTip(tr("Add, copy, turn or remove this page."))
         elif text.startswith("Bookmark page"):
-            action.setToolTip("Add this page to the Bookmarks panel.")
+            action.setToolTip(tr("Add this page to the Bookmarks panel."))
     return menu
 
 
@@ -588,7 +589,7 @@ class HelpCard(QWidget):
         self.detail = QLabel()  # what the button would do right now, e.g. "Undo add rectangle"
         self.detail.setObjectName("HelpHeading")
         self.what = QLabel()
-        self.how_title = QLabel("How to use")
+        self.how_title = QLabel(tr("How to use"))
         self.how_title.setObjectName("HelpHeading")
         self.how = QLabel()
         self.keys = QLabel()
@@ -625,14 +626,14 @@ class HelpCard(QWidget):
         self.pinned = pinned
         topic = owner.topic
         detail = owner.target.property("help_detail") or ""
-        self.detail.setText(native_keys(detail))
+        self.detail.setText(native_keys(tr(detail)))
         self.detail.setVisible(bool(detail))
-        self.title.setText(native_keys(topic.title))
-        self.what.setText(native_keys(topic.what))
-        self.how.setText(native_keys(topic.how))
+        self.title.setText(native_keys(tr(topic.title)))
+        self.what.setText(native_keys(tr(topic.what)))
+        self.how.setText(native_keys(tr(topic.how)))
         self.how.setVisible(bool(topic.how))
         self.how_title.setVisible(bool(topic.how))
-        self.keys.setText(native_keys(topic.keys))
+        self.keys.setText(native_keys(tr(topic.keys)))
         self.keys.setVisible(bool(topic.keys))
         for label in (self.what, self.how):
             label.setFixedWidth(CARD_WIDTH - 32)

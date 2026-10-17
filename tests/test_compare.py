@@ -64,6 +64,12 @@ def test_the_window_lights_the_changes_on_both_sides(qt_app, tmp_path):
     assert "added" in window.status.text() or "changed" in window.status.text()
     window.step(1)
     assert window.list.currentRow() == 0
+    for _ in range(100):  # the columns lay their pages out after each resize: wait until they have
+        QTest.qWait(10)
+        bar = window.right.verticalScrollBar()
+        if len(window.right.tops) > 1 and bar.maximum() >= window.right.tops[1]:
+            break
+    QTest.qWait(50)
     window.right.verticalScrollBar().setValue(round(window.right.tops[1]))
     QApplication.processEvents()
     assert window.right.spot()[0] == 1 and window.left.spot()[0] == 1  # the older version follows to the same page

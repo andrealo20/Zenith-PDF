@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.annotations import ENDINGS
+from ..core.i18n import tr
 from ..core.pages import PAPER_SIZES, TEMPLATES
 from ..theme import qcolor, themes
 from . import messages
@@ -237,9 +238,9 @@ class ColorButton(QPushButton):
         self.setIcon(QIcon(swatch(self._color, self.devicePixelRatioF())))
         self.setIconSize(QSize(SWATCH, SWATCH))
         if self._color is MIXED:
-            self.setText("Mixed")
+            self.setText(tr("Mixed"))
         elif self._color is None:
-            self.setText(self._none_label or "None")
+            self.setText(tr(self._none_label or "None"))
         else:
             self.setText(QColor.fromRgbF(*self._color).name().upper())
 
@@ -248,8 +249,8 @@ class ColorButton(QPushButton):
             self.pick()
             return
         menu = QMenu(self)
-        menu.addAction("Choose a colour…", self.pick)
-        menu.addAction(self._none_label, self.clear)
+        menu.addAction(tr("Choose a colour…"), self.pick)
+        menu.addAction(tr(self._none_label), self.clear)
         menu.exec(self.mapToGlobal(self.rect().bottomLeft()))
         menu.deleteLater()
 
@@ -318,7 +319,7 @@ class WatermarkDialog(FormDialog):
         self.opacity_slider.setRange(5, 100)
         self.opacity_slider.setValue(22)
         self.color_button = ColorButton(self._color)
-        self.all_pages = QCheckBox("Put it on every page")
+        self.all_pages = QCheckBox(tr("Put it on every page"))
         self.preview = WatermarkPreview(self.options())
         opacity, self.opacity_label = _value_row(self.opacity_slider)
 
@@ -337,7 +338,7 @@ class WatermarkDialog(FormDialog):
         self.text_field.selectAll()
 
     def _changed(self, *_) -> None:
-        self.opacity_label.setText(f"{self.opacity_slider.value()}%")
+        self.opacity_label.setText(tr(f"{self.opacity_slider.value()}%"))
         self.preview.options = self.options()
         self.preview.update()
 
@@ -379,9 +380,9 @@ class ApplyToPagesDialog(FormDialog):
         # Not "choice": MessageDialog keeps the button pressed under that name.
         self.pages_box = QComboBox()
         for key, label in (("all", "All pages"), ("odd", "Odd pages"), ("even", "Even pages"), ("range", "Pages…")):
-            self.pages_box.addItem(label, key)
+            self.pages_box.addItem(tr(label), key)
         self.range = QLineEdit()
-        self.range.setPlaceholderText(f"e.g. 1-3, 7 (of {count})")
+        self.range.setPlaceholderText(tr(f"e.g. 1-3, 7 (of {count})"))
         self.range.setEnabled(False)
         self.problem = muted_label("")
         self.problem.setWordWrap(True)
@@ -423,7 +424,7 @@ class ApplyToPagesDialog(FormDialog):
         except ValueError:
             chosen = []
         if not chosen:  # say so here, and let the user fix it, instead of closing on nonsense
-            self.problem.setText(f"No such pages: the document has {self._count}. Write them like 1-3, 7.")
+            self.problem.setText(tr(f"No such pages: the document has {self._count}. Write them like 1-3, 7."))
             self.problem.show()
             self.range.setFocus()
             return
@@ -476,7 +477,7 @@ class PropertiesDialog(FormDialog):
             self._watch("author", first.author, self.author_field.text)
             self.add_row("Author", self.author_field)
             self.subject_field = QLineEdit(first.subject)
-            self.subject_field.setPlaceholderText(first.label)
+            self.subject_field.setPlaceholderText(tr(first.label))
             self._watch("subject", first.subject.strip(), lambda: self.subject_field.text().strip())
             self.add_row("Subject", self.subject_field)
 
@@ -547,7 +548,7 @@ class PropertiesDialog(FormDialog):
             self.add_row("Font size", self.font_box)
 
         locked = common_value(annotations, "locked")
-        self.locked_box = QCheckBox("Locked: can't be moved, resized or deleted")
+        self.locked_box = QCheckBox(tr("Locked: can't be moved, resized or deleted"))
         if locked is MIXED:
             self.locked_box.setTristate(True)
             self.locked_box.setCheckState(Qt.CheckState.PartiallyChecked)
@@ -567,7 +568,7 @@ class PropertiesDialog(FormDialog):
 
     def _show_opacity(self) -> None:
         mixed = self._opacity_now() is MIXED
-        self.opacity_label.setText("Mixed" if mixed else f"{self.opacity_slider.value()}%")
+        self.opacity_label.setText(tr("Mixed" if mixed else f"{self.opacity_slider.value()}%"))
 
     def _lock_picked(self, *_) -> None:
         self.locked_box.setTristate(False)  # once clicked it is on or off for all: no going back to mixed
@@ -579,9 +580,9 @@ class PropertiesDialog(FormDialog):
     def _choices(self, value, names: dict[str, str]) -> QComboBox:
         box = QComboBox()
         if value is MIXED:
-            box.addItem("Mixed", MIXED)
+            box.addItem(tr("Mixed"), MIXED)
         for key, label in names.items():
-            box.addItem(label, key)
+            box.addItem(tr(label), key)
         if value is not MIXED and value not in names:  # from another app: shown as it is, kept unless changed
             box.addItem(str(value), value)
         box.setCurrentIndex(0 if value is MIXED else max(box.findData(value), 0))
@@ -649,11 +650,11 @@ class PaperCard(QAbstractButton):
     def __init__(self, kind: str, title: str, parent=None):
         super().__init__(parent)
         self.kind = kind
-        self.setText(title)
+        self.setText(tr(title))
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
-        self.setToolTip(TEMPLATES[kind])
+        self.setToolTip(tr(TEMPLATES[kind]))
         self.landscape = False
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         themes.changed.connect(self.update)
@@ -725,7 +726,7 @@ class NewDocumentDialog(FormDialog):
 
         self.paper = QComboBox()
         for name in PAPER_SIZES:
-            self.paper.addItem(name)
+            self.paper.addItem(tr(name))
         self.paper.setCurrentText(template.get("paper", "A4"))
         self.orientation = Segments(["Portrait", "Landscape"])
         self.orientation.set_current(1 if template.get("orientation") == "landscape" else 0)
@@ -733,7 +734,7 @@ class NewDocumentDialog(FormDialog):
         self.count = _inset(QSpinBox())
         self.count.setRange(1, 500)
         self.count.setValue(min(max(int(template.get("pages", 1)), 1), 500))
-        self.keep = QCheckBox("Save as a template", self)  # owned even when the form leaves it out
+        self.keep = QCheckBox(tr("Save as a template"), self)  # owned even when the form leaves it out
         self.keep.setChecked(editing_template)
         self.keep.setVisible(not editing_template)
 

@@ -21,6 +21,7 @@ DEFAULT_TEMPLATES = (
 DEFAULTS: dict[str, object] = {
     # View and layout
     "theme": "dark",  # dark, light or system
+    "language": "auto",  # "auto" for the system's, else a key of core.i18n.LANGUAGES
     "accent": "blue",  # a key of theme.ACCENTS
     "glass": "clear",  # the floating bars: "clear" or "balanced" frosted glass, or "solid"
     "icon_colours": True,  # icons coloured by what they do, as Acrobat's tools are; off: the text colour

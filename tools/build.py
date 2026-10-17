@@ -31,6 +31,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from zenith_pdf import __version__  # noqa: E402
 
 ASSETS = ROOT / "src" / "zenith_pdf" / "assets"
+LOCALES = ROOT / "src" / "zenith_pdf" / "locales"
 PACKAGING = ROOT / "packaging"
 BUILD = ROOT / "build"
 DIST = ROOT / "dist"
@@ -70,6 +71,7 @@ def pyinstaller(name: str, extra: list[str]) -> Path:
         "--name", name,
         "--paths", ROOT / "src",
         "--add-data", f"{ASSETS}{os.pathsep}zenith_pdf/assets",
+        "--add-data", f"{LOCALES}{os.pathsep}zenith_pdf/locales",
         "--collect-all", "pypdfium2",
         "--collect-all", "pypdfium2_raw",
         "--collect-data", "qtawesome",

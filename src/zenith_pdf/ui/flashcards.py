@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from ..core import flashcards
 from ..core.flashcards import Card
+from ..core.i18n import tr
 from ..core.writing import colour_name
 from . import messages
 from .widgets import muted_label
@@ -44,7 +45,7 @@ class FlashcardsDialog(messages.MessageDialog):
         row.setSpacing(12)
         self.colour_boxes: dict[str, QCheckBox] = {}
         for name in colours:
-            box = QCheckBox(name)
+            box = QCheckBox(tr(name))
             box.setChecked(True)
             box.toggled.connect(self._refresh)
             self.colour_boxes[name] = box
@@ -70,8 +71,8 @@ class FlashcardsDialog(messages.MessageDialog):
         self.cards = flashcards.make_cards(self.marks, self.page_texts, self.chosen_colours())
         self.preview.clear()
         for card in self.cards:
-            self.preview.addItem(f"{card.front}\n→ {card.back}   (p. {card.page + 1})")
-        self.count.setText(f"{len(self.cards)} card{'s' if len(self.cards) != 1 else ''}")
+            self.preview.addItem(f"{card.front}\n→ {card.back}   ({tr(f'p. {card.page + 1}')})")
+        self.count.setText(tr(f"{len(self.cards)} card{'s' if len(self.cards) != 1 else ''}"))
         for key in ("study", "anki"):
             button = self._buttons.get(key)
             if button is not None:
@@ -84,7 +85,7 @@ class StudyDialog(QDialog):
     def __init__(self, cards: list[Card], parent=None, shuffle: bool = True):
         super().__init__(parent)
         self.setObjectName("MessageDialog")
-        self.setWindowTitle("Study")
+        self.setWindowTitle(tr("Study"))
         self.setMinimumSize(560, 360)
         self.queue = list(cards)
         if shuffle:
@@ -100,12 +101,12 @@ class StudyDialog(QDialog):
         self.back.setObjectName("CardBack")
         self.back.setWordWrap(True)
         self.back.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.show_button = QPushButton("Show the answer")
+        self.show_button = QPushButton(tr("Show the answer"))
         self.show_button.setObjectName("Primary")
         self.show_button.clicked.connect(self.reveal)
-        self.again = QPushButton("Again")
+        self.again = QPushButton(tr("Again"))
         self.again.clicked.connect(lambda: self.answer(False))
-        self.knew = QPushButton("I knew it")
+        self.knew = QPushButton(tr("I knew it"))
         self.knew.setObjectName("Primary")
         self.knew.clicked.connect(lambda: self.answer(True))
         buttons = QHBoxLayout()
@@ -125,11 +126,11 @@ class StudyDialog(QDialog):
 
     def _next(self) -> None:
         if not self.queue:
-            self.front.setText(f"Done: {self.right} of {self.total} at the first try.")
+            self.front.setText(tr(f"Done: {self.right} of {self.total} at the first try."))
             self.back.hide()
             self.show_button.hide()
             self.again.hide()
-            self.knew.setText("Close")
+            self.knew.setText(tr("Close"))
             self.knew.clicked.disconnect()
             self.knew.clicked.connect(self.accept)
             self.knew.show()
@@ -137,13 +138,13 @@ class StudyDialog(QDialog):
             return
         card = self.queue[0]
         self.front.setText(card.front)
-        self.back.setText(f"{card.back}\n\np. {card.page + 1}")
+        self.back.setText(tr(f"{card.back}\n\np. {card.page + 1}"))
         self.back.hide()
         self.show_button.show()
         self.again.hide()
         self.knew.hide()
         self.show_button.setFocus()
-        self.progress.setText(f"{self.total - len(self.queue) + 1} of {self.total}")
+        self.progress.setText(tr(f"{self.total - len(self.queue) + 1} of {self.total}"))
 
     def reveal(self) -> None:
         self.back.show()

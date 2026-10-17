@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import tr
 from ..core.platforms import native_keys
 from ..icons import hue_colour, icon
 from ..theme import Theme, qcolor, themes, tone_sheet
@@ -422,13 +423,13 @@ class IconButton(QToolButton):
         super().__init__(parent)
         self._icon_name = icon_name
         self._color = color
-        self.setToolTip(tooltip)
+        self.setToolTip(tr(tooltip))
         self.setCheckable(checkable)
         self.setAutoRaise(True)
         self.setIconSize(QSize(icon_size, icon_size))
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         if text:
-            self.setText(text)
+            self.setText(tr(text))
             self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self._refresh()
         themes.changed.connect(self._refresh)
@@ -1197,7 +1198,7 @@ class _Segment(QAbstractButton):
     def __init__(self, text: str, control: Segmented):
         super().__init__(control)
         self._control = control
-        self.setText(text)
+        self.setText(tr(text))
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # one tab stop for the whole control
@@ -1238,7 +1239,7 @@ class _Segment(QAbstractButton):
         painter.setFont(font)
         painter.setPen(color)
         text = QFontMetrics(font).elidedText(self.text(), Qt.TextElideMode.ElideRight, self.width() - 12)
-        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, text)
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, tr(text))
 
     def enterEvent(self, event) -> None:
         self.update()
@@ -1280,7 +1281,7 @@ class Segmented(QWidget):
         for index, (value, label) in enumerate(self.items):
             button = _Segment(label, self)
             if self.tips.get(value):
-                button.setToolTip(self.tips[value])
+                button.setToolTip(tr(self.tips[value]))
             self._group.addButton(button, index)
             button.pressed.connect(self._remember)
             button.clicked.connect(self._clicked)
@@ -1397,7 +1398,7 @@ def separator(vertical: bool = True) -> QFrame:
 
 
 def muted_label(text: str = "") -> QLabel:
-    label = QLabel(native_keys(text))
+    label = QLabel(native_keys(tr(text)))
     label.setObjectName("Muted")
     return label
 
@@ -1409,16 +1410,16 @@ def say_copied(button) -> None:
     """A copy button says "Copied" for a moment, then its own name again."""
     name = button.property("label_before_copied") or button.text()
     button.setProperty("label_before_copied", name)
-    button.setText("Copied")
+    button.setText(tr("Copied"))
 
     def back() -> None:
         if shiboken6.isValid(button):
-            button.setText(name)
+            button.setText(tr(name))
 
     QTimer.singleShot(COPIED_MS, button, back)
 
 
 def panel_title(text: str) -> QLabel:
-    label = QLabel(text)
+    label = QLabel(tr(text))
     label.setObjectName("PanelTitle")
     return label

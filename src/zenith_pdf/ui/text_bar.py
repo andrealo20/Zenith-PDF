@@ -15,6 +15,7 @@ from PySide6.QtCore import QPointF, QRect, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMenu, QToolButton
 
+from ..core.i18n import tr
 from ..icons import icon, readable
 from ..theme import themes
 from . import messages
@@ -105,13 +106,13 @@ class TextSelectionBar(FloatingBar):
         self.colour.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.colour.setIconSize(CHIP)
         self.colour.setFixedSize(CHIP.width() + 8, BAR_BUTTON)
-        self.colour.setToolTip("Highlight colour")
+        self.colour.setToolTip(tr("Highlight colour"))
         self.colour_menu = QMenu(self)
         self.colour_menu.setToolTipsVisible(True)
         for name, color in zip(COLOUR_NAMES, HIGHLIGHTER):
-            action = self.colour_menu.addAction(_dot(color), name)
+            action = self.colour_menu.addAction(_dot(color), tr(name))
             action.setData(color)
-            action.setToolTip(f"Highlight in {name.lower()}; new highlights take this colour too.")
+            action.setToolTip(tr(f"Highlight in {name.lower()}; new highlights take this colour too."))
             action.triggered.connect(lambda _=False, c=color: self.mark("highlight", c))
         self.colour_menu.aboutToShow.connect(self._tick_colour)
         self.colour.setMenu(self.colour_menu)
@@ -160,7 +161,7 @@ class TextSelectionBar(FloatingBar):
         self.colour.setIcon(_chip(color))
         name = colour_name(color)
         self.markups["highlight"].setProperty("help_detail", f"Highlights in {name.lower()}.")
-        self.markups["highlight"].setToolTip(f"Highlight ({name.lower()})")
+        self.markups["highlight"].setToolTip(tr(f"Highlight ({name.lower()})"))
 
     def chosen_colour(self) -> int:
         """Which colour of the menu Highlight uses now, or -1 for one of its own."""

@@ -20,6 +20,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QListView, QStyle, QStyledItemDelegate, QVBoxLayout, QWidget
 
+from ..core.i18n import tr
 from ..core.render import RenderPool
 from ..theme import themes
 from .widgets import IconButton, muted_label, separator
@@ -191,7 +192,7 @@ class PageManager(QWidget):
         self.list.doubleClicked.connect(lambda index: self.closed.emit(index.row()))
         self.list.selectionModel().selectionChanged.connect(self._sync_buttons)
 
-        title = QLabel("Page manager")
+        title = QLabel(tr("Page manager"))
         title.setObjectName("PanelTitle")
         self.count = muted_label()
         actions = workspace.actions
@@ -281,7 +282,7 @@ class PageManager(QWidget):
     def reload(self, select: int | None = None) -> None:
         self.model.reload()
         count = self._workspace.document.page_count
-        self.count.setText(f"{count} page{'s' if count != 1 else ''}")
+        self.count.setText(tr(f"{count} page{'s' if count != 1 else ''}"))
         if select is not None:
             self.list.setCurrentIndex(self.model.index(min(select, count - 1)))
         self._sync_buttons()

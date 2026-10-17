@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import tr
 from ..icons import icon as theme_icon
 from ..theme import themes
 
@@ -44,14 +45,14 @@ class MessageDialog(QDialog):
                  icon_color: str | None = None):
         super().__init__(parent)
         self.setObjectName("MessageDialog")
-        self.setWindowTitle(title)
+        self.setWindowTitle(tr(title))
         self.setMinimumWidth(MIN_WIDTH)
         self.choice: str | None = None
         buttons = buttons or OK_CANCEL
         self.default_key = _default_key(buttons, default)
         t = themes.current
 
-        heading = QLabel(title)
+        heading = QLabel(tr(title))
         heading.setObjectName("DialogTitle")
         heading.setWordWrap(True)
         heading.setTextFormat(Qt.TextFormat.PlainText)
@@ -59,14 +60,14 @@ class MessageDialog(QDialog):
         self._column.setSpacing(8)
         self._column.addWidget(heading)
         if text:
-            body = QLabel(text)
+            body = QLabel(tr(text))
             body.setObjectName("DialogBody")
             body.setWordWrap(True)
             body.setTextFormat(Qt.TextFormat.PlainText)
             body.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self._column.addWidget(body)
         if detail:
-            more = QLabel(detail)
+            more = QLabel(tr(detail))
             more.setObjectName("DialogDetail")
             more.setWordWrap(True)
             more.setTextFormat(Qt.TextFormat.PlainText)
@@ -94,13 +95,13 @@ class MessageDialog(QDialog):
         row.setSpacing(8)
         self.check_box: QCheckBox | None = None
         if check:
-            self.check_box = QCheckBox(check)
+            self.check_box = QCheckBox(tr(check))
             self.check_box.setObjectName("Muted")
             row.addWidget(self.check_box)
         row.addStretch()
         self._buttons: dict[str, QPushButton] = {}
         for key, label, role in buttons:
-            button = QPushButton(label.replace("&", "&&"))
+            button = QPushButton(tr(label.replace("&", "&&")))
             button.setAutoDefault(False)
             if role == "primary":
                 button.setObjectName("Primary")
@@ -273,7 +274,7 @@ def get_text(parent: QWidget | None, title: str, label: str, text: str = "", *, 
     """A line of text, or None if cancelled."""
     dialog = _prompt(parent, title, label, action)
     field = QLineEdit(text)
-    field.setPlaceholderText(placeholder)
+    field.setPlaceholderText(tr(placeholder))
     if password:
         field.setEchoMode(QLineEdit.EchoMode.Password)
     dialog.add_field(field)

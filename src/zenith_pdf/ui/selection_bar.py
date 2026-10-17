@@ -13,6 +13,7 @@ from PySide6.QtCore import QRect
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QMenu, QToolButton
 
 from ..core.annotations import TextMarkup
+from ..core.i18n import tr
 from ..icons import icon
 from ..theme import themes
 from . import clipboard
@@ -33,7 +34,7 @@ class SelectionBar(FloatingBar):
 
         self.count = QLabel()
         self.count.setObjectName("SelectionCount")
-        self.count.setToolTip("Annotations selected")
+        self.count.setToolTip(tr("Annotations selected"))
         self.count_line = separator()
         self.style_button = self._button("palette", "Style: colour, thickness, line style", self.open_style,
                                          help="sel_style")
@@ -46,7 +47,7 @@ class SelectionBar(FloatingBar):
             ("arrow-line-down", "Send to back", lambda: view.arrange("back")),
         ]))
         self.lock = self._button("lock-simple", "Lock", view.toggle_lock, help="sel_lock")
-        self.lock.setText("Lock")  # the icon shows; the text names it for the tooltip and screen readers
+        self.lock.setText(tr("Lock"))  # the icon shows; the text names it for the tooltip and screen readers
         self.more = self._button("dots-three", "More", None, help="sel_more")
         self._more = self._menu([
             ("sliders-horizontal", "Properties…", workspace.edit_properties),
@@ -93,7 +94,7 @@ class SelectionBar(FloatingBar):
                 menu.addSeparator()
             else:
                 icon_name, text, slot = entry
-                menu.addAction(icon(icon_name), text, slot)
+                menu.addAction(icon(icon_name), tr(text), slot)
         return explain_menu(menu)
 
     def _recolour(self, *_) -> None:
@@ -105,7 +106,7 @@ class SelectionBar(FloatingBar):
         return selected[0].page if selected else self._workspace.view.current_page
 
     def _action(self, text: str):
-        return next(a for a in self._more.actions() if a.text().split("\t")[0] == text)
+        return next(a for a in self._more.actions() if a.text().split("\t")[0] == tr(text))
 
     def open_style(self) -> None:
         """The style editor for the selection, beside it if there is room."""
@@ -131,8 +132,8 @@ class SelectionBar(FloatingBar):
         self.count.setVisible(count > 1)
         self.count_line.setVisible(count > 1)
         locked = bool(selected) and all(a.locked for a in selected)
-        self.lock.setText("Unlock" if locked else "Lock")
-        self.lock.setToolTip("Unlock" if locked else "Lock: no moving, resizing or deleting by accident")
+        self.lock.setText(tr("Unlock" if locked else "Lock"))
+        self.lock.setToolTip(tr("Unlock" if locked else "Lock: no moving, resizing or deleting by accident"))
         self.lock.set_icon_name("lock-simple-open" if locked else "lock-simple")
         movable = [a for a in selected if not isinstance(a, TextMarkup)]
         self.style_button.setEnabled(not read_only and bool(selection_options(selected)))

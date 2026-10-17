@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from ..core.annotations import Annotation, Attachment, FreeText, ImageStamp, Link, Measurement, TextMarkup
 from ..core.document import Document
+from ..core.i18n import tr
 from ..core.store import AnnotationStore
 from ..icons import icon, readable
 from ..theme import qcolor, themes
@@ -100,7 +101,7 @@ class AnnotationDelegate(QStyledItemDelegate):
             painter.setFont(font)
             painter.setPen(QColor(t.text_muted))
             painter.drawText(option.rect.adjusted(8, 10, -6, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                             f"PAGE {page + 1}")
+                             tr(f"PAGE {page + 1}"))
             painter.restore()
             return
 
@@ -123,7 +124,7 @@ class AnnotationDelegate(QStyledItemDelegate):
         painter.setPen(QColor(t.text))
         title = a.subject if a.subject and a.subject != a.label else a.label
         painter.drawText(QRect(x, rect.y() + 6, width, metrics.height()), 0,
-                         metrics.elidedText(title, Qt.TextElideMode.ElideRight, width))
+                         metrics.elidedText(tr(title), Qt.TextElideMode.ElideRight, width))
         summary = " ".join(self._panel.summary(a).split())
         if not summary:  # nothing written on it: who made it, and when
             summary = " · ".join(part for part in (a.author, self._panel.date_text(a)) if part) or "No comment"
@@ -156,7 +157,7 @@ class AnnotationsPanel(QWidget):
         self.links_chip.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.links_chip.setIconSize(QSize(14, 14))
         self.links_chip.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.links_chip.setToolTip("Show the document's links in the list")
+        self.links_chip.setToolTip(tr("Show the document's links in the list"))
         self.links_chip.toggled.connect(self.refresh)
         chips = QHBoxLayout()
         chips.setContentsMargins(0, 0, 0, 0)
@@ -229,7 +230,7 @@ class AnnotationsPanel(QWidget):
         self.list.clear()
         annotations = self.ordered()
         links = sum(1 for a in self._store.all() if isinstance(a, Link))
-        self.links_chip.setText(f"Links ({links})")
+        self.links_chip.setText(tr(f"Links ({links})"))
         self.links_chip.setVisible(links > 0)
         page = None
         for annotation in annotations:
@@ -238,7 +239,7 @@ class AnnotationsPanel(QWidget):
                 heading = QListWidgetItem()
                 heading.setData(HEADER_ROLE, page)
                 heading.setFlags(Qt.ItemFlag.NoItemFlags)
-                self.list.addItem(heading)
+                self.list.addItem(tr(heading))
             item = QListWidgetItem()
             item.setData(ANNOTATION_ROLE, annotation)
             item.setToolTip(annotation.contents[:500] if annotation.contents else "")

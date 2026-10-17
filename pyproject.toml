@@ -45,7 +45,7 @@ zenith-pdf = "zenith_pdf.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-zenith_pdf = ["assets/*"]
+zenith_pdf = ["assets/*", "locales/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

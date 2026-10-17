@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import tr
 from ..core.platforms import MAC, SYSTEM_NAME, WINDOWS, mono_font, native_keys, settings_place, ui_font
 from ..core.releases import EARLIER, RELEASES
 from ..icons import icon
@@ -58,15 +59,18 @@ else:
 
 def _whats_new() -> str:
     """Every version's highlights and smaller changes, the newest first, from core/releases.py."""
-    parts = ["<h1>What's new</h1>"]
+    heading = tr("What's new")
+    parts = [f"<h1>{heading}</h1>"]
     for release in RELEASES:
-        parts.append(f"<h2>Version {release.version}</h2><ul>")
-        parts += [f"<li><b>{html.escape(h.title)}</b>. {html.escape(native_keys(h.text))}</li>" for h in release.highlights]
-        parts += [f"<li>{html.escape(native_keys(line))}</li>" for line in release.more]
+        parts.append(f"<h2>{tr(f'Version {release.version}')}</h2><ul>")
+        parts += [f"<li><b>{html.escape(tr(h.title))}</b>. {html.escape(native_keys(tr(h.text)))}</li>"
+                  for h in release.highlights]
+        parts += [f"<li>{html.escape(native_keys(tr(line)))}</li>" for line in release.more]
         parts.append("</ul>")
-    parts.append("<h2>Earlier</h2><ul>" + "".join(f"<li>{html.escape(line)}</li>" for line in EARLIER) + "</ul>")
-    parts.append("<p>After each update a short tour shows what changed. Settings &gt; Help turns it off, and "
-                 "opens it again.</p>")
+    parts.append(f"<h2>{tr('Earlier')}</h2><ul>" + "".join(f"<li>{html.escape(tr(line))}</li>" for line in EARLIER)
+                 + "</ul>")
+    tour = tr("After each update a short tour shows what changed. Settings > Help turns it off, and opens it again.")
+    parts.append(f"<p>{html.escape(tour)}</p>")
     return "".join(parts)
 
 
@@ -81,10 +85,10 @@ def _tool_list(document: QTextDocument, specs) -> str:
         document.addResource(QTextDocument.ResourceType.ImageResource, QUrl(name),
                              icon(spec.icon, spec.color).pixmap(QSize(26, 26)).toImage())
         topic = TOPICS.get(spec.help)
-        what = html.escape(topic.what) if topic else ""
-        how = html.escape(topic.how) if topic and topic.how else ""
+        what = html.escape(native_keys(tr(topic.what))) if topic else ""
+        how = html.escape(native_keys(tr(topic.how))) if topic and topic.how else ""
         rows.append(f'<tr><td class="glyph"><img src="{name}" width="26" height="26"></td>'
-                    f'<td><b>{html.escape(spec.title)}</b><br>{what}'
+                    f'<td><b>{html.escape(tr(spec.title))}</b><br>{what}'
                     f'{"<br><span class=muted>" + how + "</span>" if how else ""}</td></tr>')
     return "<table cellspacing='0' cellpadding='6'>" + "".join(rows) + "</table>"
 
@@ -94,24 +98,24 @@ def _pdf_tools() -> str:
 
     parts = []
     for group in TOOL_GROUPS:
-        items = "".join(f"<li><b>{html.escape(t.title)}</b>: {html.escape(t.description)}.</li>"
+        items = "".join(f"<li><b>{html.escape(tr(t.title))}</b>: {html.escape(tr(t.description))}.</li>"
                         for t in TOOLS if t.group == group)
-        parts.append(f"<h3>{group}</h3><ul>{items}</ul>")
+        parts.append(f"<h3>{tr(group)}</h3><ul>{items}</ul>")
     return "".join(parts)
 
 
 def _shortcuts() -> str:
     parts = []
     for group, entries in SHORTCUTS:
-        rows = "".join(f"<tr><td width='220'>{_keys(keys)}</td><td>{html.escape(action)}</td></tr>"
+        rows = "".join(f"<tr><td width='220'>{_keys(keys)}</td><td>{html.escape(tr(action))}</td></tr>"
                        for keys, action in entries)
-        parts.append(f"<h3>{group}</h3><table cellpadding='4'>{rows}</table>")
+        parts.append(f"<h3>{tr(group)}</h3><table cellpadding='4'>{rows}</table>")
     return "".join(parts)
 
 
 def chapters(document: QTextDocument) -> list[tuple[str, str, str, str]]:
     """(key, title, icon, html) for every chapter."""
-    tools = "".join(f"<h3>{group}</h3><p class='muted'>{GROUP_INTROS[group]}</p>"
+    tools = "".join(f"<h3>{tr(group)}</h3><p class='muted'>{tr(GROUP_INTROS[group])}</p>"
                     + _tool_list(document, [s for s in CATALOG if s.group == group]) for group in GROUPS)
     return [
         ("start", "Getting started", "rocket-launch", f"""
@@ -156,7 +160,7 @@ you ran last comes first. With nothing typed, it suggests the writing helpers th
 <h2>Writing help</h2>
 <ul>
 <li><b>Check spelling and punctuation</b>: select a text box, a callout or a note, or right-click it. Zenith PDF
-uses {html.escape(SPELLER)}. Spacing, punctuation and capitals are checked in every language. Untick what should
+uses {html.escape(tr(SPELLER))}. Spacing, punctuation and capitals are checked in every language. Untick what should
 stay; the rest changes in one step that Undo takes back.</li>
 <li><b>Key points</b> of the selected text (right-click it) or of a page: the sentences that carry it, Short,
 Medium or Long. Keep them as a note on the page, or copy them.</li>
@@ -287,7 +291,7 @@ tool's menu chooses whether a click on the page asks, starts recording or asks f
 to play it in a small player beside it.</li>
 <li><b>Paste</b> a copied picture with {_keys('Ctrl+V')}: it lands where the pointer is. Drag image files onto a
 page, or use Image from file. Corners keep the proportions; {_keys('Shift')} stretches.</li>
-<li><b>Camera</b>: {html.escape(CAMERA)}</li>
+<li><b>Camera</b>: {html.escape(tr(CAMERA))}</li>
 <li><b>Signatures</b>: type your name in a handwriting style, draw it, or take it from a photo of your
 signature. They are kept for every document. This is a picture of a signature; for a certificate-based digital
 signature you need a dedicated app.</li>
@@ -365,16 +369,16 @@ class GuideWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("SettingsWindow")
-        self.setWindowTitle("Guide")
+        self.setWindowTitle(tr("Guide"))
         self.resize(1040, 740)
         nav = QFrame()
         nav.setObjectName("SettingsNav")
         nav.setFixedWidth(300)
-        title = QLabel("Guide")
+        title = QLabel(tr("Guide"))
         title.setObjectName("SettingsTitle")
         self.search = QLineEdit()
         self.search.setObjectName("SettingsSearch")
-        self.search.setPlaceholderText("Search the guide")
+        self.search.setPlaceholderText(tr("Search the guide"))
         self.search.setClearButtonEnabled(True)
         self._search_icon = self.search.addAction(icon("magnifying-glass"), QLineEdit.ActionPosition.LeadingPosition)
         self.search.textChanged.connect(self._filter)
@@ -393,7 +397,7 @@ class GuideWindow(QDialog):
         self.text.setFrameShape(QFrame.Shape.NoFrame)
         self.text.setOpenExternalLinks(True)
         self.text.document().setDocumentMargin(40)
-        self.copy = QPushButton("Copy version details")
+        self.copy = QPushButton(tr("Copy version details"))
         self.copy.clicked.connect(self._copy_details)
         right = QVBoxLayout()
         right.setContentsMargins(0, 0, 0, 0)
@@ -435,7 +439,7 @@ class GuideWindow(QDialog):
         self.list.blockSignals(True)
         self.list.clear()
         for key, title, icon_name, _ in self.chapters:
-            item = QListWidgetItem(QIcon(icon(icon_name)), title)
+            item = QListWidgetItem(QIcon(icon(icon_name)), tr(title))
             item.setData(Qt.ItemDataRole.UserRole, key)
             item.setSizeHint(QSize(240, 44))
             self.list.addItem(item)
@@ -457,9 +461,9 @@ class GuideWindow(QDialog):
             return
         key = item.data(Qt.ItemDataRole.UserRole)
         page = next(text for k, _, _, text in self.chapters if k == key)
-        self.text.setHtml(f"<body>{page}</body>")
+        self.text.setHtml(f"<body>{tr(page)}</body>")
         self.bottom.setVisible(key == "problem")
-        self.copy.setText("Copy version details")  # a chapter shown again starts with nothing copied
+        self.copy.setText(tr("Copy version details"))  # a chapter shown again starts with nothing copied
         words = self.search.text().strip()
         if words:
             self.text.find(words.split()[0])
@@ -472,7 +476,7 @@ class GuideWindow(QDialog):
             key = item.data(Qt.ItemDataRole.UserRole)
             body = next(t for k, title, _, t in self.chapters if k == key)
             plain = QTextDocument()
-            plain.setHtml(body)
+            plain.setHtml(tr(body) + body)  # found by its words in the language shown and in English
             visible = all(word in plain.toPlainText().lower() for word in words)
             item.setHidden(not visible)
             if visible and first is None:
@@ -482,8 +486,8 @@ class GuideWindow(QDialog):
             self.list.setCurrentItem(None)
             self.list.blockSignals(False)
             self.bottom.hide()
-            self.text.setHtml(f"<body><p class='muted'>No chapter mentions “{html.escape(text.strip())}”. "
-                              "Try another word, or fewer words.</p></body>")
+            self.text.setHtml(tr(f"<body><p class='muted'>No chapter mentions “{html.escape(text.strip())}”. "
+                              "Try another word, or fewer words.</p></body>"))
         elif self.list.currentItem() is None or self.list.currentItem().isHidden():
             self.list.setCurrentItem(first)
         else:
@@ -492,5 +496,5 @@ class GuideWindow(QDialog):
     def _copy_details(self) -> None:
         from .settings_page import version_details
 
-        QApplication.clipboard().setText(version_details() + f"\n{SYSTEM_NAME}: {platform.version()}")
+        QApplication.clipboard().setText(tr(version_details() + f"\n{SYSTEM_NAME}: {platform.version()}"))
         say_copied(self.copy)

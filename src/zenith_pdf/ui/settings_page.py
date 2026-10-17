@@ -34,6 +34,7 @@ from shiboken6 import isValid
 
 from .. import __version__
 from ..core import ocr
+from ..core.i18n import LANGUAGES, system_language, tr, tr_in
 from ..core.platforms import SYSTEM_NAME, native_keys
 from ..icons import icon, readable
 from ..settings import DEFAULTS, Settings
@@ -126,14 +127,15 @@ class Row(QFrame):
         super().__init__()
         self.setObjectName("SettingRow")
         self.title, self.description, self.keywords = title, description, keywords  # the assistant finds rows by these
-        self.search_text = f"{title} {description} {keywords}".lower()
+        # Found by its words in English and in the language shown, as the user may type either.
+        self.search_text = f"{title} {description} {keywords} {tr(title)} {tr(description)}".lower()
         grid = QGridLayout(self)
         grid.setContentsMargins(0, 12, 0, 12)
         grid.setHorizontalSpacing(24)
         grid.setVerticalSpacing(3)
         rows = 0
         if title:
-            heading = QLabel(title)
+            heading = QLabel(tr(title))
             heading.setObjectName("SettingTitle")
             grid.addWidget(heading, rows, 0)
             rows += 1
@@ -162,7 +164,7 @@ class Section(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 28)
         layout.setSpacing(0)
-        heading = QLabel(title)
+        heading = QLabel(tr(title))
         heading.setObjectName("SettingsSection")
         heading.setIndent(0)  # its style gives it a frame, and a frame an indent: it would start 5 px in
         layout.addWidget(heading)
@@ -207,7 +209,7 @@ class AccentPicker(QWidget):
         for key, (label, dark, light) in ACCENTS.items():
             button = QToolButton()
             button.setFixedSize(26, 26)
-            button.setToolTip(label)
+            button.setToolTip(tr(label))
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.clicked.connect(lambda _=False, k=key: settings.set("accent", k))
             layout.addWidget(button)
@@ -257,7 +259,7 @@ class _ToolRow(QFrame):
         self.glyph.setFixedSize(22, 22)
         text = QVBoxLayout()
         text.setSpacing(0)
-        self.name = QLabel(instance_title(key))
+        self.name = QLabel(tr(instance_title(key)))
         self.name.setObjectName("PanelRowText")
         self.summary = muted_label()
         text.addWidget(self.name)
@@ -277,12 +279,12 @@ class _ToolRow(QFrame):
         self.caret.setPixmap(icon("caret-right", t.text_muted).pixmap(QSize(16, 16), ratio))
         parts = []
         if base in LOCKABLE:
-            parts.append("Locked" if tools.is_locked(self.key) else "Unlocked")
+            parts.append(tr("Locked" if tools.is_locked(self.key) else "Unlocked"))
         subject = tools.subject(self.key)
         if subject != BY_KEY[base].title:
-            parts.append(f"subject “{subject}”")
-        self.summary.setText(", ".join(parts) or "Options")
-        self.setToolTip(f"{instance_title(self.key)}: colour, size and the other options")
+            parts.append(tr(f"subject “{subject}”"))
+        self.summary.setText(", ".join(parts) or tr("Options"))
+        self.setToolTip(tr(f"{instance_title(self.key)}: colour, size and the other options"))
 
     def mouseReleaseEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.position().toPoint()):
@@ -397,7 +399,7 @@ class Templates(QWidget):
             glyph.setPixmap(icon("note-blank", themes.current.accent).pixmap(20, 20))
             text = QVBoxLayout()
             text.setSpacing(0)
-            name = QLabel(template.get("name", "Untitled"))
+            name = QLabel(tr(template.get("name", "Untitled")))
             name.setObjectName("PanelRowText")
             text.addWidget(name)
             text.addWidget(muted_label(template_summary(template)))
@@ -416,7 +418,7 @@ class SettingsWindow(QDialog):
     def __init__(self, settings: Settings, tool_settings: ToolSettings, parent=None):
         super().__init__(parent)
         self.setObjectName("SettingsWindow")
-        self.setWindowTitle("Settings")
+        self.setWindowTitle(tr("Settings"))
         self.resize(1000, 720)
         self._settings = settings
         self._tools = tool_settings
@@ -426,11 +428,11 @@ class SettingsWindow(QDialog):
         nav = QFrame()
         nav.setObjectName("SettingsNav")
         nav.setFixedWidth(300)
-        title = QLabel("Settings")
+        title = QLabel(tr("Settings"))
         title.setObjectName("SettingsTitle")
         self.search = QLineEdit()
         self.search.setObjectName("SettingsSearch")
-        self.search.setPlaceholderText("Search settings")
+        self.search.setPlaceholderText(tr("Search settings"))
         self.search.setClearButtonEnabled(True)
         self._search_icon = self.search.addAction(icon("magnifying-glass"), QLineEdit.ActionPosition.LeadingPosition)
         self.search.textChanged.connect(self._filter)
@@ -438,7 +440,7 @@ class SettingsWindow(QDialog):
         self.nav.setObjectName("SettingsNavList")
         self.nav.setIconSize(QSize(22, 22))
         for key, label, icon_name in CATEGORIES:
-            item = QListWidgetItem(icon(icon_name) if icon_name else logo_icon(), label)
+            item = QListWidgetItem(icon(icon_name) if icon_name else logo_icon(), tr(label))
             item.setData(Qt.ItemDataRole.UserRole, key)
             item.setSizeHint(QSize(240, 46))
             self.nav.addItem(item)
@@ -588,11 +590,11 @@ class SettingsWindow(QDialog):
         guarded()
         self._watchers.setdefault(key, []).append(guarded)
 
-    def _combo(self, key: str, options: dict) -> QComboBox:
+    def _combo(self, key: str, options: dict, translate: bool = True) -> QComboBox:
         box = QComboBox()
         box.setFixedWidth(CONTROL_WIDTH)
         for value, label in options.items():
-            box.addItem(label, value)
+            box.addItem(tr(label) if translate else label, value)
         self._watch(key, box, lambda: box.setCurrentIndex(max(box.findData(self._settings.get(key)), 0)))
         box.currentIndexChanged.connect(lambda: self._settings.set(key, box.currentData()))
         return box
@@ -621,10 +623,10 @@ class SettingsWindow(QDialog):
 
         def load():
             slider.setValue(int(self._settings.get(key)))
-            value.setText(f"{slider.value()}{suffix}")
+            value.setText(tr(f"{slider.value()}{suffix}"))
 
         self._watch(key, slider, load)
-        slider.valueChanged.connect(lambda v: value.setText(f"{v}{suffix}"))
+        slider.valueChanged.connect(lambda v: value.setText(tr(f"{v}{suffix}")))
         slider.valueChanged.connect(lambda v: self._settings.set(key, int(round(v / step) * step)))
         layout.addWidget(slider, 1)
         layout.addWidget(value)
@@ -645,13 +647,18 @@ class SettingsWindow(QDialog):
                   "dark mode light mode colours appearance"))
         s.add(Row("Accent colour", "Used for selections, the active tool and buttons.", AccentPicker(self._settings),
                   "colour color highlight"))
-        glass = Segmented(GLASS_CHOICES, GLASS_TIPS)
+        glass = Segmented([(value, tr_in("glass", label)) for value, label in GLASS_CHOICES], GLASS_TIPS)
         glass.setFixedWidth(CONTROL_WIDTH)
         self._watch("glass", glass, lambda: glass.set_value(glass_style(self._settings.get("glass"))))
         glass.chosen.connect(lambda value: self._settings.set("glass", value))
         s.add(Row("Glass", "Clear lets the pages show through the floating bars, blurred; Balanced tints them more; "
                   "Solid makes them opaque. Their text stays readable over any page.",
                   glass, "transparency effects transparent blur frosted acrylic liquid clear balanced solid opaque"))
+        # Each language by its own name, as people look for it.
+        languages = {"auto": f"{tr('Automatic')}: {LANGUAGES[system_language()]}"} | dict(LANGUAGES)
+        s.add(Row("Language", "The language of menus, settings, help and the guide. Takes effect when Zenith PDF "
+                  "starts again.", self._combo("language", languages, translate=False),
+                  "language lingua langue idioma sprache italiano english français español deutsch português"))
         s.add(Row("Coloured icons", "Icons take a colour by what they do, as in Acrobat's list of tools: blue for "
                   "files, purple for pens, red for making and removing, green for pages, orange for comments. Off, "
                   "they take the text colour.", self._switch("icon_colours"), "icons colours colorful monochrome"))
@@ -687,9 +694,9 @@ class SettingsWindow(QDialog):
         path = QLineEdit()
         path.setReadOnly(True)
         path.setMinimumWidth(260)
-        path.setPlaceholderText("The last folder you used")
-        choose = QPushButton("Choose…")
-        reset = QPushButton("Reset")
+        path.setPlaceholderText(tr("The last folder you used"))
+        choose = QPushButton(tr("Choose…"))
+        reset = QPushButton(tr("Reset"))
         choose.clicked.connect(self._choose_new_folder)
         reset.clicked.connect(lambda: self._settings.set("new_folder", ""))
         layout.addWidget(path)
@@ -708,7 +715,7 @@ class SettingsWindow(QDialog):
         s = self._section("annotation")
         author = QLineEdit()
         author.setFixedWidth(CONTROL_WIDTH)
-        author.setPlaceholderText("Your name")
+        author.setPlaceholderText(tr("Your name"))
         self._watch("author", author, lambda: author.setText(self._settings.get("author")))
         author.editingFinished.connect(lambda: self._settings.set("author", author.text().strip()))
         s.add(Row("Author name", "Written into each annotation you make, so others can see who added it.", author,
@@ -745,7 +752,7 @@ class SettingsWindow(QDialog):
         s.add(Row("Ask before flattening", "Flattening makes annotations part of the page, so it asks first.", ask,
                   "confirm question"))
         self.tool_list = ToolStyleList(self._tools, self._settings)
-        reset = QPushButton("Reset every tool")
+        reset = QPushButton(tr("Reset every tool"))
         reset.clicked.connect(self._reset_tools)
         styles = QWidget()
         column = QVBoxLayout(styles)
@@ -809,7 +816,7 @@ class SettingsWindow(QDialog):
         limit.setRange(0, 200)
         self._watch("recent_limit", limit, lambda: limit.setValue(self._settings.get("recent_limit")))
         limit.valueChanged.connect(self._set_recent_limit)
-        clear = QPushButton("Clear list")
+        clear = QPushButton(tr("Clear list"))
         clear.clicked.connect(lambda: self._settings.set("recent", []))
         layout.addWidget(limit, 1)
         layout.addWidget(clear)
@@ -818,20 +825,20 @@ class SettingsWindow(QDialog):
         s.add(Row("Search inside every PDF", "Keeps an index of the words of each PDF you open, on this computer, "
                   "so the home page's search finds them in all of them at once.", self._switch("search_index"),
                   "search index full text inside all documents words"))
-        forget = QPushButton("Clear the index")
+        forget = QPushButton(tr("Clear the index"))
         forget.clicked.connect(self._clear_index)
         s.add(Row("Search index", "Forget the words of every PDF: they are read again as you open them.", forget,
                   "search index clear rebuild"))
         vault = QPushButton()
         vault.setFixedWidth(CONTROL_WIDTH)
         self._watch("obsidian_vault", vault, lambda: vault.setText(
-            Path(self._settings.get("obsidian_vault")).name if self._settings.get("obsidian_vault") else "Choose…"))
+            tr(Path(self._settings.get("obsidian_vault")).name if self._settings.get("obsidian_vault") else "Choose…")))
         vault.clicked.connect(self._choose_vault)
         s.add(Row("Obsidian vault", "Where Study notes > Send to Obsidian writes the notes of each document.", vault,
                   "obsidian vault notes markdown export"))
         folder = QLineEdit()
         folder.setFixedWidth(CONTROL_WIDTH)
-        folder.setPlaceholderText("The top of the vault")
+        folder.setPlaceholderText(tr("The top of the vault"))
         self._watch("obsidian_folder", folder, lambda: folder.setText(self._settings.get("obsidian_folder")))
         folder.editingFinished.connect(lambda: self._settings.set("obsidian_folder", folder.text().strip()))
         s.add(Row("Folder in the vault", "The notes go in this folder of the vault.", folder,
@@ -844,7 +851,7 @@ class SettingsWindow(QDialog):
         indexer = getattr(type(window), "indexer", None) if window is not None else None
         if indexer is not None:
             indexer.clear()
-        self.sender().setText("Cleared")
+        self.sender().setText(tr("Cleared"))
 
     def _choose_vault(self) -> None:
         from .writing_dialogs import choose_vault
@@ -885,7 +892,7 @@ class SettingsWindow(QDialog):
         s = self._section("shortcuts")
         for group, entries in SHORTCUTS:
             for keys, action in entries:
-                chip = QLabel(native_keys(keys))
+                chip = QLabel(native_keys(tr(keys)))
                 chip.setObjectName("KeyChip")
                 s.add(Row(action, "", chip, f"{group} keyboard shortcut {keys}"))
 
@@ -901,18 +908,18 @@ class SettingsWindow(QDialog):
         s.add(Row("Tips for new tools", "The first time you pick a tool, a small card under it gives two or three "
                   "ways to use it well. Each tool's card shows once.", self._switch("tool_tips"),
                   "tips hints first time tool card advice"))
-        again = QPushButton("Show tips again")
+        again = QPushButton(tr("Show tips again"))
         again.clicked.connect(self._tips_again)
         s.add(Row("Tips already seen", "Show every tool's tips again, the next time you pick it.", again,
                   "tips hints reset again"))
-        assistant = QPushButton("Open the assistant")
+        assistant = QPushButton(tr("Open the assistant"))
         assistant.clicked.connect(self._open_assistant)
         s.add(Row("Assistant", f"{native_keys('Ctrl+K')}, or the sparkle at the top right, finds any tool, command, setting, shortcut "
                   "or guide chapter from a few words or a question, in English, Italian, French, Spanish, German or "
                   "Portuguese. It also checks spelling, picks the key points of a text and turns highlights into "
                   "study notes, all on this computer.", assistant,
                   "assistant ai search command palette find ask spelling summary study notes"))
-        guide = QPushButton("Open the guide")
+        guide = QPushButton(tr("Open the guide"))
         guide.clicked.connect(self._open_guide)
         s.add(Row("Guide", "A short guide to every part of Zenith PDF. F1 opens it from anywhere.", guide,
                   "manual help learn tutorial"))
@@ -922,19 +929,19 @@ class SettingsWindow(QDialog):
         s.add(Row("Install updates automatically", "New versions download in the background, checked against the "
                   "release's fingerprints, and install when you close Zenith PDF.", self._switch("update_auto"),
                   "update automatic install upgrade background"))
-        check = QPushButton("Check now")
+        check = QPushButton(tr("Check now"))
         check.clicked.connect(self._check_updates)
         s.add(Row("Updates", f"This is version {__version__}.", check, "update version latest check"))
         s.add(Row("What's new after an update", "After each update a short tour shows what changed, with a Show me "
                   "for each part.", self._switch("whats_new_after_update"), "whats new tour changes release notes"))
-        tour = QPushButton("Show the tour")
+        tour = QPushButton(tr("Show the tour"))
         tour.clicked.connect(self._show_tour)
         s.add(Row("What's new", f"What version {__version__} brought.", tour, "whats new tour changes release notes"))
-        questions = QPushButton("Ask again")
+        questions = QPushButton(tr("Ask again"))
         questions.clicked.connect(lambda: self._settings.set("asked", []))
         s.add(Row("Questions you turned off", "Questions answered with \"don't ask again\" will be asked again.",
                   questions, "confirm reset"))
-        reset = QPushButton("Reset settings")
+        reset = QPushButton(tr("Reset settings"))
         reset.clicked.connect(self._reset_all)
         s.add(Row("Reset all settings", "Back to how Zenith PDF started. Recent files, templates, the markup "
                   "library and tool styles stay.", reset, "defaults factory"))
@@ -958,7 +965,7 @@ class SettingsWindow(QDialog):
     def _tips_again(self) -> None:
         self._settings.set("tips_seen", [])
         self._settings.set("tool_tips", True)
-        self.sender().setText("Tips will show again")
+        self.sender().setText(tr("Tips will show again"))
 
     def _open_assistant(self) -> None:
         window = self.parent()
@@ -985,7 +992,7 @@ class SettingsWindow(QDialog):
         themes.changed.connect(self._draw_logo)
         text = QVBoxLayout()
         text.setSpacing(2)
-        name = QLabel("Zenith PDF")
+        name = QLabel(tr("Zenith PDF"))
         name.setObjectName("AboutName")
         text.addStretch()
         text.addWidget(name)
@@ -997,7 +1004,7 @@ class SettingsWindow(QDialog):
         s.add(Row("", "", header, "zenith pdf version about logo"))
         for title, licence, version in CREDITS:
             s.add(Row(title, f"{licence} licence, version {version()}", None, "credits licence open source"))
-        copy = QPushButton("Copy details")
+        copy = QPushButton(tr("Copy details"))
         copy.clicked.connect(lambda: (QApplication.clipboard().setText(version_details()), say_copied(copy)))
         s.add(Row("Version details", f"Python {platform.python_version()}, {sys.platform}. Useful when reporting "
                   "a problem.", copy, "debug report"))

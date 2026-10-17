@@ -14,6 +14,7 @@ from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QGraphicsRectItem, QHBoxLayout, QMenu
 
 from ..core import textclean, writing
+from ..core.i18n import tr
 from ..settings import Settings
 from ..theme import themes
 from .widgets import FloatingBar, IconButton, separator
@@ -235,12 +236,12 @@ class ReadAloudBar(FloatingBar):
 
     def _state(self, state: str) -> None:
         self.play.set_icon_name("play" if state == "paused" else "pause")
-        self.play.setToolTip("Go on" if state == "paused" else "Pause")
+        self.play.setToolTip(tr("Go on" if state == "paused" else "Pause"))
 
     def _speed_menu(self) -> None:
         menu = QMenu(self)
         for speed in SPEEDS:
-            action = menu.addAction(f"{speed:g}×")
+            action = menu.addAction(tr(f"{speed:g}×"))
             action.setCheckable(True)
             action.setChecked(abs(speed - self.reader.speed) < 0.01)
             action.triggered.connect(lambda _=False, s=speed: self.reader.set_speed(s))
@@ -252,7 +253,7 @@ class ReadAloudBar(FloatingBar):
         current = self.reader.tts.voice().name()
         voices = self.reader.voices()
         if not voices:
-            menu.addAction("No other voice for this language").setEnabled(False)
+            menu.addAction(tr("No other voice for this language")).setEnabled(False)
         for voice in voices:
             action = menu.addAction(voice.name())
             action.setCheckable(True)

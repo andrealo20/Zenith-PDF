@@ -8,6 +8,7 @@ from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QHBoxLayout, QMenu, QWidget, QWidgetAction
 
 from ..core.annotations import Annotation, Attachment, FreeText, ImageStamp, Link, Note, Tape
+from ..core.i18n import tr
 from ..core.pages import TEMPLATES
 from ..icons import icon
 from . import clipboard
@@ -22,7 +23,7 @@ MARKUPS = (("highlight", "Highlight", "z-text-highlight"), ("underline", "Underl
 
 
 def _action(menu: QMenu, icon_name: str | None, text: str, slot, enabled: bool = True):
-    action = menu.addAction(icon(icon_name), text, slot) if icon_name else menu.addAction(text, slot)
+    action = menu.addAction(icon(icon_name), tr(text), slot) if icon_name else menu.addAction(tr(text), slot)
     action.setEnabled(enabled)
     return action
 
@@ -113,7 +114,7 @@ def build_context_menu(view: DocumentView, page: int, pos, annotation: Annotatio
     if shown or has_text:
         menu.addSeparator()
 
-    special = menu.addMenu(icon("clipboard"), "Copy/Paste as")
+    special = menu.addMenu(icon("clipboard"), tr("Copy/Paste as"))
     _action(special, "text-aa", "Copy selected text", view.copy_selection, has_text)
     _action(special, "image", "Copy page as image", lambda: actions.copy_page_image(page), actions is not None)
     special.addSeparator()
@@ -125,7 +126,7 @@ def build_context_menu(view: DocumentView, page: int, pos, annotation: Annotatio
             clipboard.image() is not None and editable)
     menu.addSeparator()
 
-    pages = menu.addMenu(icon("file"), f"Page {number}")
+    pages = menu.addMenu(icon("file"), tr(f"Page {number}"))
     _action(pages, "file-plus", f"Add page (after page {number})", lambda: actions.add_page(page, "blank"), editable)
     _action(pages, "files", "Copy page", lambda: actions.copy_page(page), actions is not None and not view.document.read_only)
     _action(pages, "copy-simple", "Duplicate page", lambda: actions.duplicate(page), editable)
@@ -141,7 +142,7 @@ def build_context_menu(view: DocumentView, page: int, pos, annotation: Annotatio
     if actions is not None and actions.ocr_available():  # shown only where the system can recognise text
         _action(pages, "magnifying-glass-plus", "Run OCR (text recognition)", lambda: actions.run_ocr(page), editable)
 
-    insert = menu.addMenu(icon("plus-circle"), "Insert")
+    insert = menu.addMenu(icon("plus-circle"), tr("Insert"))
     for kind, label in TEMPLATES.items():
         _action(insert, "file-plus", label, lambda k=kind: actions.add_page(page, k), editable)
     insert.addSeparator()

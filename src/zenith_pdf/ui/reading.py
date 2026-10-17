@@ -20,6 +20,7 @@ from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 from shiboken6 import isValid
 
+from ..core.i18n import tr
 from .help import close_help_card
 from .widgets import Fade, FloatingBar, IconButton
 
@@ -44,7 +45,7 @@ class ExitChip(FloatingBar):
         self.button = IconButton("z-reading", f"Leave reading mode (Esc or {SHORTCUT})", icon_size=18,
                                  text=" Exit reading mode", help="reading_mode")  # a space after the icon
         self.button.clicked.connect(self.clicked)
-        key = QLabel("Esc")
+        key = QLabel(tr("Esc"))
         key.setObjectName("HelpKeys")  # the key as the help cards show keys
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 4, 12, 4)

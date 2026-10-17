@@ -57,6 +57,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.document import before_exit
+from ..core.i18n import tr
 from ..core.platforms import native_keys
 from ..icons import icon
 from ..settings import Settings
@@ -419,7 +420,7 @@ class FileDelegate(QStyledItemDelegate):
             if not entry.tags:
                 painter.setPen(QColor(t.text_muted))
                 icon("tag", t.text_muted).paint(painter, QRect(x, rect.center().y() - 8, 16, 16))
-                painter.drawText(QRect(x + 22, rect.y(), 100, rect.height()), Qt.AlignmentFlag.AlignVCenter, "Add tag")
+                painter.drawText(QRect(x + 22, rect.y(), 100, rect.height()), Qt.AlignmentFlag.AlignVCenter, tr("Add tag"))
         elif column == MORE:
             icon("dots-three-vertical", t.text_muted).paint(painter, QRect(rect.center().x() - 9, rect.center().y() - 9,
                                                                            18, 18))
@@ -449,7 +450,7 @@ class NavButton(QPushButton):
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(36)
-        self.setToolTip(text)
+        self.setToolTip(tr(text))
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
@@ -470,7 +471,7 @@ class NavButton(QPushButton):
         painter.setPen(QColor(t.accent_ink if self.isChecked() else t.text))  # text on the tinted fill
         metrics = painter.fontMetrics()
         painter.drawText(QRect(38, 0, rect.width() - 80, rect.height()), Qt.AlignmentFlag.AlignVCenter,
-                         metrics.elidedText(self.label, Qt.TextElideMode.ElideRight, rect.width() - 80))
+                         metrics.elidedText(tr(self.label), Qt.TextElideMode.ElideRight, rect.width() - 80))
         if self.count:
             painter.setPen(QColor(t.text_muted))
             painter.drawText(QRect(rect.width() - 44, 0, 34, rect.height()),
@@ -500,7 +501,7 @@ class QuickCard(QFrame):
         layout.setSpacing(2)
         self.glyph = QLabel()
         self.glyph.setFixedSize(26, 26)
-        self.name = QLabel(title)
+        self.name = QLabel(tr(title))
         self.name.setObjectName("PanelRowText")
         self.caption = muted_label(detail)
         self.caption.setWordWrap(True)
@@ -528,7 +529,7 @@ class QuickCard(QFrame):
         self.caption.setVisible(mode == "full")
         self.name.setVisible(mode != "icon")
         self.layout().setAlignment(self.glyph, Qt.AlignmentFlag.AlignHCenter if mode == "icon" else Qt.AlignmentFlag(0))
-        self.setToolTip("" if mode == "full" else f"{self.title}: {self.detail_text}")
+        self.setToolTip(tr("" if mode == "full" else f"{self.title}: {self.detail_text}"))
 
     def minimumSizeHint(self) -> QSize:
         return QSize(56, super().minimumSizeHint().height())
@@ -573,7 +574,7 @@ class HomePage(QWidget):
         self.logo = QLabel()
         self.logo.setFixedSize(30, 30)
         self.logo.setPixmap(logo_pixmap(30, QApplication.instance().devicePixelRatio()))
-        name = QLabel("Zenith PDF")
+        name = QLabel(tr("Zenith PDF"))
         name.setObjectName("HomeBrand")
         brand.addWidget(self.logo)
         brand.addWidget(name)
@@ -597,11 +598,11 @@ class HomePage(QWidget):
         # Search, open, new
         self.search = QLineEdit()
         self.search.setObjectName("SettingsSearch")
-        self.search.setPlaceholderText("Search your files or tags")
+        self.search.setPlaceholderText(tr("Search your files or tags"))
         self._search_icon = self.search.addAction(icon("magnifying-glass"), QLineEdit.ActionPosition.LeadingPosition)
         self.search.setClearButtonEnabled(True)
         self.search.setFixedHeight(BUTTON_HEIGHT)
-        self.open_button = QPushButton("  Open")
+        self.open_button = QPushButton(tr("  Open"))
         self.open_button.setObjectName("Primary")
         self.open_button.setFixedHeight(BUTTON_HEIGHT)
         self.open_button.clicked.connect(self.open_requested)
@@ -634,7 +635,7 @@ class HomePage(QWidget):
             self.cards.append(card)
         self.quick.installEventFilter(self)
 
-        self.title = QLabel("All files")
+        self.title = QLabel(tr("All files"))
         self.title.setObjectName("HomeSection")
         self.summary = muted_label()
         # The count stands on the title's baseline: bottoms aligned, then lifted by what the big
@@ -701,17 +702,17 @@ class HomePage(QWidget):
         aside = QVBoxLayout(self.aside)
         aside.setContentsMargins(22, 30, 22, 22)
         aside.setSpacing(10)
-        heading = QLabel("Get to know your tools")
+        heading = QLabel(tr("Get to know your tools"))
         heading.setObjectName("SectionTitle")
         heading.setWordWrap(True)
         pitch = muted_label("A short guide to everything in Zenith PDF: reading, marking up, pages, tools and "
                             "shortcuts.")
         pitch.setWordWrap(True)
-        open_guide = QPushButton("Open the guide")
+        open_guide = QPushButton(tr("Open the guide"))
         open_guide.setObjectName("Primary")
         open_guide.setFixedHeight(BUTTON_HEIGHT)
         open_guide.clicked.connect(lambda: self.guide_requested.emit(""))
-        whats_new = QPushButton("What's new")
+        whats_new = QPushButton(tr("What's new"))
         whats_new.setFixedHeight(BUTTON_HEIGHT)
         whats_new.clicked.connect(lambda: self.guide_requested.emit("whats-new"))
         self.tip = QLabel()
@@ -816,18 +817,18 @@ class HomePage(QWidget):
         if self.scope.startswith("folder:"):
             self.title.setText(Path(self.scope[7:]).name or self.scope[7:])
         elif self.scope.startswith("tag:"):
-            self.title.setText(f"Tagged {self.scope[4:]}")
+            self.title.setText(tr(f"Tagged {self.scope[4:]}"))
         else:
-            self.title.setText(titles.get(self.scope, "All files"))
+            self.title.setText(tr(titles.get(self.scope, "All files")))
         count = len(entries)
-        self.summary.setText(f"{count} file{'s' if count != 1 else ''}")
+        self.summary.setText(tr(f"{count} file{'s' if count != 1 else ''}"))
         self.empty.setVisible(not entries)
         self.table.setVisible(bool(entries))
         if self.scope != "all" and not entries:
-            self.empty.setText("Nothing here yet.")
+            self.empty.setText(tr("Nothing here yet."))
         else:
-            self.empty.setText("Files you open will appear here. Open one, or drop PDFs on the window.")
-        self.tip.setText(native_keys(random.choice(TIPS)))
+            self.empty.setText(tr("Files you open will appear here. Open one, or drop PDFs on the window."))
+        self.tip.setText(native_keys(tr(random.choice(TIPS))))
 
     def _on_loaded(self, path: str, info: dict, image: QImage) -> None:
         if info:
@@ -874,7 +875,7 @@ class HomePage(QWidget):
     def set_indexer(self, indexer) -> None:
         """Search inside the documents too, with the app's index."""
         self.inside.indexer = indexer
-        self.search.setPlaceholderText("Search your files, their tags, or the words inside them")
+        self.search.setPlaceholderText(tr("Search your files, their tags, or the words inside them"))
         indexer.indexed.connect(self._on_indexed)
 
     def _on_indexed(self, _path: str) -> None:
@@ -929,7 +930,7 @@ class HomePage(QWidget):
         row = QWidget()
         layout = QHBoxLayout(row)
         layout.setContentsMargins(10, 0, 4, 2)
-        label = QLabel(text.upper())
+        label = QLabel(tr(text).upper())
         label.setObjectName("HomeNavHeading")
         layout.addWidget(label)
         layout.addStretch()
@@ -952,9 +953,9 @@ class HomePage(QWidget):
 
     def _folder_menu(self, folder: str) -> None:
         menu = QMenu(self)
-        menu.addAction(icon("folder-open"), "Show in Explorer",
+        menu.addAction(icon("folder-open"), tr("Show in Explorer"),
                        lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(folder)))
-        menu.addAction(icon("x"), "Unpin", lambda: self._unpin(folder))
+        menu.addAction(icon("x"), tr("Unpin"), lambda: self._unpin(folder))
         menu.exec(self.cursor().pos())
 
     def _unpin(self, folder: str) -> None:
@@ -1010,19 +1011,19 @@ class HomePage(QWidget):
 
     def _file_menu(self, entry: FileEntry) -> None:
         menu = QMenu(self)
-        menu.addAction(icon("file-pdf"), "Open", lambda: self.file_requested.emit(entry.path))
-        menu.addAction(icon("folder-open"), "Show in Explorer",
+        menu.addAction(icon("file-pdf"), tr("Open"), lambda: self.file_requested.emit(entry.path))
+        menu.addAction(icon("folder-open"), tr("Show in Explorer"),
                        lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(entry.path.parent))))
-        menu.addAction(icon("copy"), "Copy the path", lambda: QApplication.clipboard().setText(str(entry.path)))
+        menu.addAction(icon("copy"), tr("Copy the path"), lambda: QApplication.clipboard().setText(str(entry.path)))
         menu.addSeparator()
-        menu.addAction(icon("star"), "Remove the star" if entry.starred else "Star", lambda: self.toggle_star(entry.path))
-        menu.addAction(icon("tag"), "Add tag…", lambda: self.add_tag(entry.path))
+        menu.addAction(icon("star"), tr("Remove the star" if entry.starred else "Star"), lambda: self.toggle_star(entry.path))
+        menu.addAction(icon("tag"), tr("Add tag…"), lambda: self.add_tag(entry.path))
         if entry.tags:
-            remove = menu.addMenu(icon("tag-simple"), "Remove tag")
+            remove = menu.addMenu(icon("tag-simple"), tr("Remove tag"))
             for name in entry.tags:
-                remove.addAction(name, lambda n=name: self.remove_tag(entry.path, n))
+                remove.addAction(tr(name), lambda n=name: self.remove_tag(entry.path, n))
         menu.addSeparator()
-        menu.addAction(icon("x"), "Remove from the list", lambda: self._settings.remove_recent(entry.path))
+        menu.addAction(icon("x"), tr("Remove from the list"), lambda: self._settings.remove_recent(entry.path))
         menu.exec(self.cursor().pos())
 
     # Fitting the window ---------------------------------------------------------

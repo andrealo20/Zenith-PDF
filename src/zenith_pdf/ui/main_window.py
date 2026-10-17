@@ -24,6 +24,7 @@ from shiboken6 import isValid
 
 from .. import __version__
 from ..core.document import Document, PdfiumError
+from ..core.i18n import tr
 from ..core.platforms import key as platform_key
 from ..core.releases import RELEASES, since
 from ..core.render import RenderPool
@@ -87,7 +88,7 @@ class MainWindow(QMainWindow):
         self.library = library or Library(settings, self)
         self.workspaces: list[Workspace] = []
         self._links: dict[QWidget, list] = {}  # each tab's (signal, slot) to this window, undone when it moves away
-        self.setWindowTitle(APP_NAME)
+        self.setWindowTitle(tr(APP_NAME))
         self.setAcceptDrops(True)
         self.resize(1320, 860)
         if first and settings.window_geometry is not None:
@@ -219,7 +220,7 @@ class MainWindow(QMainWindow):
                 self._add_theme_menu(menu)
             else:
                 icon_name, text, slot = entry
-                action = menu.addAction(text, slots.get(slot) or getattr(self, slot))
+                action = menu.addAction(tr(text), slots.get(slot) or getattr(self, slot))
                 self._menu_icons.append((action, icon_name))
                 if slot == "toggle_reading_mode":
                     self.reading_action = action
@@ -228,18 +229,18 @@ class MainWindow(QMainWindow):
                     self._document_actions[slot] = action
         menu.aboutToShow.connect(self._sync_menu)
         menu.addSeparator()
-        about = menu.addAction("About Zenith PDF", lambda: self.open_settings("about"))
+        about = menu.addAction(tr("About Zenith PDF"), lambda: self.open_settings("about"))
         self._menu_icons.append((about, "info"))
         self._paint_menu_icons()
         themes.changed.connect(self._paint_menu_icons)
         return explain_menu(menu)
 
     def _add_theme_menu(self, menu: QMenu) -> None:
-        theme_menu = menu.addMenu("Theme")
+        theme_menu = menu.addMenu(tr("Theme"))
         self._menu_icons.append((theme_menu, "circle-half"))
         group = QActionGroup(self)
         for name, label in THEME_NAMES.items():
-            action = theme_menu.addAction(label, lambda n=name: self.set_theme(n))
+            action = theme_menu.addAction(tr(label), lambda n=name: self.set_theme(n))
             action.setCheckable(True)
             action.setData(name)
             group.addAction(action)
@@ -344,7 +345,7 @@ class MainWindow(QMainWindow):
         self.home.refresh()
         self.stack.setCurrentWidget(self.home)
         self.home_button.setChecked(True)
-        self.setWindowTitle(APP_NAME)
+        self.setWindowTitle(tr(APP_NAME))
         for button in self.document_buttons:
             button.setEnabled(False)
 
@@ -397,7 +398,7 @@ class MainWindow(QMainWindow):
         self.tabs.setTabText(index, title)
         self.tabs.setTabToolTip(index, tip)
         if self.stack.currentWidget() is widget:
-            self.setWindowTitle(f"{window} - {APP_NAME}")
+            self.setWindowTitle(tr(f"{window} - {APP_NAME}"))
 
     def _on_tab_moved(self, source: int, target: int) -> None:
         self.workspaces.insert(target, self.workspaces.pop(source))
@@ -437,7 +438,7 @@ class MainWindow(QMainWindow):
             return True
         name = workspace.document.path.name
         progress = QProgressDialog(f"Finishing the work on {name}…", "Don't close", 0, 0, self)
-        progress.setWindowTitle("Please wait")
+        progress.setWindowTitle(tr("Please wait"))
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
         loop = QEventLoop()
@@ -633,17 +634,17 @@ class MainWindow(QMainWindow):
             return None
         widget = self.workspaces[index]
         menu = QMenu(self)
-        move = menu.addAction(icon("app-window"), "Move to new window", lambda: self.tear_off(widget))
+        move = menu.addAction(icon("app-window"), tr("Move to new window"), lambda: self.tear_off(widget))
         move.setEnabled(isinstance(widget, Workspace) and len(self.workspaces) > 1)
         others = [w for w in MainWindow.open_windows if w is not self and w.isVisible()]
         if others and isinstance(widget, Workspace):
-            to = menu.addMenu(icon("arrow-square-out"), "Move to window")
+            to = menu.addMenu(icon("arrow-square-out"), tr("Move to window"))
             for number, window in enumerate(others, start=1):
-                to.addAction(window.windowTitle() or f"Window {number}",
+                to.addAction(window.windowTitle() or tr(f"Window {number}"),
                              lambda w=window: self.move_tab(widget, w))
         menu.addSeparator()
-        menu.addAction(icon("x"), "Close tab", lambda: self.close_tab(self.workspaces.index(widget)))
-        close_others = menu.addAction("Close other tabs", lambda: self._close_others(widget))
+        menu.addAction(icon("x"), tr("Close tab"), lambda: self.close_tab(self.workspaces.index(widget)))
+        close_others = menu.addAction(tr("Close other tabs"), lambda: self._close_others(widget))
         close_others.setEnabled(len(self.workspaces) > 1)
         return explain_menu(menu)
 

@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import tr
 from ..icons import icon
 from ..theme import themes
 from .help import TOPICS
@@ -50,7 +51,7 @@ class ToolTile(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         topic = TOPICS.get(spec.help)
-        self.setToolTip(topic.what if topic else spec.title)
+        self.setToolTip(tr(topic.what if topic else spec.title))
         themes.changed.connect(self.update)
 
     def _circle(self) -> QRectF:
@@ -97,7 +98,7 @@ class ToolTile(QWidget):
         painter.setFont(font)
         painter.drawText(QRectF(0, circle.bottom() + 8, self.width(), 40),
                          Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
-                         self.spec.title)
+                         tr(self.spec.title))
 
     def mouseMoveEvent(self, event) -> None:
         self.update()
@@ -197,7 +198,7 @@ class ToolChooser(QWidget):
         panel = FloatingBar(self, solid=True)
         panel.setObjectName("ToolChooser")
 
-        title = QLabel("Choose a tool")
+        title = QLabel(tr("Choose a tool"))
         title.setObjectName("ChooserTitle")
         close = IconButton("x", "Close (Esc)", icon_size=20)
         close.clicked.connect(self.close)
@@ -211,7 +212,7 @@ class ToolChooser(QWidget):
         tabs.setSpacing(6)
         for index, group in enumerate(GROUPS):
             tab = QToolButton()
-            tab.setText(group)
+            tab.setText(tr(group))
             tab.setObjectName("ChooserTab")
             tab.setCheckable(True)
             tab.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -221,7 +222,7 @@ class ToolChooser(QWidget):
         tabs.addStretch()
         self.search = QLineEdit()
         self.search.setObjectName("SettingsSearch")
-        self.search.setPlaceholderText("Search tools")
+        self.search.setPlaceholderText(tr("Search tools"))
         self.search.setFixedWidth(200)
         self._search_icon = self.search.addAction(icon("magnifying-glass"), QLineEdit.ActionPosition.TrailingPosition)
         self.search.textChanged.connect(self._search)
@@ -240,8 +241,8 @@ class ToolChooser(QWidget):
         footer.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         footer_layout = QHBoxLayout(footer)
         footer_layout.setContentsMargins(24, 14, 24, 14)
-        hint = QLabel("<b>Drag and drop</b>&nbsp;&nbsp;Add a tool straight to your toolbar, where you want it. "
-                      "Right-click a toolbar button for its menu: style, lock, move or remove.")
+        hint = QLabel(tr("<b>Drag and drop</b>&nbsp;&nbsp;Add a tool straight to your toolbar, where you want it. "
+                      "Right-click a toolbar button for its menu: style, lock, move or remove."))
         hint.setObjectName("Muted")
         hint.setWordWrap(True)
         footer_layout.addWidget(hint, 1)

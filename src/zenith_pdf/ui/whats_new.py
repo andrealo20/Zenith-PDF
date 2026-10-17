@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import __version__
+from ..core.i18n import tr
 from ..core.platforms import native_keys
 from ..core.releases import Highlight, Release
 from ..icons import icon
@@ -26,7 +27,7 @@ ROW_GLYPH = 20  # the icons of the overview
 
 
 def _label(text: str, name: str, rich: bool = False) -> QLabel:
-    label = QLabel(native_keys(text))
+    label = QLabel(native_keys(tr(text)))
     label.setObjectName(name)
     label.setWordWrap(True)
     label.setTextFormat(Qt.TextFormat.RichText if rich else Qt.TextFormat.PlainText)
@@ -41,7 +42,7 @@ class WhatsNewDialog(QDialog):
     def __init__(self, releases: list[Release], parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("MessageDialog")
-        self.setWindowTitle("What's new")
+        self.setWindowTitle(tr("What's new"))
         self.setFixedWidth(WIDTH)
         self.highlights: list[Highlight] = [h for release in releases for h in release.highlights]
         self.pages = QStackedWidget()
@@ -51,7 +52,7 @@ class WhatsNewDialog(QDialog):
 
         self.dots = QLabel()
         self.dots.setObjectName("Muted")
-        self.back = QPushButton("Back")
+        self.back = QPushButton(tr("Back"))
         self.back.setAutoDefault(False)
         self.back.clicked.connect(lambda: self.go(self.pages.currentIndex() - 1))
         self.next = QPushButton()
@@ -111,7 +112,7 @@ class WhatsNewDialog(QDialog):
         column.addWidget(_label(highlight.title, "DialogTitle"))
         column.addWidget(_label(highlight.text, "DialogBody"))
         if highlight.action:
-            show = QPushButton("Show me")
+            show = QPushButton(tr("Show me"))
             show.setIcon(icon("arrow-right", themes.current.accent))
             show.setAutoDefault(False)
             show.setObjectName("ShowMe")
@@ -125,8 +126,8 @@ class WhatsNewDialog(QDialog):
         self.pages.setCurrentIndex(index)
         last = index == self.pages.count() - 1
         self.back.setVisible(index > 0)
-        self.next.setText("Done" if last else ("Show me each one" if index == 0 else "Next"))
-        self.dots.setText(f"{index} of {len(self.highlights)}" if index else "")
+        self.next.setText(tr("Done" if last else ("Show me each one" if index == 0 else "Next")))
+        self.dots.setText(tr(f"{index} of {len(self.highlights)}" if index else ""))
 
     def _next(self) -> None:
         if self.pages.currentIndex() == self.pages.count() - 1:

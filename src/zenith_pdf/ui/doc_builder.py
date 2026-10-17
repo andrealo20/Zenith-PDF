@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
 
 from ..core import builder as core
 from ..core.document import Document, PdfiumError
+from ..core.i18n import tr
 from ..core.render import RenderPool
 from ..icons import icon
 from ..theme import themes
@@ -211,7 +212,7 @@ class CardDelegate(QStyledItemDelegate):
         painter.setBrush(QColor(255, 255, 255, 220))
         painter.drawRoundedRect(pill, 9, 9)
         painter.setPen(colour.darker(150))
-        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, label)
+        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, tr(label))
 
         if row.group and source is not None:
             strip = QRectF(card.x(), card.bottom() - 28, card.width(), 28)
@@ -221,7 +222,7 @@ class CardDelegate(QStyledItemDelegate):
             painter.setPen(QColor("white"))
             painter.setFont(option.font)
             name = painter.fontMetrics().elidedText(source.path.name, Qt.TextElideMode.ElideMiddle, round(strip.width()) - 16)
-            painter.drawText(strip.adjusted(8, 0, -8, 0), Qt.AlignmentFlag.AlignVCenter, name)
+            painter.drawText(strip.adjusted(8, 0, -8, 0), Qt.AlignmentFlag.AlignVCenter, tr(name))
         if entry.source is not None and builder.can_toggle(row):
             toggle = self._toggle_rect(card)
             painter.setPen(QPen(QColor("white"), 1.5))
@@ -272,7 +273,7 @@ class DocBuilder(QWidget):
         open_button.clicked.connect(self.open_dialog)
         sort_button = QPushButton(icon("sort-ascending"), " Sort A-Z")
         sort_button.clicked.connect(self.sort_sources)
-        clear_button = QPushButton("Clear")
+        clear_button = QPushButton(tr("Clear"))
         clear_button.clicked.connect(self.clear_all)
         for button, key in ((open_button, "db_open"), (sort_button, "db_sort"), (clear_button, "db_clear")):
             attach_help(button, key)
@@ -328,12 +329,12 @@ class DocBuilder(QWidget):
         self.selection_button.setObjectName("MenuButton")  # a button with a caret: the choices are in its menu
         self.selection_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(self.selection_button)
-        menu.addAction("Select all", lambda: self.grid.selectAll())
-        menu.addAction("Select none", lambda: self.grid.clearSelection())
-        menu.addAction("Invert selection", self._invert_selection)
+        menu.addAction(tr("Select all"), lambda: self.grid.selectAll())
+        menu.addAction(tr("Select none"), lambda: self.grid.clearSelection())
+        menu.addAction(tr("Invert selection"), self._invert_selection)
         self.selection_button.setMenu(menu)
         attach_help(self.selection_button, "db_selection")
-        self.build_button = QPushButton("Build")
+        self.build_button = QPushButton(tr("Build"))
         self.build_button.setObjectName("Primary")
         self.build_button.clicked.connect(self.build)
         attach_help(self.build_button, "db_build")
@@ -351,7 +352,7 @@ class DocBuilder(QWidget):
         self._fit_name()
         self.count = muted_label()
         insert = QToolButton()
-        insert.setText(" Insert page")
+        insert.setText(tr(" Insert page"))
         insert.setIcon(icon("plus"))
         insert.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         insert.clicked.connect(self.insert_blank)
@@ -375,7 +376,7 @@ class DocBuilder(QWidget):
         self.grid.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.grid.setSpacing(4)
         self.grid.setUniformItemSizes(True)
-        self.empty = QLabel("Open PDF files, or drop them here, to start building.")
+        self.empty = QLabel(tr("Open PDF files, or drop them here, to start building."))
         self.empty.setObjectName("Muted")
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -400,7 +401,7 @@ class DocBuilder(QWidget):
         the current selection is kept (the entry list must then be unchanged)."""
         self._rebuild_grid(select)
         count = len(self.entries)
-        self.count.setText(f"({count} page{'s' if count != 1 else ''})")
+        self.count.setText(tr(f"({count} page{'s' if count != 1 else ''})"))
         self.empty.setVisible(not self.entries)
         self.grid.setVisible(bool(self.entries))
         self.build_button.setEnabled(bool(self.entries))
@@ -428,7 +429,7 @@ class DocBuilder(QWidget):
         handle.setPixmap(icon_pixmap("dots-six-vertical", 16, themes.current.text_muted))
         text = QVBoxLayout()
         text.setSpacing(0)
-        name = QLabel(source.path.name)
+        name = QLabel(tr(source.path.name))
         name.setToolTip(str(source.path))
         detail = muted_label(f"{source.document.page_count} pages · {pages} in use · added {source.added:%H:%M}")
         text.addWidget(name)
@@ -446,8 +447,8 @@ class DocBuilder(QWidget):
         more = IconButton("dots-three-vertical", "More", icon_size=16)
         more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(more)
-        menu.addAction("Add all its pages again", lambda: self.add_pages_of(source.key))
-        menu.addAction("Remove from the build", lambda: self.remove_source(source.key))
+        menu.addAction(tr("Add all its pages again"), lambda: self.add_pages_of(source.key))
+        menu.addAction(tr("Remove from the build"), lambda: self.remove_source(source.key))
         more.setMenu(menu)
         layout.addWidget(handle)
         layout.addLayout(text, 1)
@@ -466,7 +467,7 @@ class DocBuilder(QWidget):
 
     def _sync_selection(self, *_) -> None:
         count = len(self.selected_entries())
-        self.selection_button.setText(f"{count} selected")
+        self.selection_button.setText(tr(f"{count} selected"))
         for button in self.selection_tools:
             button.setEnabled(count > 0)
 

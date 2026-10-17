@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from ..core import compare
 from ..core.compare import Change, Word
 from ..core.document import Document
+from ..core.i18n import tr
 from ..theme import themes
 from .widgets import muted_label
 
@@ -107,10 +108,10 @@ class PageColumn(QGraphicsView):
 
     def spot(self) -> tuple[int, float]:
         """The page at the top of the column, and how far down it the top is (0 to 1)."""
-        y = self.mapToScene(0, 0).y()
+        y = self.mapToScene(0, 0).y() + 0.5  # the scroll bar moves by whole pixels, page tops fall between them
         index = max(0, max((i for i, top in enumerate(self.tops) if top <= y), default=0))
         height = self._pages[index].boundingRect().height() if self._pages else 1
-        return index, (y - self.tops[index]) / max(height, 1) if self.tops else 0.0
+        return index, max(0.0, y - 0.5 - self.tops[index]) / max(height, 1) if self.tops else 0.0
 
     def go(self, page: int, fraction: float) -> None:
         if not self.tops:
@@ -136,21 +137,21 @@ class CompareWindow(QWidget):
 
     def __init__(self, old: Document, new: Document, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
-        self.setWindowTitle(f"Compare: {old.path.name} and {new.path.name}")
+        self.setWindowTitle(tr(f"Compare: {old.path.name} and {new.path.name}"))
         self.resize(1400, 900)
         self.old, self.new = old, new
         self.changes: list[Change] = []
         self.left, self.right = PageColumn(old), PageColumn(new)
         heading = QHBoxLayout()
         for name, side in ((old.path.name, "Older"), (new.path.name, "Newer")):
-            label = QLabel(f"{side}: {name}")
+            label = QLabel(f"{tr(side)}: {name}")
             label.setObjectName("HomeSection")
             heading.addWidget(label, 1)
         self.status = muted_label("Comparing…")
         self.list = QListWidget()
         self.list.setMinimumWidth(300)
         self.list.currentRowChanged.connect(self._go)
-        previous, following = QPushButton("Previous"), QPushButton("Next")
+        previous, following = QPushButton(tr("Previous")), QPushButton(tr("Next"))
         previous.clicked.connect(lambda: self.step(-1))
         following.clicked.connect(lambda: self.step(1))
         buttons = QHBoxLayout()
@@ -194,13 +195,13 @@ class CompareWindow(QWidget):
         for change in changes:
             self.left.mark(change.old, change.kind)
             self.right.mark(change.new, change.kind)
-            item = QListWidgetItem(f"{NAMES[change.kind]} · p. {change.page + 1}\n{change.summary()}")
+            item = QListWidgetItem(tr(f"{NAMES[change.kind]} · p. {change.page + 1}\n{change.summary()}"))
             item.setForeground(QBrush(COLOURS[change.kind].darker(150) if themes.current.name == "light"
                                       else COLOURS[change.kind].lighter(160)))
             self.list.addItem(item)
         found = compare.counts(changes)
-        self.status.setText("The two versions read the same." if not changes else
-                            f"{found['added']} added, {found['removed']} removed, {found['changed']} changed")
+        self.status.setText(tr("The two versions read the same." if not changes else
+                            f"{found['added']} added, {found['removed']} removed, {found['changed']} changed"))
 
     def step(self, by: int) -> None:
         if self.changes:

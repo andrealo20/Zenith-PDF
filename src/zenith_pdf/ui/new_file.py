@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from ..core.i18n import tr
 from ..settings import Settings
 from ..theme import themes
 from .widgets import FloatingBar, IconButton, icon_pixmap
@@ -29,7 +30,7 @@ class Row(QFrame):
         layout.setSpacing(12)
         glyph = QLabel()
         glyph.setPixmap(icon_pixmap(icon_name, 22, themes.current.accent if accent else None))
-        label = QLabel(text)
+        label = QLabel(tr(text))
         label.setObjectName("PanelRowText")
         layout.addWidget(glyph)
         layout.addWidget(label, 1)
@@ -63,7 +64,7 @@ class Section(QWidget):
         self._header.clicked.connect(self.toggle)
         header = QHBoxLayout(self._header)
         header.setContentsMargins(4, 6, 4, 2)
-        label = QLabel(title)
+        label = QLabel(tr(title))
         label.setObjectName("SectionTitle")
         self._chevron = QLabel()
         header.addWidget(label, 1)
@@ -120,7 +121,7 @@ class NewFilePanel(FloatingBar):
         templates = Section("Saved templates")
         for position, template in enumerate(settings.templates):
             row = templates.add(Row("notebook", template["name"]))
-            row.setToolTip(f"{template['paper']} {template['orientation']}, {template['kind']}, {template['pages']} pages")
+            row.setToolTip(tr(f"{template['paper']} {template['orientation']}, {template['kind']}, {template['pages']} pages"))
             row.clicked.connect(lambda t=template: self._do(self.from_template, t))
             row.add_button("pencil-simple", "Edit template", lambda _=False, p=position: self._do(self.edit_template, p))
             row.add_button("x", "Delete template", lambda _=False, p=position: self._do(self.delete_template, p))

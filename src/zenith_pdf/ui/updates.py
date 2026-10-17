@@ -16,6 +16,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
 
 from ..core import updates
+from ..core.i18n import tr
 from ..core.updates import Update, UpdateError
 from ..settings import Settings
 from ..theme import themes
@@ -194,8 +195,8 @@ class UpdateCard(FloatingBar):
                                f"QProgressBar::chunk {{ background: {t.accent}; border-radius: 3px; }}")
 
     def _set(self, title: str, text: str, buttons: list[tuple[str, object, bool]], progress: bool = False) -> None:
-        self.title.setText(title)
-        self.text.setText(text)
+        self.title.setText(tr(title))
+        self.text.setText(tr(text))
         self.text.setVisible(bool(text))
         self.bar.setVisible(progress)
         while self.buttons.count():
@@ -206,7 +207,7 @@ class UpdateCard(FloatingBar):
                 item.widget().deleteLater()
         self.buttons.addStretch()
         for label, slot, primary in buttons:
-            button = QPushButton(label)
+            button = QPushButton(tr(label))
             button.setObjectName("Primary" if primary else "")
             button.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # the card never takes the keyboard from the pages
             button.clicked.connect(slot)

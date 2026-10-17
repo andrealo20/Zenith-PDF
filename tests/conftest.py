@@ -5,6 +5,7 @@ import sys
 import tempfile
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("ZENITH_LANGUAGE", "en")  # the tests read the English texts, whatever the system speaks
 if sys.platform == "win32":  # the offscreen platform finds no fonts of its own there
     os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ.get("WINDIR", "C:/Windows"), "Fonts"))
 os.environ.setdefault("ZENITH_RENDER_PROCESSES", "0")  # test_render.py covers the processes

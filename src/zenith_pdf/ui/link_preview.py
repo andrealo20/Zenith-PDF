@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from ..core.annotations import Rect
 from ..core.document import DocumentClosed, PdfiumError
+from ..core.i18n import tr
 from ..theme import themes
 from .widgets import FloatingBar
 
@@ -192,7 +193,7 @@ class LinkPreview(FloatingBar):
             self.leave()  # the document is closing or changing: there is nothing to show
             return
         number = str(page + 1)
-        self.title.setText(f"Page {number}" if label == number else f"Page {label} ({number})")
+        self.title.setText(tr(f"Page {number}" if label == number else f"Page {label} ({number})"))
         self.picture.set_pixmap(pixmap, mark)
         self.layout().activate()
         self.adjustSize()

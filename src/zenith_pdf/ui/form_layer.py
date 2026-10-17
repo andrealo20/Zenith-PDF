@@ -11,6 +11,8 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QPen
 from PySide6.QtWidgets import QGraphicsProxyWidget, QGraphicsRectItem, QLineEdit, QMenu, QPlainTextEdit
 
+from shiboken6 import isValid
+
 from ..core.forms import Box, Field
 from ..core.platforms import ui_font
 from ..theme import themes
@@ -91,7 +93,6 @@ class FormLayer:
         self.view = view
         self.items: list[FieldItem] = []
         self._editing: tuple[FieldItem, QGraphicsProxyWidget, object] | None = None
-        themes.changed.connect(self._recolour)
 
     @property
     def fields(self) -> list[Field]:
@@ -113,9 +114,10 @@ class FormLayer:
                 rect = document.geometry(box.page).rect_to_display(box.rect)
                 self.items.append(FieldItem(field, box, rect, self.view._pages[box.page]))
 
-    def _recolour(self, *_) -> None:
+    def recolour(self) -> None:
+        """The fields in the new theme's accent; the view calls it when the theme changes."""
         for item in self.items:
-            if item.scene() is not None:
+            if isValid(item) and item.scene() is not None:
                 item.recolour()
 
     def item_at(self, view_pos: QPointF) -> FieldItem | None:

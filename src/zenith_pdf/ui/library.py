@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.annotations import Annotation, union
+from ..core.i18n import tr
 from ..settings import Settings
 from ..theme import qcolor, themes
 from . import messages
@@ -159,8 +160,8 @@ class LibraryPanel(QWidget):
             return
         position = item.data(INDEX_ROLE)
         menu = QMenu(self)
-        menu.addAction("Rename…", lambda: self._rename(position, item.text()))
-        menu.addAction("Remove from library", lambda: self._library.remove(position))
+        menu.addAction(tr("Rename…"), lambda: self._rename(position, item.text()))
+        menu.addAction(tr("Remove from library"), lambda: self._library.remove(position))
         menu.exec(self.list.viewport().mapToGlobal(point))
         menu.deleteLater()
 

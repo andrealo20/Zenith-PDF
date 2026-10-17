@@ -16,6 +16,7 @@ from PySide6.QtGui import QColor, QCursor, QDrag, QIcon, QPainter
 from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QMenu, QToolButton, QWidget
 from shiboken6 import isValid
 
+from ..core.i18n import tr
 from ..icons import hue_colour, icon, readable
 from ..theme import qcolor as token_color, themes
 from .document_view import DocumentView
@@ -368,10 +369,10 @@ class AnnotationToolbar(FloatingBar):
         if self._visiting is not None:
             spec = BY_KEY[base_of(self._visiting)]
             action = menu.addAction(icon(spec.icon, tool_colour(self._settings, self._visiting)),
-                                    instance_title(self._visiting), lambda k=self._visiting: self._from_overflow(k))
+                                    tr(instance_title(self._visiting)), lambda k=self._visiting: self._from_overflow(k))
             action.setCheckable(True)
             action.setChecked(True)
-            menu.addAction("Add it to the toolbar", lambda k=self._visiting: self.add_tool(k))
+            menu.addAction(tr("Add it to the toolbar"), lambda k=self._visiting: self.add_tool(k))
         if max_width is None:
             self._sync_overflow()
             self.adjustSize()
@@ -391,7 +392,7 @@ class AnnotationToolbar(FloatingBar):
             menu.addSeparator()
         for key in self._hidden:
             spec = BY_KEY[base_of(key)]
-            action = menu.addAction(icon(spec.icon, tool_colour(self._settings, key)), instance_title(key),
+            action = menu.addAction(icon(spec.icon, tool_colour(self._settings, key)), tr(instance_title(key)),
                                     lambda k=key: self._from_overflow(k))
             action.setCheckable(not spec.action)
             action.setChecked(key == self._settings.tool)
@@ -425,7 +426,7 @@ class AnnotationToolbar(FloatingBar):
             on = key == active and not button.spec.action
             locked = on and base_of(key) in LOCKABLE and self._settings.is_locked(key)
             resized = button.set_state(on, locked, ink_colour(self._settings, key)) or resized
-            button.setToolTip(self._tip(key))
+            button.setToolTip(tr(self._tip(key)))
             detail = ", ".join(self._details(key))  # the help card has the name already
             button.setProperty("help_detail", detail[:1].upper() + detail[1:])
         self._sync_overflow()

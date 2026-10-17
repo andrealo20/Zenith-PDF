@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 
 from ..core import images, mathtext
 from ..core.annotations import REAL_UNITS, UNITS
+from ..core.i18n import tr
 from ..core.platforms import WINDOWS, math_font, mono_font, settings_place, ui_font
 from ..icons import icon
 from ..theme import themes
@@ -74,13 +75,13 @@ EXAMPLES = [
 
 
 def _heading(text: str) -> QLabel:
-    label = QLabel(text)
+    label = QLabel(tr(text))
     label.setObjectName("DialogTitle")
     return label
 
 
 def _intro(text: str) -> QLabel:
-    label = QLabel(text)
+    label = QLabel(tr(text))
     label.setObjectName("DialogBody")
     label.setWordWrap(True)
     return label
@@ -88,7 +89,7 @@ def _intro(text: str) -> QLabel:
 
 def _layout(dialog: QDialog, title: str, intro: str = "") -> QVBoxLayout:
     """The dialog's column, with its heading and intro already in it."""
-    dialog.setWindowTitle(title)
+    dialog.setWindowTitle(tr(title))
     dialog.setMinimumWidth(DIALOG_WIDTH)
     layout = QVBoxLayout(dialog)
     layout.setContentsMargins(24, 20, 24, 20)
@@ -105,7 +106,7 @@ def _layout(dialog: QDialog, title: str, intro: str = "") -> QVBoxLayout:
 
 def _paper_label(text: str = "") -> QLabel:
     """A preview on white paper, as it will be on the page; its own text is grey whatever the theme."""
-    label = QLabel(text)
+    label = QLabel(tr(text))
     label.setObjectName("EquationPreview")
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     label.setStyleSheet(f"color: {PAPER_TEXT};")
@@ -119,12 +120,12 @@ def _footer(dialog: QDialog, layout: QVBoxLayout, action: str, *left: QWidget) -
     for widget in left:
         row.addWidget(widget)
     row.addStretch()
-    ok = QPushButton(action)
+    ok = QPushButton(tr(action))
     ok.setObjectName("Primary")
     ok.setAutoDefault(False)
     ok.setDefault(True)
     ok.clicked.connect(dialog.accept)
-    cancel = QPushButton("Cancel")
+    cancel = QPushButton(tr("Cancel"))
     cancel.setAutoDefault(False)
     cancel.clicked.connect(dialog.reject)
     row.addWidget(ok)
@@ -136,7 +137,7 @@ def _footer(dialog: QDialog, layout: QVBoxLayout, action: str, *left: QWidget) -
 
 def _field_label(text: str, width: int) -> QLabel:
     """A form label of a set width, so fields line up across the pages of a dialog."""
-    label = QLabel(text)
+    label = QLabel(tr(text))
     label.setFixedWidth(width)
     return label
 
@@ -160,7 +161,7 @@ class LinkDialog(QDialog):
         self.kind = Segments(["Web address", "Page of this document"])
         self.web, self.page = self.kind.buttons
         self.address = QLineEdit(uri)
-        self.address.setPlaceholderText("example.org or name@example.org")
+        self.address.setPlaceholderText(tr("example.org or name@example.org"))
         self.number = QSpinBox()
         self.number.setRange(1, max(1, page_count))
         self.number.setValue(target + 1 if target >= 0 else 1)
@@ -189,7 +190,7 @@ class LinkDialog(QDialog):
         layout.addWidget(self.fields)
         left = []
         if existing:
-            remove = QPushButton("Remove link")
+            remove = QPushButton(tr("Remove link"))
             remove.setObjectName("DangerText")
             remove.setAutoDefault(False)
             remove.clicked.connect(self._remove)
@@ -249,19 +250,19 @@ class ScaleDialog(QDialog):
         self.real_unit.setCurrentText(real_unit)
         self.presets = QComboBox()
         for label, values in SCALES:
-            self.presets.addItem(label, values)
-        self.presets.addItem("Custom", None)
+            self.presets.addItem(tr(label), values)
+        self.presets.addItem(tr("Custom"), None)
         self.presets.activated.connect(self._preset)  # only the user's own picks, not _match's
         grid = QGridLayout()
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(12)
         grid.setColumnStretch(1, 1)
-        grid.addWidget(QLabel("Scale"), 0, 0)
+        grid.addWidget(QLabel(tr("Scale")), 0, 0)
         grid.addWidget(self.presets, 0, 1, 1, 2)
-        grid.addWidget(QLabel("On the page"), 1, 0)
+        grid.addWidget(QLabel(tr("On the page")), 1, 0)
         grid.addWidget(self.paper, 1, 1)
         grid.addWidget(self.paper_unit, 1, 2)
-        grid.addWidget(QLabel("In reality"), 2, 0)
+        grid.addWidget(QLabel(tr("In reality")), 2, 0)
         grid.addWidget(self.real, 2, 1)
         grid.addWidget(self.real_unit, 2, 2)
         layout.addLayout(grid)
@@ -307,7 +308,7 @@ class EquationDialog(QDialog):
         self.setMinimumWidth(620)
         self._color = color
         self.source = QPlainTextEdit(source)
-        self.source.setPlaceholderText(r"e.g. x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}")
+        self.source.setPlaceholderText(tr(r"e.g. x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}"))
         self.source.setStyleSheet(f'font-family: "{mono_font()}"; font-size: 15px;')
         self.source.setTabChangesFocus(True)
         self.source.setFixedHeight(84)
@@ -328,15 +329,15 @@ class EquationDialog(QDialog):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setSpacing(4)
         for number, (name, label, text) in enumerate(EXAMPLES):
-            button = QPushButton(label)
-            button.setToolTip(f"{name}: {text}")
+            button = QPushButton(tr(label))
+            button.setToolTip(f"{tr(name)}: {text}")
             button.setAccessibleName(name)
             button.setAutoDefault(False)
             button.clicked.connect(lambda _=False, t=text: self._insert(t))
             grid.addWidget(button, number // 7, number % 7)
         options = QHBoxLayout()
         options.setSpacing(8)
-        options.addWidget(QLabel("Size"))
+        options.addWidget(QLabel(tr("Size")))
         options.addWidget(self.size_box)
         options.addStretch()
         layout.addWidget(self.source)
@@ -344,7 +345,7 @@ class EquationDialog(QDialog):
         layout.addLayout(options)
         layout.addWidget(self.preview, 1)
         self.ok_button = _footer(self, layout, "Place on the page" if not source else "Save")
-        self.ok_button.setToolTip("Ctrl+Enter")
+        self.ok_button.setToolTip(tr("Ctrl+Enter"))
         self.source.textChanged.connect(self._render)
         self.size_box.valueChanged.connect(self._render)
         self._render()
@@ -377,7 +378,7 @@ class EquationDialog(QDialog):
             self.preview.setStyleSheet(f"color: {PAPER_DANGER if problem else PAPER_TEXT};")
         self.ok_button.setEnabled(image is not None)
         if image is None:
-            self.preview.setText(problem or "The equation appears here.")
+            self.preview.setText(tr(problem or "The equation appears here."))
             return
         pixmap = QPixmap.fromImage(image)
         pixmap.setDevicePixelRatio(1.5)  # rendered at 2 pixels a point: about the size it will print
@@ -448,7 +449,7 @@ class _DrawPad(QWidget):
         if not self.strokes:
             painter.setPen(QColor(150, 150, 158))
             painter.drawText(QRectF(20, self.height() - 36, self.width() - 40, 24),
-                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, "Sign above the line")
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, tr("Sign above the line"))
         painter.setPen(QPen(self.color, 2.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(self._path())
@@ -485,7 +486,7 @@ def typed_signature(name: str, family: str, color) -> QImage:
     painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
     painter.setFont(font)
     painter.setPen(QColor.fromRgbF(*color))
-    painter.drawText(QRectF(20, 10, bounds.width(), bounds.height()), Qt.AlignmentFlag.AlignLeft, name)
+    painter.drawText(QRectF(20, 10, bounds.width(), bounds.height()), Qt.AlignmentFlag.AlignLeft, tr(name))
     painter.end()
     return image
 
@@ -525,7 +526,7 @@ class SignatureDialog(QDialog):
 
         typed = QWidget()
         self.name = QLineEdit(default_name)
-        self.name.setPlaceholderText("Your name")
+        self.name.setPlaceholderText(tr("Your name"))
         self.style_box = QComboBox()  # not self.font: that would hide QWidget.font()
         for family in fonts:
             self.style_box.addItem(family, family)
@@ -542,7 +543,7 @@ class SignatureDialog(QDialog):
 
         drawn = QWidget()
         self.pad = _DrawPad()
-        clear = QPushButton("Clear")
+        clear = QPushButton(tr("Clear"))
         clear.setAutoDefault(False)
         clear.setIcon(icon("eraser"))
         clear.clicked.connect(self.pad.clear)
@@ -558,7 +559,7 @@ class SignatureDialog(QDialog):
 
         picture = QWidget()
         self.picture_path = ""
-        choose = QPushButton("Choose a picture…")
+        choose = QPushButton(tr("Choose a picture…"))
         choose.setAutoDefault(False)
         choose.setIcon(icon("image"))
         choose.clicked.connect(self._choose_picture)
@@ -572,7 +573,7 @@ class SignatureDialog(QDialog):
         picture_row.setSpacing(8)
         picture_row.addWidget(choose)
         picture_row.addStretch()
-        picture_row.addWidget(QLabel("Make the paper transparent"))
+        picture_row.addWidget(QLabel(tr("Make the paper transparent")))
         picture_row.addWidget(self.clean)
         picture_layout = QVBoxLayout(picture)
         picture_layout.setContentsMargins(0, 0, 0, 0)
@@ -584,10 +585,10 @@ class SignatureDialog(QDialog):
             self.pages.addWidget(page)
         self.colour = QComboBox()
         for label, color in INK_COLOURS.items():
-            self.colour.addItem(label, color)
+            self.colour.addItem(tr(label), color)
         self.colour.currentIndexChanged.connect(self._colour_changed)
         self.label = QLineEdit()
-        self.label.setPlaceholderText("Name of this signature, e.g. Full signature")
+        self.label.setPlaceholderText(tr("Name of this signature, e.g. Full signature"))
         bottom = QFormLayout()
         bottom.setSpacing(12)
         bottom.setHorizontalSpacing(8)
@@ -624,7 +625,7 @@ class SignatureDialog(QDialog):
     def _show_typed(self) -> None:
         name = self.name.text().strip()
         if not name:
-            self.typed_preview.setText("Type your name")
+            self.typed_preview.setText(tr("Type your name"))
         else:
             image = typed_signature(name, self.style_box.currentData(), self._ink())
             self.typed_preview.setPixmap(QPixmap.fromImage(image).scaledToHeight(
@@ -642,7 +643,7 @@ class SignatureDialog(QDialog):
             return
         image = QImage(self.picture_path)
         if image.isNull():
-            self.picture_preview.setText("That file is not a picture. Choose another one.")
+            self.picture_preview.setText(tr("That file is not a picture. Choose another one."))
             self._picture = None
             self._refresh_ok()
             return
@@ -703,16 +704,16 @@ class CameraDialog(QDialog):
                          "The Camera app is opening. Take a photo and it goes on the page."
                          if self._folders else
                          "No Pictures folder was found, so photos can't be picked up. Choose a file instead.")
-        reopen = QPushButton("Open the Camera app again")
+        reopen = QPushButton(tr("Open the Camera app again"))
         reopen.setAutoDefault(False)
         reopen.setIcon(icon("camera"))
         reopen.clicked.connect(self.open_camera)
         reopen.setVisible(bool(self._folders))
-        file_button = QPushButton("Choose a photo file…")
+        file_button = QPushButton(tr("Choose a photo file…"))
         file_button.setAutoDefault(False)
         file_button.setIcon(icon("image"))
         file_button.clicked.connect(self._choose)
-        cancel = QPushButton("Cancel")
+        cancel = QPushButton(tr("Cancel"))
         cancel.setAutoDefault(False)
         cancel.clicked.connect(self.reject)
         row = QHBoxLayout()
@@ -797,16 +798,16 @@ class LiveCameraDialog(QDialog):
         self._status.setWordWrap(True)
         self._status.hide()
         layout.addWidget(self._status)
-        self._take = QPushButton("Take photo")
+        self._take = QPushButton(tr("Take photo"))
         self._take.setIcon(icon("camera"))
         self._take.setDefault(True)
         self._take.setEnabled(False)
         self._take.clicked.connect(self._shoot)
-        file_button = QPushButton("Choose a photo file…")
+        file_button = QPushButton(tr("Choose a photo file…"))
         file_button.setAutoDefault(False)
         file_button.setIcon(icon("image"))
         file_button.clicked.connect(self._choose)
-        cancel = QPushButton("Cancel")
+        cancel = QPushButton(tr("Cancel"))
         cancel.setAutoDefault(False)
         cancel.clicked.connect(self.reject)
         row = QHBoxLayout()
@@ -824,7 +825,7 @@ class LiveCameraDialog(QDialog):
             QTimer.singleShot(0, self._ask_permission)
 
     def _say(self, text: str) -> None:
-        self._status.setText(text)
+        self._status.setText(tr(text))
         self._status.setVisible(bool(text))
 
     def _ask_permission(self) -> None:

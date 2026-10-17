@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from ..core.annotations import Redaction, TextMarkup, union
 from ..core.document import Document
+from ..core.i18n import tr
 from ..core.platforms import native_keys
 from ..core.render import RenderPool
 from ..core.store import AnnotationStore
@@ -90,7 +91,7 @@ class PageCounter(FloatingBar):
         self.field.setObjectName("PageField")
         self.field.setFixedWidth(46)
         self.field.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.field.setToolTip("Go to page (Ctrl+G)")
+        self.field.setToolTip(tr("Go to page (Ctrl+G)"))
         self.field.returnPressed.connect(self._on_entered)
         self.field.cancelled.connect(self._view.setFocus)  # and leaving puts the number back
         self.field.left.connect(lambda: self.field.setText(str(self._view.current_page + 1)))
@@ -116,13 +117,13 @@ class PageCounter(FloatingBar):
     def refresh(self) -> None:
         count = self._view.document.page_count
         self.field.setValidator(QIntValidator(1, count, self))
-        self.total.setText(f" of {count} ")
+        self.total.setText(tr(f" of {count} "))
         self.set_page(self._view.current_page)
         spot = self._view.history.peek_back()
         self.back_button.setVisible(spot is not None)
         if spot is not None:
             self.back_button.setText(str(spot.page + 1))
-            self.back_button.setToolTip(f"Back to page {spot.page + 1} (Alt+Left)")
+            self.back_button.setToolTip(tr(f"Back to page {spot.page + 1} (Alt+Left)"))
             self.back_button.setProperty("help_detail", f"Back to page {spot.page + 1}")
         self.adjustSize()
 
@@ -163,10 +164,10 @@ class ZoomBar(FloatingBar):
         self.zoom_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         menu = QMenu(self.zoom_button)
         for zoom in ZOOM_PRESETS:
-            menu.addAction(f"{round(zoom * 100)}%", lambda z=zoom: view.set_zoom(z))
+            menu.addAction(tr(f"{round(zoom * 100)}%"), lambda z=zoom: view.set_zoom(z))
         menu.addSeparator()
-        menu.addAction("Fit width", view.fit_width)
-        menu.addAction("Fit page", view.fit_page)
+        menu.addAction(tr("Fit width"), view.fit_width)
+        menu.addAction(tr("Fit page"), view.fit_page)
         self.zoom_button.setMenu(menu)
         attach_help(self.zoom_button, "zoom_menu")
         fit_width = IconButton("arrows-out-line-horizontal", "Fit width (Ctrl+2)", icon_size=18, help="fit_width")
@@ -225,28 +226,28 @@ class ZoomBar(FloatingBar):
         view = self._view
         for title, choices, apply, current in (("Page layout", LAYOUTS, view.set_layout, view.layout_mode),
                                                ("Page colours", TINTS, view.set_page_tint, view.page_tint)):
-            sub = menu.addMenu(title)
+            sub = menu.addMenu(tr(title))
             for key, label in choices.items():
-                action = sub.addAction(label, lambda k=key, a=apply: a(k))
+                action = sub.addAction(tr(label), lambda k=key, a=apply: a(k))
                 action.setCheckable(True)
                 action.setChecked(key == current)
         if view.settings is not None:
             menu.addSeparator()
             for key, text in (("snap_annotations", "Snap to annotations"), ("snap_content", "Snap to PDF content")):
-                action = menu.addAction(text, lambda k=key: view.settings.set(k, not view.settings.get(k)))
+                action = menu.addAction(tr(text), lambda k=key: view.settings.set(k, not view.settings.get(k)))
                 action.setCheckable(True)
                 action.setChecked(bool(view.settings.get(key)))
         if self._folded > 1:
             menu.addSeparator()
-            menu.addAction("Fit width\tCtrl+2", view.fit_width)
-            menu.addAction("Fit page\tCtrl+0", view.fit_page)
+            menu.addAction(tr("Fit width\tCtrl+2"), view.fit_width)
+            menu.addAction(tr("Fit page\tCtrl+0"), view.fit_page)
 
     def _menu_button(self, icon_name: str, tip: str, choices: dict, apply, current, help: str) -> IconButton:
         button = IconButton(icon_name, tip, icon_size=18, help=help)
         button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(button)
         for key, label in choices.items():
-            action = menu.addAction(label, lambda k=key: apply(k))
+            action = menu.addAction(tr(label), lambda k=key: apply(k))
             action.setCheckable(True)
             action.setData(key)
         menu.aboutToShow.connect(lambda: [a.setChecked(a.data() == current()) for a in menu.actions()])
@@ -254,7 +255,7 @@ class ZoomBar(FloatingBar):
         return button
 
     def set_zoom(self, zoom: float) -> None:
-        self.zoom_button.setText(f"{round(zoom * 100)}%")
+        self.zoom_button.setText(tr(f"{round(zoom * 100)}%"))
 
     def _sync_snapping(self, key: str = "") -> None:
         if key in ("", "snap_annotations", "snap_content"):
@@ -279,7 +280,7 @@ class SnappingPopup(FloatingBar):
     def __init__(self, settings, parent=None):
         super().__init__(parent, popup=True)
         self._settings = settings
-        title = QLabel("Annotation snapping")
+        title = QLabel(tr("Annotation snapping"))
         title.setObjectName("SectionTitle")
         gear = IconButton("gear-six", "Snapping settings", icon_size=16)
         gear.clicked.connect(self._open_settings)
@@ -300,7 +301,7 @@ class SnappingPopup(FloatingBar):
             switch.toggled.connect(lambda on, k=key: settings.set(k, on))
             row.addWidget(glyph)
             row.addSpacing(8)
-            row.addWidget(QLabel(text), 1)
+            row.addWidget(QLabel(tr(text)), 1)
             row.addSpacing(24)
             row.addWidget(switch)
             layout.addLayout(row)
@@ -341,7 +342,7 @@ class UndoBar(FloatingBar):
     def _describe(button: IconButton, verb: str, text: str) -> None:
         """What the button would do now, in its tooltip and its help card: "Undo add rectangle"."""
         what = f"{verb} {text.lower()}" if text else ""
-        button.setToolTip(what or verb)
+        button.setToolTip(tr(what or verb))
         button.setProperty("help_detail", what)
 
 
@@ -368,7 +369,7 @@ class Toast(FloatingBar):
         return self.label.text()
 
     def show_message(self, text: str) -> None:
-        self.label.setText(text)
+        self.label.setText(tr(text))
         self.adjustSize()
         self.fade.fade_in()
         self.raise_()
@@ -980,7 +981,7 @@ class Workspace(QWidget):
         return messages.confirm_once(self, self.settings, question, title, text, action, danger)
 
     def notify(self, text: str) -> None:
-        self.toast.show_message(native_keys(text))
+        self.toast.show_message(native_keys(tr(text)))
         self.canvas.resizeEvent(None)
 
     # Page manager -------------------------------------------------------

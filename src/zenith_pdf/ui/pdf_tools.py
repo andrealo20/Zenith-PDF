@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 from ..core import images, pdf_tools as T
 from ..core.annotations import Redaction
 from ..core.document import Document
+from ..core.i18n import tr
 from ..core.pages import PAPER_SIZES
 from ..icons import icon
 from ..theme import themes
@@ -97,7 +98,7 @@ class ToolForm(messages.MessageDialog):
     def choose(self, key: str, label: str, options: dict, default=None) -> QComboBox:
         box = QComboBox()
         for value, text in options.items():
-            box.addItem(text, value)
+            box.addItem(tr(text), value)
         if default is not None:
             box.setCurrentIndex(max(box.findData(default), 0))
         self._form.addRow(label, box)
@@ -118,7 +119,7 @@ class ToolForm(messages.MessageDialog):
 
     def text(self, key: str, label: str, default: str = "", placeholder: str = "", password: bool = False) -> QLineEdit:
         edit = QLineEdit(default)
-        edit.setPlaceholderText(placeholder)
+        edit.setPlaceholderText(tr(placeholder))
         if password:
             edit.setEchoMode(QLineEdit.EchoMode.Password)
         self._form.addRow(label, edit)
@@ -126,7 +127,7 @@ class ToolForm(messages.MessageDialog):
         return edit
 
     def check(self, key: str, label: str, default: bool = False) -> QCheckBox:
-        box = QCheckBox(label)
+        box = QCheckBox(tr(label))
         box.setChecked(default)
         self._form.addRow("", box)
         self._getters[key] = box.isChecked
@@ -142,9 +143,9 @@ class ToolForm(messages.MessageDialog):
         box = QComboBox()
         for value, text in (("all", "All pages"), ("current", f"This page ({current + 1})"), ("odd", "Odd pages"),
                             ("even", "Even pages"), ("range", "Pages…")):
-            box.addItem(text, value)
+            box.addItem(tr(text), value)
         pick = QLineEdit()
-        pick.setPlaceholderText(f"e.g. 1-3, 7 (of {count})")
+        pick.setPlaceholderText(tr(f"e.g. 1-3, 7 (of {count})"))
         pick.setEnabled(False)
         box.currentIndexChanged.connect(lambda: pick.setEnabled(box.currentData() == "range"))
         row = QWidget()
@@ -221,7 +222,7 @@ class ProgressDialog(messages.MessageDialog):
         self.setFixedWidth(messages.MIN_WIDTH)
         self.cancelled = False
         self.on_cancel: Callable[[], None] | None = None
-        self.label = QLabel(text)
+        self.label = QLabel(tr(text))
         self.label.setObjectName("DialogBody")
         self.label.setTextFormat(Qt.TextFormat.PlainText)
         self.bar = QProgressBar()
@@ -247,7 +248,7 @@ class ProgressDialog(messages.MessageDialog):
             self.bar.setRange(0, maximum)
         self.bar.setValue(value)
         if text is not None and not self.cancelled:
-            self.label.setText(text)
+            self.label.setText(tr(text))
 
     def due(self) -> bool:
         """Whether the job has run long enough for the dialog to show."""
@@ -268,7 +269,7 @@ class ProgressDialog(messages.MessageDialog):
         if self.cancelled:
             return
         self.cancelled = True
-        self.label.setText("Stopping…")
+        self.label.setText(tr("Stopping…"))
         self.button(messages.CANCEL).setEnabled(False)
         if self.on_cancel is not None:
             self.on_cancel()
@@ -342,8 +343,10 @@ def page_numbers(window: MainWindow) -> None:
     form = ToolForm("Add page numbers", "The numbers become part of the pages. In the format, {n} is the number "
                     "and {total} the last number.", window, "Add numbers")
     form.choose("position", "Position", T.POSITIONS, "bottom-center")
-    form.choose("format", "Format", {"{n}": "1, 2, 3", "Page {n}": "Page 1", "Page {n} of {total}": "Page 1 of 9",
-                                     "{n} / {total}": "1 / 9", "- {n} -": "- 1 -"})
+    # The formats are written on the pages, so "Page" is in the language shown, as the examples are.
+    form.choose("format", "Format", {"{n}": "1, 2, 3", tr("Page {n}"): "Page 1",
+                                     tr("Page {n} of {total}"): "Page 1 of 9", "{n} / {total}": "1 / 9",
+                                     "- {n} -": "- 1 -"})
     custom = form.text("custom", "Or your own", placeholder="e.g. Chapter 2, page {n}")
     form.number("start", "First number", 0, 99999, 1)
     form.number("size", "Font size", 5, 48, 10, " pt")
@@ -863,7 +866,7 @@ class ElidedLabel(QLabel):
 
     def __init__(self, text: str, parent=None):
         super().__init__(text, parent)
-        self.setToolTip(text)
+        self.setToolTip(tr(text))
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 
     def minimumSizeHint(self) -> QSize:
@@ -874,7 +877,7 @@ class ElidedLabel(QLabel):
         painter.setPen(self.palette().color(self.foregroundRole()))
         rect = self.contentsRect()
         text = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideMiddle, rect.width())
-        painter.drawText(rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
+        painter.drawText(rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, tr(text))
 
 
 def font_summary(fonts: list[str]) -> str:
@@ -905,7 +908,7 @@ class PropertiesDialog(messages.MessageDialog):
 
     def __init__(self, document: Document, parent=None):
         super().__init__(parent, document.path.name, "", [("save", "Save", "primary"), (messages.CANCEL, "Cancel", "")])
-        self.setWindowTitle("Properties")
+        self.setWindowTitle(tr("Properties"))
         self.setFixedWidth(PROPERTIES_WIDTH)
         meta = document.metadata()
         rows = [("Location", str(document.path.parent))] + document.info()
@@ -921,7 +924,7 @@ class PropertiesDialog(messages.MessageDialog):
         grid.setVerticalSpacing(8)
         grid.setColumnStretch(1, 1)
         labels = [label for label, _ in rows] + ["Keywords"]
-        label_width = max(QLabel(text).sizeHint().width() for text in labels)
+        label_width = max(QLabel(tr(text)).sizeHint().width() for text in labels)
         grid.setColumnMinimumWidth(0, label_width)  # the values line up with the fields below
         self.font_list: QWidget | None = None
         line = 0
@@ -968,7 +971,7 @@ class PropertiesDialog(messages.MessageDialog):
         for line, (key, label) in enumerate((("title", "Title"), ("author", "Author"), ("subject", "Subject"),
                                              ("keywords", "Keywords")), start=1):
             self.fields[key] = QLineEdit(meta.get(key, ""))
-            grid.addWidget(QLabel(label), line, 0)
+            grid.addWidget(QLabel(tr(label)), line, 0)
             grid.addWidget(self.fields[key], line, 1)
         note = muted_label("Other apps show these in the file's properties and search results.")
         note.setWordWrap(True)
@@ -1005,7 +1008,7 @@ class PropertiesDialog(messages.MessageDialog):
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-        layout.addWidget(QLabel(font_summary(fonts)))
+        layout.addWidget(QLabel(tr(font_summary(fonts))))
         self.fonts_button = IconButton("caret-down", "Show every font", icon_size=14, text="Details")
         self.fonts_button.setCheckable(True)
         self.fonts_button.setFocusPolicy(Qt.FocusPolicy.TabFocus)  # Tab reaches it, Space opens the list
@@ -1015,7 +1018,7 @@ class PropertiesDialog(messages.MessageDialog):
         self.fonts_button.toggled.connect(self._show_fonts)
         layout.addWidget(self.fonts_button)
         layout.addStretch()
-        listing = QLabel("\n".join(fonts))
+        listing = QLabel(tr("\n".join(fonts)))
         listing.setObjectName("Muted")
         listing.setTextFormat(Qt.TextFormat.PlainText)
         listing.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -1034,7 +1037,7 @@ class PropertiesDialog(messages.MessageDialog):
     def _show_fonts(self, shown: bool) -> None:
         self.font_list.setVisible(shown)
         self.fonts_button.set_icon_name("caret-up" if shown else "caret-down")
-        self.fonts_button.setToolTip("Hide the fonts" if shown else "Show every font")
+        self.fonts_button.setToolTip(tr("Hide the fonts" if shown else "Show every font"))
         self._fit_screen()
         if shown:
             self.facts.ensureWidgetVisible(self.font_list)
@@ -1101,10 +1104,10 @@ class AttachmentsDialog(messages.MessageDialog):
         for name, size, description in self._workspace.document.attachments():
             item = QListWidgetItem(icon("paperclip"), f"{name}    {T.human_size(size)}")
             item.setData(Qt.ItemDataRole.UserRole, name)
-            item.setToolTip(description or name)
+            item.setToolTip(tr(description or name))
             self.list.addItem(item)
         if not self.list.count():
-            placeholder = QListWidgetItem("No attachments")
+            placeholder = QListWidgetItem(tr("No attachments"))
             placeholder.setFlags(Qt.ItemFlag.NoItemFlags)
             self.list.addItem(placeholder)
         self._sync()
@@ -1367,7 +1370,7 @@ class ToolTile(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setCursor(Qt.CursorShape.PointingHandCursor if enabled else Qt.CursorShape.ArrowCursor)
         self.setEnabled(enabled)
-        self.setToolTip(tool.description if enabled else f"{tool.description}. Open a document first.")
+        self.setToolTip(tr(tool.description if enabled else f"{tool.description}. Open a document first."))
         self._on_click = on_click
         t = themes.current
         layout = QHBoxLayout(self)
@@ -1379,9 +1382,9 @@ class ToolTile(QFrame):
         text = QVBoxLayout()
         text.setContentsMargins(0, 0, 0, 0)
         text.setSpacing(2)
-        name = QLabel(tool.title)
+        name = QLabel(tr(tool.title))
         name.setObjectName("PanelRowText")
-        detail = _caption(QLabel(tool.description))
+        detail = _caption(QLabel(tr(tool.description)))
         detail.setWordWrap(True)
         if not enabled:
             name.setStyleSheet(f"color: {t.text_muted};")
@@ -1418,7 +1421,7 @@ class ToolsPanel(FloatingBar):
         has_document = window.current_workspace() is not None
         self.search = QLineEdit()
         self.search.setObjectName("SettingsSearch")
-        self.search.setPlaceholderText("Search tools")
+        self.search.setPlaceholderText(tr("Search tools"))
         self.search.addAction(icon("magnifying-glass"), QLineEdit.ActionPosition.LeadingPosition)
         self.search.textChanged.connect(self._filter)
         body = QWidget()
@@ -1433,7 +1436,7 @@ class ToolsPanel(FloatingBar):
         grid.addWidget(self.hint)
         self._groups: list[tuple[QLabel, list[ToolTile]]] = []
         for number, group in enumerate(GROUPS):
-            title = QLabel(group)
+            title = QLabel(tr(group))
             title.setObjectName("SectionTitle")
             title.setContentsMargins(0, 0 if number == 0 and has_document else 12, 0, 2)
             grid.addWidget(title)

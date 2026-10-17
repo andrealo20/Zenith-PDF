@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from ..core.annotations import FreeText, Note, TextMarkup
 from ..core.finder import Entry, Finder
+from ..core.i18n import tr
 from ..core.platforms import native_keys
 from ..theme import THEME_NAMES, themes
 from .dialogs import SHORTCUTS
@@ -271,8 +272,10 @@ def _writing(window, workspace) -> list[Found]:
         note = "Select a text box, a callout or a note first."
     else:
         note = ""
-    what = f" of this {target.label.lower()}" if target is not None else ""
-    found.append(Found(Entry("write:spelling", "writing", f"Check spelling and punctuation{what}", "Writing",
+    # The kind of annotation as a word of its own, which is translated with the rest.
+    title = (f"Check spelling and punctuation: {target.label}" if target is not None
+             else "Check spelling and punctuation")
+    found.append(Found(Entry("write:spelling", "writing", title, "Writing",
                              "spelling punctuation typo mistakes correct", "", "", "check-circle", "", not note, note),
                        lambda: helpers.check_spelling(view)))
     has_text = view is not None and view.has_text_selection()
@@ -338,7 +341,7 @@ def _guide(window) -> list[Found]:
     document = QTextDocument()
     for key, title, icon_name, html in chapters(document):
         plain = QTextDocument()
-        plain.setHtml(html)
+        plain.setHtml(tr(html))
         entry = Entry(f"guide:{key}", "guide", f"Guide: {title}", "Guide chapter", "guide help",
                       plain.toPlainText()[:4000], "", icon_name)
         found.append(Found(entry, lambda k=key: window.open_guide(k)))
@@ -358,7 +361,7 @@ class ResultRow(QWidget):
         glyph = QLabel()
         glyph.setFixedSize(22, 22)
         glyph.setPixmap(icon_pixmap(entry.icon or "circle", 20, entry.color or None))
-        title = QLabel(native_keys(entry.title))
+        title = QLabel(native_keys(tr(entry.title)))
         title.setObjectName("AssistantTitle")
         # A short reason it can't run shows in place of where it lives; a long one waits in the footer.
         short = not entry.enabled and entry.note and entry.kind != "info"
@@ -375,18 +378,18 @@ class ResultRow(QWidget):
         row.addWidget(glyph)
         row.addLayout(text, 1)
         if entry.keys:
-            chip = QLabel(native_keys(entry.keys))
+            chip = QLabel(native_keys(tr(entry.keys)))
             chip.setObjectName("KeyChip")
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             row.addWidget(chip, 0, Qt.AlignmentFlag.AlignVCenter)
         else:
-            kind = QLabel(KINDS.get(entry.kind, ""))
+            kind = QLabel(tr(KINDS.get(entry.kind, "")))
             kind.setObjectName("AssistantKind")
             row.addWidget(kind, 0, Qt.AlignmentFlag.AlignVCenter)
         if not entry.enabled:
             for label in (title, glyph):
                 label.setEnabled(False)
-        self.setToolTip(entry.note if not entry.enabled else "")
+        self.setToolTip(tr(entry.note if not entry.enabled else ""))
 
 
 class AssistantPanel(FloatingBar):
@@ -407,7 +410,7 @@ class AssistantPanel(FloatingBar):
         self.glyph.setPixmap(icon_pixmap("sparkle", 20, themes.current.accent))
         self.search = QLineEdit()
         self.search.setObjectName("AssistantSearch")
-        self.search.setPlaceholderText("Ask in your language: a tool, a command, a setting…")
+        self.search.setPlaceholderText(tr("Ask in your language: a tool, a command, a setting…"))
         self.search.textChanged.connect(self._refresh)
         self.search.installEventFilter(self)
         top = QHBoxLayout()
@@ -473,7 +476,7 @@ class AssistantPanel(FloatingBar):
             head.setFlags(Qt.ItemFlag.NoItemFlags)
             head.setSizeHint(QSize(0, HEADER_HEIGHT))
             self.list.addItem(head)
-            label = QLabel(heading)
+            label = QLabel(tr(heading))
             label.setObjectName("AssistantSection")
             self.list.setItemWidget(head, label)
             height += HEADER_HEIGHT
@@ -511,7 +514,7 @@ class AssistantPanel(FloatingBar):
     def _on_row(self, row: int) -> None:
         item = self.list.item(row) if row >= 0 else None
         entry = self._entries.get(item.data(Qt.ItemDataRole.UserRole)) if item is not None else None
-        self.footer.setText(entry.note if entry is not None and not entry.enabled and entry.note else HINT)
+        self.footer.setText(tr(entry.note if entry is not None and not entry.enabled and entry.note else HINT))
 
     def _move(self, step: int) -> None:
         rows = [row for row in range(self.list.count()) if self.list.item(row).flags() & Qt.ItemFlag.ItemIsSelectable]
@@ -540,7 +543,7 @@ class AssistantPanel(FloatingBar):
         if entry is None:
             return False
         if not entry.enabled or run is None:
-            self.footer.setText(entry.note or "Not available here.")
+            self.footer.setText(tr(entry.note or "Not available here."))
             return False
         settings = self._window.settings
         if settings is not None:
