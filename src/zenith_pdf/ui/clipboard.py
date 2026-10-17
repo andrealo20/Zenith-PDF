@@ -26,6 +26,7 @@ from ..core.annotations import (
     Shape,
     Tape,
     TextMarkup,
+    TextStamp,
     new_id,
     regrouped,
     union,
@@ -34,7 +35,7 @@ from ..core.annotations import (
 ANNOTATIONS_MIME = "application/x-zenith-pdf-annotations"
 PAGES_MIME = "application/x-zenith-pdf-pages"
 KINDS = {cls.__name__: cls for cls in (TextMarkup, Shape, Line, Ink, FreeText, Note, ImageStamp, Redaction, Poly,
-                                       Tape, Measurement, Link, Attachment, Caret)}
+                                       Tape, Measurement, Link, Attachment, Caret, TextStamp)}
 BINARY = (ImageStamp, Attachment)  # their bytes travel as base64, and their digest is worked out again
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp")
 

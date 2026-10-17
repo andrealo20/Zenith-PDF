@@ -62,6 +62,7 @@ from ..core.annotations import (
     Redaction,
     Tape,
     TextMarkup,
+    TextStamp,
     caret_at,
     new_id,
     overlaps,
@@ -1072,6 +1073,8 @@ class DocumentView(QGraphicsView):
             self.edit_text_box(annotation, is_new=False)
         elif isinstance(annotation, (Note, Caret)):
             self.edit_note(annotation)
+        elif isinstance(annotation, TextStamp):
+            self.edit_stamp(annotation)
         elif isinstance(annotation, Tape):
             from .drawing_tools import toggle_tape
 
@@ -2198,6 +2201,12 @@ class DocumentView(QGraphicsView):
         if text is not None and text != note.contents:
             label = "Edit inserted text" if isinstance(note, Caret) else "Edit note"
             self.undo_stack.push(ChangeAnnotations(self.store, [note], [replace(note, contents=text)], label))
+
+    def edit_stamp(self, stamp: TextStamp) -> None:
+        text = messages.get_text(self, "Stamp", "What the stamp says.", stamp.text, action="Save", required=True)
+        if text is not None and text.strip() and text.strip() != stamp.text:
+            self.undo_stack.push(ChangeAnnotations(self.store, [stamp], [replace(stamp, text=text.strip(), name="")],
+                                                   "Edit stamp"))
 
     def insert_at_text_selection(self, text: str, replacing: bool = False) -> list[Annotation]:
         """Proofreading: a caret after the selected text carrying `text`, the text to put in there. `replacing`

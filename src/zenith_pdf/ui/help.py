@@ -85,6 +85,9 @@ TOPICS: dict[str, Topic] = {
     "tool_note": Topic("Note", "Adds a sticky note: a small icon that holds a comment.",
                        "Click on the page and write the note. Double-click the icon later to read or edit it. "
                        "Its menu picks the colour and the icon."),
+    "tool_stamp": Topic("Stamp", "Stamps the page: APPROVED, DRAFT, CONFIDENTIAL and more, or your own words.",
+                        "Click where it goes. A line under it can say who stamped it and when; in your own words "
+                        "{date}, {time}, {author} and {page} fill in. Apply to pages stamps every page."),
     "tool_redact": Topic("Redact", "Marks areas to black out for good, such as names or account numbers.",
                          "Drag over what must go; the marks can still be moved or deleted. When ready, open "
                          "PDF tools and choose Apply redactions: the marked areas turn black and the text under "

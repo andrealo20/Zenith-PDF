@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING
 
 import shiboken6
-from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QDateTime, QLocale, QObject, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QPainterPath
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
 
@@ -18,6 +18,7 @@ from ..core.annotations import (
     ENDINGS,
     NOTE_ICONS,
     NOTE_SIZE,
+    STAMPS,
     UNITS,
     Color,
     FreeText,
@@ -26,9 +27,11 @@ from ..core.annotations import (
     Redaction,
     Shape,
     TextMarkup,
+    TextStamp,
     constrain_angle,
     normalized,
 )
+from ..core.i18n import tr
 from . import messages
 from .annotation_items import AnnotationItem, qcolor
 from .tool_catalog import BY_KEY, DUPLICABLE, MAX_INSTANCES, base_of, instance_number, is_valid_key
@@ -89,6 +92,8 @@ class ToolStyle:
     italic: bool = False
     underline: bool = False
     align: str = "left"  # TEXT_ALIGNS
+    stamp: str = "Approved"  # one of STAMPS, or words of the user's own
+    stamp_detail: bool = True  # a line under the stamp: who stamped it, and when
 
     def face(self) -> tuple[str, bool, bool]:
         """(font, bold, italic), as a text box made with this style measures its text."""
@@ -136,6 +141,7 @@ DEFAULT_STYLES = {
     "perimeter": ToolStyle(color=BLUE, width=1.5),
     "area": ToolStyle(color=BLUE, width=1.5),
     "note": ToolStyle(color=(1.0, 0.82, 0.2)),
+    "stamp": ToolStyle(color=(0.85, 0.15, 0.15)),
     "bookmark": ToolStyle(color=BLUE),
     "signature": ToolStyle(color=BLACK),
     "camera": ToolStyle(color=BLACK),
@@ -182,6 +188,7 @@ OPTIONS: dict[str, tuple[str, ...]] = {
     "perimeter": _MEASURE,
     "area": _MEASURE,
     "note": ("color", "note_icon"),
+    "stamp": ("stamp_text", "stamp_detail", "color", "opacity"),
     "bookmark": (),
     "signature": ("signatures",),
     "camera": _PICTURE,
@@ -201,10 +208,11 @@ OPTION_FIELDS: dict[str, tuple[str, ...]] = {
     "signatures": ("signature_width",),  # plus the saved signatures, in Settings
     "scale": (),
     "text_format": ("font", "bold", "italic", "underline", "align"),
+    "stamp_text": ("stamp",),
 } | {name: (name,) for name in (
     "fill", "width", "opacity", "font_size", "dash", "highlight", "ink_to_line", "ink_to_shape", "erase",
     "tape_start", "laser_size", "laser_fade", "clean_kinds", "note_icon", "image_size", "link_border",
-    "snapshot_scale", "snapshot_annotations", "lasso_pick", "audio_source")}
+    "snapshot_scale", "snapshot_annotations", "lasso_pick", "audio_source", "stamp_detail")}
 SETTING_OPTIONS = {name: name for name in ("select_new", "snap_annotations", "snap_content", "wheel", "scroll_speed",
                                            "signatures")}  # option -> Settings key
 BORDER_TOOLS = frozenset({"rectangle", "ellipse", "cloud", "polygon"})  # colour titled Border, with No colour
@@ -220,7 +228,8 @@ MEASURE_TOOLS = {"distance", "perimeter", "area"}
 LOCK_DEFAULTS = {key: True for key in (
     "pen", "marker", "eraser", "tape", "highlight", "underline", "squiggly", "strikeout", "cleaner", "redact",
     "distance", "perimeter", "area")} | {key: False for key in (
-    "line", "arrow", "polyline", "rectangle", "ellipse", "cloud", "polygon", "text", "callout", "note", "signature",
+    "line", "arrow", "polyline", "rectangle", "ellipse", "cloud", "polygon", "text", "callout", "note", "stamp",
+    "signature",
     "hyperlink", "audio", "equation", "snapshot")}
 LOCKABLE = frozenset(LOCK_DEFAULTS)
 AFTER_DRAWING = ("pan", "select")
@@ -270,6 +279,12 @@ def _fill(value) -> Color | None:
     return None if value is None else _color(value)
 
 
+def _stamp_words(value) -> str:
+    if not isinstance(value, str) or not " ".join(value.split()):
+        raise ValueError(value)
+    return " ".join(value.split())[:60]
+
+
 def _kinds(value) -> tuple[str, ...]:
     if isinstance(value, str):
         raise ValueError(value)
@@ -312,7 +327,26 @@ FIELD_CHECKS = {
     "italic": _flag,
     "underline": _flag,
     "align": _one_of(TEXT_ALIGNS),
+    "stamp": _stamp_words,
+    "stamp_detail": _flag,
 }
+
+
+def stamp_words(style: ToolStyle, author: str, page: int = 0, when: QDateTime | None = None) -> tuple[str, str, str]:
+    """(text, detail, name) of a stamp made with `style`: a ready one's word in the app's language, in
+    capitals; words of one's own with {date}, {time}, {author} and {page} filled in."""
+    when = when or QDateTime.currentDateTime()
+    locale = QLocale()
+    date = locale.toString(when.date(), QLocale.FormatType.ShortFormat)
+    time = locale.toString(when.time(), QLocale.FormatType.ShortFormat)
+    if style.stamp in STAMPS:
+        text, name = tr(style.stamp).upper(), style.stamp
+    else:
+        text, name = style.stamp, ""
+        for token, value in (("{date}", date), ("{time}", time), ("{author}", author), ("{page}", str(page + 1))):
+            text = text.replace(token, value)
+    detail = (f"{author}, {date} {time}" if author else f"{date} {time}") if style.stamp_detail else ""
+    return text, detail, name
 
 
 def checked_fields(values: dict) -> dict:
@@ -800,6 +834,22 @@ class NoteTool(Tool):
         return False  # the dialog took the mouse: no release will follow
 
 
+class StampTool(Tool):
+    def press(self, page, pos, event) -> bool:
+        """The stamp, centred on the click and on the page whole."""
+        s = self.style
+        text, detail, name = stamp_words(s, self.view.tool_settings.author, page.index)
+        width, height = textlayout.stamp_size(text, detail)
+        width = min(width, page.rect.width())
+        x = min(max(pos.x() - width / 2, 0.0), max(page.rect.width() - width, 0.0))
+        y = min(max(pos.y() - height / 2, 0.0), max(page.rect.height() - height, 0.0))
+        stamp = TextStamp(page=page.index, rect=(x, y, width, height), text=text, detail=detail, name=name,
+                          color=s.color, opacity=s.opacity, **self.common())
+        self.view.add_annotations([stamp], stamp.label)
+        self.view.created([stamp])
+        return False
+
+
 def make_tools(view: DocumentView) -> dict[str, Tool]:
     tools: dict[str, Tool] = {"select": SelectTool(view, "select")}
     for name in MarkupTool.STYLES:
@@ -808,6 +858,7 @@ def make_tools(view: DocumentView) -> dict[str, Tool]:
         tools[name] = DragShapeTool(view, name)
     tools["text"] = TextBoxTool(view, "text")
     tools["note"] = NoteTool(view, "note")
+    tools["stamp"] = StampTool(view, "stamp")
     from .drawing_tools import make_more_tools  # they build on the classes above
 
     tools.update(make_more_tools(view))

@@ -27,6 +27,7 @@ from .annotations import (
     Shape,
     Tape,
     TextMarkup,
+    TextStamp,
     union,
 )
 
@@ -150,7 +151,7 @@ def mirrored(a: Annotation, axis: str, centre: float) -> Annotation:
         return replace(a, rect=rect(a.rect), data=images.encode(picture), rotation=(4 - a.rotation) % 4)
     if isinstance(a, Redaction):
         return replace(a, rects=tuple(rect(r) for r in a.rects))
-    if isinstance(a, (Shape, Link, Caret)):
+    if isinstance(a, (Shape, Link, Caret, TextStamp)):
         return replace(a, rect=rect(a.rect))
     if isinstance(a, (Note, Attachment)):
         px, py = a.position

@@ -29,6 +29,7 @@ from ..core.annotations import (
     Shape,
     Tape,
     TextMarkup,
+    TextStamp,
     arrow_head,
     cloud_bumps,
     constrain_angle,
@@ -254,6 +255,8 @@ def paint_annotation(painter: QPainter, a: Annotation) -> None:
             painter.drawPolygon(qpolygon(arrow_head(line[0], line[1], 1.0)))
             painter.setBrush(Qt.BrushStyle.NoBrush)
         paint_text_box(painter, a)
+    elif isinstance(a, TextStamp):
+        paint_text_stamp(painter, a)
     elif isinstance(a, Poly):
         color = qcolor(a.color)
         border = dashed_pen(color, a.width, a.dash, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
@@ -343,6 +346,31 @@ def paint_annotation(painter: QPainter, a: Annotation) -> None:
         painter.setBrush(qcolor(a.color))
         painter.drawRect(QRectF(x + 0.5, y + 0.5, NOTE_SIZE - 1, NOTE_SIZE - 1))
         paint_endings(painter, note_marks(a.icon, a.position), qcolor(note_ink(a.color)), 1.2)
+    painter.restore()
+
+
+def paint_text_stamp(painter: QPainter, a: TextStamp) -> None:
+    """A stamp's frame and words, laid out as its saved appearance has them."""
+    painter.save()
+    if a.rotation:
+        painter.setTransform(QTransform(*quarter_turn(a.rect, a.rotation)), True)
+        x, y, (w, h) = 0.0, 0.0, a.upright_size()
+    else:
+        x, y, w, h = a.rect
+    line, radius = textlayout.stamp_frame(h)
+    painter.setPen(QPen(qcolor(a.color), line, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+                        Qt.PenJoinStyle.RoundJoin))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawRoundedRect(QRectF(x + line / 2, y + line / 2, w - line, h - line), radius, radius)
+    painter.setPen(qcolor(a.color))
+    painter.setFont(textlayout.reference_font(textlayout.STAMP_FACE))
+    for text, size, dx, baseline in textlayout.stamp_lines(a.text, a.detail, w, h):
+        painter.save()
+        painter.translate(x + dx, y + baseline)
+        factor = size / textlayout.REFERENCE_PIXELS
+        painter.scale(factor, factor)
+        painter.drawText(QPointF(0, 0), text)
+        painter.restore()
     painter.restore()
 
 

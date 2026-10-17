@@ -21,6 +21,8 @@ from .annotations import (
     DASHES,
     ENDINGS,
     NOTE_ICONS,
+    STAMP_NAMES,
+    STAMPS,
     Annotation,
     Attachment,
     Caret,
@@ -38,6 +40,7 @@ from .annotations import (
     Shape,
     Tape,
     TextMarkup,
+    TextStamp,
     drawn_dashes,
     new_id,
     points_bounds,
@@ -55,7 +58,8 @@ IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 # Keys rewritten from scratch on every write: an annotation that no longer needs one loses it.
 MANAGED_KEYS = ("/RD", "/IC", "/LE", "/AS", "/IT", "/CL", "/BE", "/Measure", "/Vertices", "/Subj", "/Name",
                 "/ZenithHighlighter", "/ZenithWidths", "/ZenithBorderColor", "/ZenithBorderWidth", "/ZenithRotation",
-                "/ZenithEquationSize", "/ZenithEquationColor", "/ZenithGroup")
+                "/ZenithEquationSize", "/ZenithEquationColor", "/ZenithGroup", "/ZenithStampText",
+                "/ZenithStampDetail", "/ZenithStampName")
 ALIGNS = ("left", "center", "right")  # a text box's /Q: 0, 1 and 2
 FLAG_HIDDEN = 2
 FLAG_PRINT = 4
@@ -360,6 +364,11 @@ def read_annotation(obj, page: int, geometry: PageGeometry, pages: dict | None =
         return Note(position=(x, y), color=color or (1.0, 0.85, 0.2), icon=icon if icon in NOTE_ICONS else "Comment",
                     **common)
 
+    if subtype == "/Stamp" and "/ZenithStampText" in obj:
+        name = _text(obj.get("/ZenithStampName"))
+        return TextStamp(rect=geometry.rect_to_display(_inner_box(obj)), text=_text(obj.ZenithStampText),
+                         detail=_text(obj.get("/ZenithStampDetail")), name=name if name in STAMPS else "",
+                         rotation=_text_turns(obj, geometry), color=color or (0.85, 0.15, 0.15), **common)
     if subtype == "/Stamp":
         return _read_picture(obj, geometry, dict(common, color=color or (0.0, 0.0, 0.0)))
 
@@ -800,6 +809,19 @@ def write_annotation(pdf: pikepdf.Pdf, obj: Dictionary, annotation: Annotation, 
         obj.C = _array(a.color)
         obj.IC = _array(a.fill)
         obj.QuadPoints = _quad_points(a.rects, geometry)
+    elif isinstance(a, TextStamp):
+        obj.C = _array(a.color)
+        # The PDF's own name for a ready stamp, so other apps list it as that; words of one's own get ours.
+        obj.Name = Name("/" + STAMP_NAMES.get(a.name, "ZenithStamp"))
+        obj.ZenithStampText = String(a.text)
+        if a.detail:
+            obj.ZenithStampDetail = String(a.detail)
+        if a.name:
+            obj.ZenithStampName = String(a.name)
+        obj.ZenithRotation = (a.rotation - geometry.rotation // 90) % 4
+        left, bottom, right, top = look.bbox
+        sl, sb, sr, st = appearance.pdf_rect(geometry, a.rect)
+        obj.RD = _array((sl - left, sb - bottom, right - sr, top - st))
     elif isinstance(a, ImageStamp):
         obj.C = _array(a.color)  # not drawn, but kept, so the annotation reads back as it was
         if "/ZenithEquation" in obj:

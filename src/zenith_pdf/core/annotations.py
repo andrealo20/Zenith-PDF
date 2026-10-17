@@ -355,6 +355,46 @@ def regrouped(annotations: list) -> list:
     return [replace(a, group=names.setdefault(a.group, new_id())) if a.group else a for a in annotations]
 
 
+# Stamps with a ready word, in the tool's order; and the PDF's own name for those that have one.
+STAMPS = ("Approved", "Draft", "Confidential", "Final", "Reviewed", "Rejected", "Received", "Void")
+STAMP_NAMES = {"Approved": "Approved", "Draft": "Draft", "Confidential": "Confidential", "Final": "Final",
+               "Rejected": "NotApproved"}
+
+
+@dataclass(frozen=True, kw_only=True)
+class TextStamp(Annotation):
+    """A rubber stamp: a word such as APPROVED in a frame, and a smaller line under it if `detail` has one
+    (who stamped it, and when)."""
+
+    rect: Rect = (0.0, 0.0, 0.0, 0.0)
+    text: str = "APPROVED"
+    detail: str = ""
+    name: str = ""  # the ready stamp it came from (STAMPS), or "" for words of the user's own
+    rotation: int = 0  # quarter turns clockwise in `rect`, as a text box's: it turns with its page
+    color: Color = (0.85, 0.15, 0.15)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "rotation", int(self.rotation) % 4)
+
+    @property
+    def kind(self) -> str:
+        return "Stamp"
+
+    @property
+    def label(self) -> str:
+        return "Stamp"
+
+    def upright_size(self) -> tuple[float, float]:
+        return upright_size(self.rect, self.rotation)
+
+    def bounds(self) -> Rect:
+        return self.rect
+
+    def translated(self, dx: float, dy: float) -> TextStamp:
+        x, y, w, h = self.rect
+        return replace(self, rect=(x + dx, y + dy, w, h))
+
+
 @dataclass(frozen=True, kw_only=True)
 class ImageStamp(Annotation):
     """A picture on the page. `data` is the picture as PNG or JPEG bytes.

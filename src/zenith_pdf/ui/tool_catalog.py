@@ -47,6 +47,7 @@ CATALOG = [
     ToolSpec("perimeter", "Perimeter", "path", "Measure", "#14b8a6"),
     ToolSpec("area", "Area", "bounding-box", "Measure", "#0ea5e9"),
     ToolSpec("note", "Note", "note", "Insert", "#facc15"),
+    ToolSpec("stamp", "Stamp", "circle-wavy-check", "Insert", "#ef4444"),
     ToolSpec("bookmark", "Bookmark", "bookmark-simple", "Insert", "#f59e0b", action=True),
     ToolSpec("signature", "Signature", "z-signature", "Insert", "#3b82f6"),
     ToolSpec("camera", "Image from camera", "camera", "Insert", "#14b8a6", action=True),

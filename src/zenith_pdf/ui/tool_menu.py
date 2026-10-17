@@ -60,8 +60,10 @@ from ..core.annotations import (
     Poly,
     Redaction,
     Shape,
+    STAMPS,
     Tape,
     TextMarkup,
+    TextStamp,
 )
 from ..icons import icon, readable
 from ..settings import DEFAULTS
@@ -1646,7 +1648,7 @@ SAMPLE = "Mark up this text"
 REDACT_MARKED = "Mark up"  # the words the Redaction preview marks; the rest shows filled in
 PREVIEWED = {"pen", "marker", "eraser", "tape", "laser", "line", "polyline", "arrow", "rectangle", "ellipse", "cloud",
              "polygon", "highlight", "underline", "squiggly", "strikeout", "text", "callout", "redact", "distance",
-             "perimeter", "area", "note", "hyperlink", "audio", "equation"}
+             "perimeter", "area", "note", "hyperlink", "audio", "equation", "stamp"}
 UNDER_TEXT = {"marker", "tape", "rectangle", "ellipse", "cloud", "polygon", "line", "arrow", "polyline"}
 
 
@@ -1738,6 +1740,15 @@ def preview_annotation(base: str, style: ToolStyle, measure: tuple | None = None
                            width=min(s.width, 12.0), color=s.color)
     if base == "note":
         return Note(page=0, position=(w / 2 - NOTE_SIZE / 2, h / 2 - NOTE_SIZE / 2), color=s.color, icon=s.note_icon)
+    if base == "stamp":
+        from .tools import stamp_words
+
+        text, detail, name = stamp_words(s, "")
+        width, height = textlayout.stamp_size(text, detail)
+        scale = min(1.0, (h - 12) / height, (w - 24) / width)
+        width, height = width * scale, height * scale
+        return TextStamp(page=0, rect=((w - width) / 2, (h - height) / 2, width, height), text=text, detail=detail,
+                         name=name, color=s.color, opacity=s.opacity)
     if base == "audio":
         return Attachment(page=0, position=(w / 2 - NOTE_SIZE / 2, h / 2 - NOTE_SIZE / 2), audio=True, color=s.color,
                           file_name="Audio note.wav")
@@ -2167,6 +2178,31 @@ class StyleEditor(QWidget):
         row.addWidget(aligns)
         return self._block("Font", fonts, row)
 
+    def _build_stamp_text(self, base: str) -> QWidget:
+        """The ready stamps, and a field for words of one's own."""
+        grid = OptionGrid([(name, None, tr(name).upper(), tr(name)) for name in STAMPS], 2, cell=30)
+        own = QLineEdit()
+        own.setObjectName("SubjectEdit")
+        own.setFixedHeight(32)
+        own.setPlaceholderText(tr("Your own words"))
+        own.setToolTip(tr("{date}, {time}, {author} and {page} fill in when you stamp."))
+        grid.chosen.connect(lambda v: (own.clear(), self._emit("stamp_text", stamp=v)))
+        own.editingFinished.connect(lambda: own.text().strip() and self._emit("stamp_text", stamp=own.text()))
+
+        def load(s: ToolStyle) -> None:
+            grid.set_value(s.stamp if s.stamp in STAMPS else None)
+            if s.stamp not in STAMPS and own.text() != s.stamp:
+                own.setText(s.stamp)
+
+        self._load("stamp_text", load)
+        return self._block("Stamp", grid, own)
+
+    def _build_stamp_detail(self, base: str) -> QWidget:
+        row = SwitchRow("Name and date", "A line under the stamp: who stamped it, and when")
+        row.toggled.connect(lambda on: self._emit("stamp_detail", stamp_detail=on))
+        self._load("stamp_detail", lambda s: row.set_checked(s.stamp_detail))
+        return row
+
     def _build_dash(self, base: str) -> QWidget:
         grid = OptionGrid([(name, f"z-dash-{name}", None, label) for name, label in DASH_NAMES.items()], 4)
         grid.chosen.connect(lambda v: self._emit("dash", dash=v))
@@ -2402,6 +2438,8 @@ def _options_of(a: Annotation) -> set[str]:
         return {"color", "note_icon"}
     if isinstance(a, (Attachment, Caret)):
         return {"color"}
+    if isinstance(a, TextStamp):
+        return {"color", "opacity"}
     if isinstance(a, Redaction):
         return {"fill"}
     return set()
@@ -2958,6 +2996,7 @@ class ToolMenu(_Menu):
 
 
 HINTS = {
+    "stamp": "Click where the stamp goes.",
     "polyline": "Click for each corner; double-click or Enter finishes.",
     "polygon": "Click for each corner; double-click or Enter closes the shape.",
     "perimeter": "Click for each point; double-click or Enter finishes.",

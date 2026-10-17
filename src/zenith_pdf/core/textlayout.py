@@ -74,6 +74,36 @@ def fitted_height(text: str, font_size: float, box_width: float, face: Face = DE
     return 2 * TEXT_PADDING + font_size * (TEXT_ASCENT + 0.25) + (lines - 1) * font_size * LINE_SPACING
 
 
+STAMP_FACE: Face = ("Helvetica", True, False)
+
+
+def stamp_lines(text: str, detail: str, width: float, height: float) -> list[tuple[str, float, float, float]]:
+    """A stamp's lines, (line, size, x, baseline) in its upright box: the word as large as fits, centred, and
+    the detail line small under it."""
+    pad = height * 0.14
+    room = max(width - 2 * pad, 1.0)
+    fit = lambda line, most: min(most, room / max(text_width(line, 1.0, STAMP_FACE), 1e-6)) if line else most
+    if not detail:
+        size = fit(text, height * 0.56)
+        return [(text, size, (width - text_width(text, size, STAMP_FACE)) / 2, height / 2 + size * 0.36)]
+    size, small = fit(text, height * 0.42), fit(detail, height * 0.17)
+    return [(text, size, (width - text_width(text, size, STAMP_FACE)) / 2, height * 0.56),
+            (detail, small, (width - text_width(detail, small, STAMP_FACE)) / 2, height * 0.83)]
+
+
+def stamp_frame(height: float) -> tuple[float, float]:
+    """(line width, corner radius) of a stamp's frame."""
+    return max(height * 0.05, 1.0), height * 0.16
+
+
+def stamp_size(text: str, detail: str) -> tuple[float, float]:
+    """The size a new stamp takes: wide enough for its word at the size it shows best."""
+    height = 52.0 if detail else 40.0
+    main = height * (0.42 if detail else 0.56)
+    widest = max(text_width(text, main, STAMP_FACE), text_width(detail, height * 0.17, STAMP_FACE) if detail else 0)
+    return widest + height * 0.28 + 12.0, height
+
+
 def underline(font_size: float) -> tuple[float, float]:
     """(offset below the baseline, thickness) of an underline, as the PDF draws it and the screen too."""
     return font_size * 0.12, max(font_size * 0.06, 0.5)

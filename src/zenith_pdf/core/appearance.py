@@ -43,6 +43,7 @@ from .annotations import (
     squiggle,
     Shape,
     TextMarkup,
+    TextStamp,
     markup_stroke,
 )
 from .geometry import PageGeometry
@@ -235,6 +236,32 @@ def _text_lines(text: str, font_size: float, x: float, y: float, width: float, c
     return ops
 
 
+def _line(text: str, size: float, x: float, baseline: float, color, face: textlayout.Face) -> list[str]:
+    """One line of text from (x, baseline): the built-in font where it can, glyph outlines elsewhere."""
+    words, shapes = [], []
+    scale = size / textlayout.REFERENCE_PIXELS
+    for start, run, plain in _runs(text):
+        left = x + (textlayout.text_width(text[:start], size, face) if start else 0.0)
+        if plain:
+            words.append(f"1 0 0 -1 {num(left)} {num(baseline)} Tm {pdf_string(run)} Tj")
+        elif glyph_path(run, face):
+            shapes.append(f"q {num(scale, 5)} 0 0 {num(scale, 5)} {num(left)} {num(baseline)} cm "
+                          f"{glyph_path(run, face)} f Q")
+    ops = [f"BT /{standard_font(face)[0]} {num(size)} Tf {_rgb(color, stroke=False)}"] + words + ["ET"] if words else []
+    return ops + ([_rgb(color, stroke=False)] + shapes if shapes else [])
+
+
+def _rounded(x: float, y: float, w: float, h: float, r: float) -> list[str]:
+    """A rectangle with rounded corners, as a closed path."""
+    r = max(min(r, w / 2, h / 2), 0.0)
+    k = r * 0.5523  # a quarter circle's control points
+    p = lambda *values: " ".join(num(v) for v in values)
+    return [f"{p(x + r, y)} m", f"{p(x + w - r, y)} l", f"{p(x + w - r + k, y, x + w, y + r - k, x + w, y + r)} c",
+            f"{p(x + w, y + h - r)} l", f"{p(x + w, y + h - r + k, x + w - r + k, y + h, x + w - r, y + h)} c",
+            f"{p(x + r, y + h)} l", f"{p(x + r - k, y + h, x, y + h - r + k, x, y + h - r)} c",
+            f"{p(x, y + r)} l", f"{p(x, y + r - k, x + r - k, y, x + r, y)} c h"]
+
+
 def _draw(annotation: Annotation) -> tuple[list[str], bool]:
     """Drawing operators in display space, and whether the Helvetica resource is needed."""
     ops: list[str] = []
@@ -368,6 +395,21 @@ def _draw(annotation: Annotation) -> tuple[list[str], bool]:
                                   (x + s * .62, y + s * .7))) + " S")
     elif isinstance(a, Caret):
         ops += [_rgb(a.color, stroke=False), _polyline(a.outline()) + " h f"]
+    elif isinstance(a, TextStamp):
+        x, y, _, _ = a.rect
+        w, h = a.upright_size()
+        if a.rotation:
+            ops.append("q " + _matrix(quarter_turn(a.rect, a.rotation)))
+            x, y = 0.0, 0.0
+        line, radius = textlayout.stamp_frame(h)
+        inset = line / 2
+        ops += [f"{num(line)} w 1 j {_rgb(a.color, stroke=True)}",
+                " ".join(_rounded(x + inset, y + inset, w - line, h - line, radius)) + " S"]
+        for text, size, dx, baseline in textlayout.stamp_lines(a.text, a.detail, w, h):
+            ops += _line(text, size, x + dx, y + baseline, a.color, textlayout.STAMP_FACE)
+        if a.rotation:
+            ops.append("Q")
+        return ops, True
     elif isinstance(a, Redaction):
         ops += ["1 w", _rgb(a.color, stroke=True)]
         ops += [f"{num(x + 0.5)} {num(y + 0.5)} {num(w - 1)} {num(h - 1)} re S" for x, y, w, h in a.rects]
@@ -429,6 +471,7 @@ def build(annotation: Annotation, geometry: PageGeometry) -> Appearance:
         blend="Multiply" if is_highlight else ("Normal" if needs_state else None),
         uses_font=uses_font,
         uses_image=isinstance(annotation, ImageStamp),
-        face=annotation.face() if isinstance(annotation, FreeText) else textlayout.DEFAULT_FACE,
+        face=annotation.face() if isinstance(annotation, FreeText) else
+        textlayout.STAMP_FACE if isinstance(annotation, TextStamp) else textlayout.DEFAULT_FACE,
         soft_fill=isinstance(annotation, Measurement) and annotation.mode == "area",
     )
