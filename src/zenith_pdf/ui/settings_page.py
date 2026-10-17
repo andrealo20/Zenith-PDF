@@ -714,7 +714,7 @@ class SettingsWindow(QDialog):
                   self._switch("remember_styles"), "colours save"))
         s.add(Row("Unlocked tools go back to", "After one use, a tool that is not locked switches to Pan, or to "
                   "Select with what it made selected. Each tool's lock is in its menu: click the tool that is on.",
-                  self._combo("after_drawing", {"pan": "Pan", "select": "Select"}),
+                  self._combo("after_drawing", {"select": "Select", "pan": "Pan"}),
                   "after drawing sticky tool lock unlock pan select return"))
         locks = QWidget()
         row = QHBoxLayout(locks)

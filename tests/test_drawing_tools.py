@@ -391,7 +391,7 @@ def test_clicking_a_link_with_the_hyperlink_tool_edits_it_once(workspace, monkey
     assert opened == ["https://example.org"] and link.uri == "https://example.org/1" and errors == []
     assert tools.tool == "hyperlink"  # changing a link is not a use of the tool
     real_drag(view, at(view, 0, 300, 400), at(view, 0, 420, 430))
-    assert len(of(store, Link)) == 2 and opened[-1] == "" and tools.tool == "hand"
+    assert len(of(store, Link)) == 2 and opened[-1] == "" and tools.tool == "select"
 
 
 def test_an_erase_whose_release_was_lost_stays_its_own_undo_step(workspace, monkeypatch):
@@ -539,7 +539,7 @@ def test_snapshot_scale_and_annotations(workspace):
     image = QApplication.clipboard().image()
     assert (image.width(), image.height()) == (200, 100)
     assert QColor(image.pixel(60, 30)).lightness() > 200  # under the rectangle, left out
-    assert tools.tool == "hand"  # the snapshot tool is unlocked by default
+    assert tools.tool == "select"  # the snapshot tool is unlocked by default
     tools.update_style("snapshot", snapshot_scale=2, snapshot_annotations=True)
     drag(view, "snapshot", [(50, 50), (250, 150)])
     image = QApplication.clipboard().image()

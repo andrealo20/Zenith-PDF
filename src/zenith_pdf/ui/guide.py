@@ -240,10 +240,9 @@ and can sort by it. Click the pencil to change it.</li>
 <li>A preview, drawn the way the page draws, then the options: colour, thickness, opacity, line style and the
 others the tool has.</li>
 </ul>
-<h2>Lock, or back to Pan</h2>
-<p>A locked tool stays on, to draw one thing after another. An unlocked tool is used once, then the pages go
-back to Pan, ready to scroll; Settings &gt; Annotation can send them back to Select instead, with what you made
-selected. The pens, the text markups and the measuring tools start locked; shapes, text boxes and notes start
+<h2>Lock, or back to Select</h2>
+<p>A locked tool stays on, to draw one thing after another. An unlocked tool is used once, then Select comes
+back, with what you made ready to move or style; Settings &gt; Annotation can send them back to Pan instead. The pens, the text markups and the measuring tools start locked; shapes, text boxes and notes start
 unlocked. A small padlock on the tool that is on shows that it is locked.</p>
 <h2>Copies of a tool</h2>
 <p><b>Duplicate</b>, in the menu's more button, puts a copy of the tool right after it, with its own style and

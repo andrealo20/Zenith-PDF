@@ -87,7 +87,7 @@ the assistant.
 
 Click the tool that is on, and its menu opens under it: colour, thickness, opacity, line style and ends,
 fill, pens that thin out when you go fast, ink that turns into clean lines and shapes. The lock keeps a tool
-on to draw again, or lets it go back to Pan after one use. The pin keeps the menu open while you draw.
+on to draw again, or lets it go back to Select after one use. The pin keeps the menu open while you draw.
 
 <img src="docs/images/tool-menu-light.png" alt="The pen's menu: basic, pro and calligraphy pens, colours, thickness, opacity and smart ink" width="100%">
 
@@ -203,8 +203,8 @@ every change, and publishes them with each new version.
   that keeps the menu open while drawing; under it the subject the tool's
   annotations get (written to the PDF as /Subj), a live preview painted by
   the page's own painter, and the tool's options. Every change applies at once
-- A locked tool stays on to draw again; an unlocked one goes back to Pan (or
-  to Select, a setting) after one use. Each tool has its own default lock
+- A locked tool stays on to draw again; an unlocked one goes back to Select (or
+  to Pan, a setting) after one use. Each tool has its own default lock
 - Copies of a tool, each with its own style and subject: a yellow and a green
   highlighter side by side, told apart by the colour of their icons
 - Pens: basic, pro (thinner when moving fast) and calligraphy (angled nib);

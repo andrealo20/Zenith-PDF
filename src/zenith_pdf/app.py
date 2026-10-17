@@ -128,6 +128,7 @@ def create_app(argv: list[str], settings: Settings | None = None) -> tuple[QAppl
     app.setStyle(ZenithStyle())
 
     settings = settings or Settings()
+    settings.upgrade()
     themes.choose(settings.theme, settings.get("accent"))
     _default_glass(settings)
     set_glass(settings.get("glass"))

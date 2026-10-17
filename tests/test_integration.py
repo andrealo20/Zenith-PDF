@@ -197,26 +197,29 @@ def test_a_pinned_menu_stays_with_an_unlocked_tool_after_its_use(workspace):
     tools.set_locked("rectangle", False)
     drag(view, "rectangle", [(100, 100), (200, 180)])
     settle()
-    assert tools.tool == "hand"  # it went back to Pan after one use
+    assert tools.tool == "select"  # it went back to Select after one use
     assert menu.isVisible() and menu.key == "rectangle"  # its pinned menu stayed, to style the next one
-    assert "Pan" in menu.lock_button.toolTip()
+    assert "Select" in menu.lock_button.toolTip()
     tools.set_tool("ellipse")  # a tool the user turns on takes the pinned menu, as before
     settle(200)
     assert menu.isVisible() and menu.key == "ellipse"
 
 
-def test_the_lock_tip_names_select_when_new_annotations_are_selected(window, workspace):
+def test_the_lock_tip_names_where_the_tool_goes(window, workspace):
     toolbar = workspace.toolbar
     workspace.tool_settings.set_locked("rectangle", False)
     toolbar.open_menu("rectangle")
     settle()
     menu = toolbar.tool_menu
-    assert "Pan" in menu.lock_button.toolTip()
-    window.settings.set("select_new", True)
+    assert "Select" in menu.lock_button.toolTip()
+    window.settings.set("after_drawing", "pan")
     try:
-        assert "Select" in menu.lock_button.toolTip()
+        assert "Pan" in menu.lock_button.toolTip()
+        window.settings.set("select_new", True)
+        assert "Select" in menu.lock_button.toolTip()  # what was made gets selected: Select it is
     finally:
         window.settings.set("select_new", False)
+        window.settings.set("after_drawing", "select")
     menu.close_menu()
 
 

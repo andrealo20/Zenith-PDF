@@ -165,7 +165,7 @@ TOPICS: dict[str, Topic] = {
                       "guide line shows what they lined up with. Hold Alt to place freely for a moment."),
     # Tool menu
     "menu_lock": Topic("Lock", "Keeps the tool on after each use, to draw several in a row.",
-                       "Unlocked, the tool goes back to Pan after one use (or to Select, in Settings > "
+                       "Unlocked, the tool goes back to Select after one use (or to Pan, in Settings > "
                        "Annotation). Each tool, and each copy of one, has its own lock."),
     "menu_remove": Topic("Remove from the toolbar", "Takes the tool off the toolbar. A copy of a tool is forgotten "
                          "with its style.", "The + at the end of the toolbar brings any tool back."),

@@ -53,7 +53,8 @@ DEFAULTS: dict[str, object] = {
     "remember_styles": True,
     "tool_styles": {},  # tool or copy key ("pen#2") -> {"style", "subject", "locked"}, and "measure"
     "toolbar_tools": [],  # the toolbar's tools and tool copies in order; empty means the default set
-    "after_drawing": "pan",  # where unlocked tools go after one use: "pan" or "select"
+    "after_drawing": "select",  # where unlocked tools go after one use: "select" or "pan"
+    "after_drawing_moved": False,  # 0.5.0 moved the old default, Pan, to Select once
     "tool_menu_pinned": False,  # the tool menu stays open while drawing
     "tool_menu_sections": {},  # "tool:section title" -> whether that section of the tool menu is open
     "recent_colours": [],  # colours picked last in the tool menus, as [r, g, b], the newest first
@@ -100,7 +101,7 @@ FILE_STATES = 300  # documents whose last position is remembered
 RECENT_KEEP = 200  # recent files stored; "recent_limit" only says how many are shown, so lowering it loses none
 # Stored values of older versions, and what they mean now. Anything else not in CHOICES reads as the default.
 MIGRATIONS = {"after_drawing": {"keep": "pan"}, "glass": {"true": "clear", "false": "solid"}}
-CHOICES = {"after_drawing": ("pan", "select"), "glass": ("clear", "balanced", "solid")}
+CHOICES = {"after_drawing": ("select", "pan"), "glass": ("clear", "balanced", "solid")}
 
 
 class Settings(QObject):
@@ -134,6 +135,14 @@ class Settings(QObject):
         self._store.remove(key)
         self._cache.pop(key, None)
         self.changed.emit(key)
+
+    def upgrade(self) -> None:
+        """Once, what an older version's default would leave behind: unlocked tools went back to Pan before
+        0.5.0, and now go back to Select."""
+        if not self.get("after_drawing_moved"):
+            if self.get("after_drawing") == "pan":
+                self.set("after_drawing", "select")
+            self.set("after_drawing_moved", True)
 
     def stored(self, key: str) -> bool:
         """Whether `key` was ever set, as opposed to still having its default."""

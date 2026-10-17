@@ -328,7 +328,7 @@ class ToolSettings(QObject):
         self.tool = "select"
         self._configs: dict[str, ToolConfig] = {key: ToolConfig(style) for key, style in DEFAULT_STYLES.items()}
         self.author = getpass.getuser()
-        self.after_drawing = "pan"  # where an unlocked tool goes after one use: "pan" or "select"
+        self.after_drawing = "select"  # where an unlocked tool goes after one use: "select" or "pan"
         self.select_new = False  # select each annotation as soon as it is made
         # True while an unlocked tool hands over to Pan or Select after one use, not by the user's choice.
         self.handing_over = False

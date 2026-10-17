@@ -176,7 +176,14 @@ def test_after_drawing_is_migrated(qt_app, tmp_path):
     store.setValue("after_drawing", "select")
     assert Settings(store).get("after_drawing") == "select"
     store.setValue("after_drawing", "sideways")
-    assert Settings(store).get("after_drawing") == "pan"
+    assert Settings(store).get("after_drawing") == "select"
+    store.setValue("after_drawing", "pan")  # the default before 0.5.0, moved to Select once
+    settings = Settings(store)
+    settings.upgrade()
+    assert settings.get("after_drawing") == "select"
+    settings.set("after_drawing", "pan")  # chosen after that, it stays
+    settings.upgrade()
+    assert settings.get("after_drawing") == "pan"
     assert Settings(store).get("tool_menu_pinned") is False
 
 

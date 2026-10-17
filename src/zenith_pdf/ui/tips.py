@@ -38,14 +38,14 @@ TOOL_TIPS: dict[str, tuple[str, ...]] = {
               "Its menu sets the colour, the size and how long the trail stays."),
     "line": ("Shift snaps the line to 45°.",
              "Click the tool again for dashes and ten kinds of line ends.",
-             "Unlocked, it goes back to Pan after one line: lock it in its menu to draw several."),
+             "Unlocked, it goes back to Select after one line: lock it in its menu to draw several."),
     "polyline": ("Click for each corner; double-click or Enter finishes.",
                  "Backspace takes back the last point, Esc gives up."),
     "arrow": ("Shift snaps the arrow to 45°.",
               "Its menu can put a head on both ends, or change the head's style."),
     "rectangle": ("Hold Shift for a square.",
                   "Click the tool again for border, fill, line style and a highlight mode that never hides the text.",
-                  "Unlocked, it goes back to Pan after one shape: lock it in its menu to draw several."),
+                  "Unlocked, it goes back to Select after one shape: lock it in its menu to draw several."),
     "ellipse": ("Hold Shift for a circle.",
                 "Its menu has border, fill and opacity, and a lock to draw several in a row."),
     "cloud": ("Drag over what changed, the way drawings mark revisions.",
@@ -202,7 +202,7 @@ class ToolTips(QObject):
 
     def _on_tool(self, key: str) -> None:
         if self.workspace.tool_settings.handing_over:
-            return  # the tool went back to Pan or Select by itself: no tip for a tool nobody picked
+            return  # the tool went back to Select or Pan by itself: no tip for a tool nobody picked
         self.card.hide()
         self.show_for(key)
 

@@ -1,7 +1,7 @@
 """Each tool's own menu, in the style of Drawboard's.
 
 At the top, the tool's icon in its colour and its name, then four buttons: lock
-(stay on after each use, or go back to Pan), remove from the toolbar, more, and
+(stay on after each use, or go back to Select), remove from the toolbar, more, and
 pin (keep the menu open while drawing). Under them the subject the tool's
 annotations get, with a pencil to change it. Below, a preview painted the way the
 page paints, then the tool's options in the order tools.OPTIONS gives. Every
