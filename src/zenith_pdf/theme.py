@@ -530,20 +530,26 @@ def _for_platform(sheet: str) -> str:
 def tone_sheet(t: Theme) -> str:
     """The rules of a glass bar that took the other theme's colours over what is behind it: a light bar over a
     bright page in the dark theme, a dark one over a dark picture in the light theme. Set on the bar, they win
-    over the app's own."""
+    over the app's own.
+
+    Only on what sits on the bar itself ("> "): a menu that opens from it, such as a tool's, is solid and keeps
+    the app's colours. Without it a light bar gave the dark menu dark text."""
+    bar = "#FloatingBar >"
     return _for_platform(f"""
-    QLabel, QLabel#Muted, QLabel#ToastText {{ color: {t.text}; }}
-    QToolButton {{ color: {t.text}; }}
-    QToolButton:hover {{ background: {t.glass_hover}; }}
-    QToolButton:pressed {{ background: {t.glass_pressed}; }}
-    QToolButton:checked {{ background: {t.glass_checked}; }}
-    QToolButton#BackChip {{
+    {bar} QLabel, {bar} QLabel#Muted, {bar} QLabel#ToastText {{ color: {t.text}; }}
+    {bar} QToolButton {{ color: {t.text}; }}
+    {bar} QToolButton:hover {{ background: {t.glass_hover}; }}
+    {bar} QToolButton:pressed {{ background: {t.glass_pressed}; }}
+    {bar} QToolButton:checked {{ background: {t.glass_checked}; }}
+    {bar} QToolButton#BackChip {{
         background: {t.glass_hover}; border-radius: 14px; padding: 5px 10px 5px 8px; font-weight: 600;
     }}
-    QToolButton#BackChip:hover {{ background: {t.glass_pressed}; }}
-    QLineEdit#PageField {{ color: {t.text}; border-color: {t.border}; selection-background-color: {t.selection}; }}
-    QLineEdit#PageField:hover {{ border-color: {t.text_muted}; }}
-    #Separator {{ background: {t.border}; }}
+    {bar} QToolButton#BackChip:hover {{ background: {t.glass_pressed}; }}
+    {bar} QLineEdit#PageField {{
+        color: {t.text}; border-color: {t.border}; selection-background-color: {t.selection};
+    }}
+    {bar} QLineEdit#PageField:hover {{ border-color: {t.text_muted}; }}
+    {bar} #Separator {{ background: {t.border}; }}
     """)
 
 

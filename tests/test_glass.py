@@ -622,3 +622,24 @@ def test_bars_turn_light_over_a_bright_page_and_dark_again_over_the_canvas(windo
     assert counter.tone == ""  # the light theme over a white page: its own colours
     assert counter._chosen_tone(QColor(5, 5, 8)) == "dark"  # a dark picture behind: the dark theme's
     window.set_theme("dark")
+
+
+def test_a_tool_menu_keeps_the_apps_colours_under_a_toned_bar(window, workspace):
+    from PySide6.QtGui import QPalette
+    from PySide6.QtWidgets import QLabel
+
+    toolbar = workspace.toolbar
+    toolbar.set_tone("light" if themes.current.name == "dark" else "dark")  # the bar over a page of the other tone
+    try:
+        toolbar.open_menu("select")
+        QApplication.processEvents()
+        titles = [label for label in toolbar.tool_menu.findChildren(QLabel) if label.text()]
+        assert titles
+        for label in titles:
+            label.ensurePolished()
+            shown = label.palette().color(QPalette.ColorRole.WindowText)
+            # The menu is solid, in the app's colours: its words stand out from its own background.
+            assert contrast(luminance(shown), luminance(QColor(themes.current.surface))) >= 3.0, label.text()
+    finally:
+        toolbar.tool_menu.close_menu()
+        toolbar.set_tone("")
