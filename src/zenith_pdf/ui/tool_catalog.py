@@ -46,6 +46,8 @@ CATALOG = [
     ToolSpec("distance", "Distance", "ruler", "Measure", "#06b6d4"),
     ToolSpec("perimeter", "Perimeter", "path", "Measure", "#14b8a6"),
     ToolSpec("area", "Area", "bounding-box", "Measure", "#0ea5e9"),
+    ToolSpec("angle", "Angle", "z-angle", "Measure", "#22d3ee"),
+    ToolSpec("volume", "Volume", "cube", "Measure", "#6366f1"),
     ToolSpec("note", "Note", "note", "Insert", "#facc15"),
     ToolSpec("stamp", "Stamp", "circle-wavy-check", "Insert", "#ef4444"),
     ToolSpec("bookmark", "Bookmark", "bookmark-simple", "Insert", "#f59e0b", action=True),

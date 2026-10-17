@@ -1649,7 +1649,7 @@ SAMPLE = "Mark up this text"
 REDACT_MARKED = "Mark up"  # the words the Redaction preview marks; the rest shows filled in
 PREVIEWED = {"pen", "marker", "eraser", "tape", "laser", "line", "polyline", "arrow", "rectangle", "ellipse", "cloud",
              "polygon", "highlight", "underline", "squiggly", "strikeout", "text", "callout", "redact", "distance",
-             "perimeter", "area", "note", "hyperlink", "audio", "equation", "stamp"}
+             "perimeter", "area", "note", "hyperlink", "audio", "equation", "stamp", "angle", "volume"}
 UNDER_TEXT = {"marker", "tape", "rectangle", "ellipse", "cloud", "polygon", "line", "arrow", "polyline"}
 
 
@@ -1730,15 +1730,19 @@ def preview_annotation(base: str, style: ToolStyle, measure: tuple | None = None
         marked = QFontMetricsF(_sample_font()).horizontalAdvance(REDACT_MARKED) + 6
         return Redaction(page=0, rects=((rect.x() - 3, rect.y(), marked, rect.height()),),
                          fill=s.fill or (0.0, 0.0, 0.0))
-    if base in ("distance", "perimeter", "area"):
+    if base == "angle":
+        return Measurement(page=0, points=((w / 2 + 90, h - 16), (w / 2 - 70, h - 16), (w / 2 + 40, 12)),
+                           mode="angle", width=min(s.width, 12.0), color=s.color)
+    if base in ("distance", "perimeter", "area", "volume"):
         paper, paper_unit, real, real_unit = measure or (1.0, "cm", 1.0, "cm")
         points_per_paper = paper * UNITS.get(paper_unit, 1.0)
         scale = real / points_per_paper if points_per_paper > 0 else 1.0
         shapes = {"distance": ((44, h - 20), (w - 44, h - 20)),
                   "perimeter": ((44, h - 14), (104, 18), (184, h - 14), (w - 44, 18)),
                   "area": ((w / 2 - 70, 12), (w / 2 + 70, 12), (w / 2 + 70, h - 12), (w / 2 - 70, h - 12))}
+        shapes["volume"] = shapes["area"]
         return Measurement(page=0, points=shapes[base], mode=base, scale=scale, unit=real_unit,
-                           width=min(s.width, 12.0), color=s.color)
+                           width=min(s.width, 12.0), color=s.color, depth=s.depth)
     if base == "note":
         return Note(page=0, position=(w / 2 - NOTE_SIZE / 2, h / 2 - NOTE_SIZE / 2), color=s.color, icon=s.note_icon)
     if base == "stamp":
@@ -3014,6 +3018,8 @@ class ToolMenu(_Menu):
 
 
 HINTS = {
+    "angle": "Click an arm's end, the corner, then the other arm's end.",
+    "volume": "Click for each corner, then say how deep it goes.",
     "stamp": "Click where the stamp goes.",
     "polyline": "Click for each corner; double-click or Enter finishes.",
     "polygon": "Click for each corner; double-click or Enter closes the shape.",

@@ -29,6 +29,7 @@ from ..core.annotations import (
     constrain_angle,
     normalized,
 )
+from . import messages
 from .annotation_items import AnnotationItem, hit_path, qcolor
 from .commands import ChangeAnnotations, RemoveAnnotations
 from .tools import LASER_SIZES, MIN_DRAG, TextSpanTool, Tool, alive, remove_item
@@ -549,13 +550,15 @@ class LaserTool(Tool):
 
 
 class PointsTool(Tool):
-    """Polyline, polygon, perimeter and area: click for each point, double-click or Enter to finish.
+    """Polyline, polygon, perimeter, area and volume: click for each point, double-click or Enter to finish.
+    An angle is done at its third click: an arm's end, the corner, the other arm's end.
 
     Backspace takes back the last point, Esc gives up, Shift keeps lines at 45°.
     """
 
     wants_hover = True
-    CLOSED = {"polygon", "area"}
+    CLOSED = {"polygon", "area", "volume"}
+    MEASURED = {"perimeter", "area", "volume", "angle"}
 
     def __init__(self, view, name):
         super().__init__(view, name)
@@ -570,9 +573,10 @@ class PointsTool(Tool):
     def _build(self, points) -> Poly | Measurement:
         s = self.style
         common = dict(page=self.page.index, color=s.color, width=s.width, **self.common())
-        if self.name in ("perimeter", "area"):
+        if self.name in self.MEASURED:
             scale, unit = self.view.tool_settings.measure_scale()
-            return Measurement(points=tuple(points), mode=self.name, scale=scale, unit=unit, **common)
+            return Measurement(points=tuple(points), mode=self.name, scale=scale, unit=unit,
+                               depth=s.depth if self.name == "volume" else 0.0, **common)
         closed = self.name == "polygon"
         if closed:
             ends = dict(fill=s.fill, border=s.border, pattern=s.pattern)
@@ -596,6 +600,9 @@ class PointsTool(Tool):
         if not self.points or not _near(self.points[-1], point, 1.0):
             self.points.append(point)
         self._show(self.points)
+        if self.name == "angle" and len(self.points) == 3:
+            self.finish()
+            return False
         return True
 
     def hover(self, page, pos) -> None:
@@ -641,8 +648,10 @@ class PointsTool(Tool):
     def finish(self) -> None:
         points, page = self.points, self.page
         self.cancel()
-        needed = 3 if self.name in self.CLOSED else 2
+        needed = 3 if self.name in self.CLOSED or self.name == "angle" else 2
         if page is None or len(points) < needed:
+            return
+        if self.name == "volume" and not self._ask_depth():
             return
         self.page = page
         annotation = self._build(points)
@@ -654,6 +663,16 @@ class PointsTool(Tool):
         remove_item(self.item)
         self.item = None
         self.page, self.points = None, []
+
+    def _ask_depth(self) -> bool:
+        """A volume's depth, in the scale's unit; the next volume starts from it. False if cancelled."""
+        _, unit = self.view.tool_settings.measure_scale()
+        depth = messages.get_double(self.view, "Volume", "How deep the area goes, or how high it stands.",
+                                    self.style.depth, 0.001, 1e6, 2, suffix=f" {unit}", action="Measure")
+        if depth is None:
+            return False
+        self.view.tool_settings.update_style(self.name, depth=depth)
+        return True
 
 
 class MeasureLineTool(Tool):
@@ -950,7 +969,7 @@ def make_more_tools(view) -> dict:
     tools["eraser"] = EraserTool(view, "eraser")
     tools["tape"] = TapeTool(view, "tape")
     tools["laser"] = LaserTool(view, "laser")
-    for name in ("polyline", "polygon", "perimeter", "area"):
+    for name in ("polyline", "polygon", "perimeter", "area", "angle", "volume"):
         tools[name] = PointsTool(view, name)
     tools["distance"] = MeasureLineTool(view, "distance")
     tools["cleaner"] = CleanerTool(view, "cleaner")

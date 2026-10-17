@@ -313,10 +313,13 @@ def paint_annotation(painter: QPainter, a: Annotation) -> None:
         painter.drawPolygon(shape)
     elif isinstance(a, Measurement):
         painter.setPen(pen(qcolor(a.color), a.width, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        if a.mode == "area" and len(a.points) >= 3:
+        if a.closed and len(a.points) >= 3:
             painter.setBrush(qcolor(a.color, 0.16))
             painter.drawPolygon(qpolygon(a.points))
             painter.setBrush(Qt.BrushStyle.NoBrush)
+        elif a.mode == "angle" and len(a.points) >= 3:
+            painter.drawPolyline(qpolygon(a.points[:3]))
+            painter.drawPolyline(qpolygon(a.arc()))
         elif len(a.points) >= 2:
             painter.drawPolyline(qpolygon(a.points))
             for end, neighbour in ((a.points[0], a.points[1]), (a.points[-1], a.points[-2])):
@@ -460,13 +463,12 @@ def hit_path(a: Annotation) -> QPainterPath:
         path.closeSubpath()
         return path
     if isinstance(a, (Poly, Measurement)):
-        path.addPolygon(qpolygon(a.points + ((a.points[0],) if getattr(a, "closed", False) or
-                                             getattr(a, "mode", "") == "area" else ())))
+        path.addPolygon(qpolygon(a.points + ((a.points[0],) if getattr(a, "closed", False) else ())))
         stroker.setWidth(a.width + 2 * HIT_SLOP)
         outline = stroker.createStroke(path)
         if isinstance(a, Measurement):
             outline.addRect(QRectF(*a.label_rect()))
-            if a.mode == "area":
+            if a.closed:
                 outline.addPolygon(qpolygon(a.points))
         else:
             outline = _with_endings(outline, a.endings())

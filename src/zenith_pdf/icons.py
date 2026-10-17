@@ -108,6 +108,14 @@ def _cleaner(p: QPainter) -> None:
     p.drawLine(QPointF(20.5, 13.5), QPointF(14.5, 19.5))
 
 
+def _angle(p: QPainter) -> None:
+    p.drawLine(QPointF(3.5, 19.5), QPointF(20.5, 19.5))
+    p.drawLine(QPointF(3.5, 19.5), QPointF(16, 5))
+    arc = QPainterPath(QPointF(12, 19.5))
+    arc.arcTo(QRectF(-5, 11, 17, 17), 0, 48)
+    p.drawPath(arc)
+
+
 def _snapshot(p: QPainter) -> None:
     pen = QPen(p.pen())
     pen.setDashPattern([2.0, 1.6])
@@ -291,6 +299,7 @@ CUSTOM = {
     "z-equation": _glyph("π", italic=True, size=17),
     "z-cleaner": _cleaner,
     "z-snapshot": _snapshot,
+    "z-angle": _angle,
     "z-pen-basic": _pen_basic,
     "z-pen-pro": _pen_pro(),
     "z-pen-calligraphy": _pen_calligraphy(),

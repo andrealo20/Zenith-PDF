@@ -94,6 +94,7 @@ class ToolStyle:
     underline: bool = False
     align: str = "left"  # TEXT_ALIGNS
     pattern: str = "solid"  # how a shape's fill is drawn: PATTERNS
+    depth: float = 1.0  # a volume's depth, in the measuring scale's unit
     stamp: str = "Approved"  # one of STAMPS, or words of the user's own
     stamp_detail: bool = True  # a line under the stamp: who stamped it, and when
 
@@ -142,6 +143,8 @@ DEFAULT_STYLES = {
     "distance": ToolStyle(color=BLUE, width=1.5),
     "perimeter": ToolStyle(color=BLUE, width=1.5),
     "area": ToolStyle(color=BLUE, width=1.5),
+    "angle": ToolStyle(color=BLUE, width=1.5),
+    "volume": ToolStyle(color=BLUE, width=1.5),
     "note": ToolStyle(color=(1.0, 0.82, 0.2)),
     "stamp": ToolStyle(color=(0.85, 0.15, 0.15)),
     "bookmark": ToolStyle(color=BLUE),
@@ -189,6 +192,8 @@ OPTIONS: dict[str, tuple[str, ...]] = {
     "distance": _MEASURE,
     "perimeter": _MEASURE,
     "area": _MEASURE,
+    "angle": ("color", "width"),
+    "volume": _MEASURE,
     "note": ("color", "note_icon"),
     "stamp": ("stamp_text", "stamp_detail", "color", "opacity"),
     "bookmark": (),
@@ -222,14 +227,14 @@ BORDER_TOOLS = frozenset({"rectangle", "ellipse", "cloud", "polygon"})  # colour
 _BASIC = {"color", "width", "opacity", "font_size", "scale"}
 STYLE_CONTROLS = {tool: set(names) & _BASIC for tool, names in OPTIONS.items() if set(names) & _BASIC}
 WIDE_TOOLS = {"marker", "eraser", "tape"}  # thickness chips in bigger steps
-MEASURE_TOOLS = {"distance", "perimeter", "area"}
+MEASURE_TOOLS = {"distance", "perimeter", "area", "angle", "volume"}
 
 # Whether a tool stays on after one use. Repetitive tools are locked by default; tools that place
 # one object are not, and go back to the "after_drawing" tool. Tools missing here never switch away:
 # select, hand and laser; lasso, which goes to Select by itself; and the action tools.
 LOCK_DEFAULTS = {key: True for key in (
     "pen", "marker", "eraser", "tape", "highlight", "underline", "squiggly", "strikeout", "cleaner", "redact",
-    "distance", "perimeter", "area")} | {key: False for key in (
+    "distance", "perimeter", "area", "angle", "volume")} | {key: False for key in (
     "line", "arrow", "polyline", "rectangle", "ellipse", "cloud", "polygon", "text", "callout", "note", "stamp",
     "signature",
     "hyperlink", "audio", "equation", "snapshot")}
@@ -330,6 +335,7 @@ FIELD_CHECKS = {
     "underline": _flag,
     "align": _one_of(TEXT_ALIGNS),
     "pattern": _one_of(PATTERNS),
+    "depth": _number(0.001, 1e6),
     "stamp": _stamp_words,
     "stamp_detail": _flag,
 }

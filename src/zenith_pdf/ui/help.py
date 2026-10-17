@@ -85,6 +85,11 @@ TOPICS: dict[str, Topic] = {
     "tool_note": Topic("Note", "Adds a sticky note: a small icon that holds a comment.",
                        "Click on the page and write the note. Double-click the icon later to read or edit it. "
                        "Its menu picks the colour and the icon."),
+    "tool_angle": Topic("Angle", "Measures the angle between two lines, in degrees.",
+                        "Click the end of one arm, the corner, then the end of the other arm."),
+    "tool_volume": Topic("Volume", "Measures a volume: an area on the drawing times its depth or height.",
+                         "Click for each corner and finish with a double-click or Enter, then give the depth. The "
+                         "drawing's scale, in the tool's menu, turns the area into real units."),
     "tool_stamp": Topic("Stamp", "Stamps the page: APPROVED, DRAFT, CONFIDENTIAL and more, or your own words.",
                         "Click where it goes. A line under it can say who stamped it and when; in your own words "
                         "{date}, {time}, {author} and {page} fill in. Apply to pages stamps every page."),

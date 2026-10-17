@@ -54,13 +54,14 @@ log = logging.getLogger(__name__)
 MARKUPS = {"/Highlight", "/Underline", "/Squiggly", "/StrikeOut"}
 SUPPORTED = MARKUPS | {"/Square", "/Circle", "/Line", "/Ink", "/FreeText", "/Text", "/Stamp", "/Redact", "/PolyLine",
                        "/Polygon", "/Link", "/FileAttachment", "/Caret"}
-DIMENSIONS = {"/LineDimension": "distance", "/PolyLineDimension": "perimeter", "/PolygonDimension": "area"}
+DIMENSIONS = {"/LineDimension": "distance", "/PolyLineDimension": "perimeter", "/PolygonDimension": "area",
+              "/ZenithAngle": "angle", "/ZenithVolume": "volume"}  # the last two are Zenith PDF's own
 IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 # Keys rewritten from scratch on every write: an annotation that no longer needs one loses it.
 MANAGED_KEYS = ("/RD", "/IC", "/LE", "/AS", "/IT", "/CL", "/BE", "/Measure", "/Vertices", "/Subj", "/Name",
                 "/ZenithHighlighter", "/ZenithWidths", "/ZenithBorderColor", "/ZenithBorderWidth", "/ZenithRotation",
                 "/ZenithEquationSize", "/ZenithEquationColor", "/ZenithGroup", "/ZenithStampText",
-                "/ZenithStampDetail", "/ZenithStampName", "/ZenithPattern")
+                "/ZenithStampDetail", "/ZenithStampName", "/ZenithPattern", "/ZenithDepth")
 ALIGNS = ("left", "center", "right")  # a text box's /Q: 0, 1 and 2
 FLAG_HIDDEN = 2
 FLAG_PRINT = 4
@@ -252,8 +253,11 @@ def read_annotation(obj, page: int, geometry: PageGeometry, pages: dict | None =
         extra = dict(scale=scale[0], unit=scale[1]) if scale else {}
         if len(points) < 2:
             return None
+        if (mode == "angle" and len(points) < 3) or (mode == "volume" and len(points) < 3):
+            return None
         measured = Measurement(points=points, mode=mode, width=_border_width(obj, 1.5),
-                               color=color or (0.1, 0.45, 0.95), **extra, **common)
+                               color=color or (0.1, 0.45, 0.95), depth=_number(obj.get("/ZenithDepth"), 0.0),
+                               **extra, **common)
         if measured.contents == measured.text():  # the label we wrote, not a comment of the user's
             measured = replace(measured, contents="")
         return measured
@@ -757,7 +761,10 @@ def write_annotation(pdf: pikepdf.Pdf, obj: Dictionary, annotation: Annotation, 
             obj.L = _array((*geometry.to_pdf(*a.points[0]), *geometry.to_pdf(*a.points[-1])))
         else:
             obj.Vertices = _flat(a.points, geometry)
-        obj.IT = Name({"distance": "/LineDimension", "perimeter": "/PolyLineDimension"}.get(a.mode, "/PolygonDimension"))
+        obj.IT = Name({"distance": "/LineDimension", "perimeter": "/PolyLineDimension", "angle": "/ZenithAngle",
+                       "volume": "/ZenithVolume"}.get(a.mode, "/PolygonDimension"))
+        if a.mode == "volume":
+            obj.ZenithDepth = float(a.depth)
         unit = pikepdf.String(a.unit)
         number = lambda factor, label: Dictionary(Type=Name.NumberFormat, U=label, C=float(factor), D=100)
         obj.Measure = Dictionary(

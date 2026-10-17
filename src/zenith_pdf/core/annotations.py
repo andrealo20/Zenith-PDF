@@ -539,44 +539,80 @@ REAL_UNITS = ("mm", "cm", "m", "km", "in", "ft", "yd", "mi", "pt")
 
 @dataclass(frozen=True, kw_only=True)
 class Measurement(Annotation):
-    """A measured distance, perimeter or area, labelled with its value at the drawing's scale.
+    """A measured distance, perimeter, area, angle or volume, labelled with its value at the drawing's scale.
+
+    An angle is three points, the first arm's end, the corner and the second arm's end; a volume is an area
+    times `depth`, given in `unit`.
 
     `scale` turns points on the page into `unit`s in reality: 1 cm on paper
     standing for 1 m makes scale = 1 / (72 / 2.54) m per point.
     """
 
     points: tuple[Point, ...] = ()
-    mode: str = "distance"  # distance, perimeter or area
+    mode: str = "distance"  # distance, perimeter, area, angle or volume
     scale: float = 2.54 / 72  # cm per point: life size
     unit: str = "cm"
     width: float = 1.5
     color: Color = (0.1, 0.45, 0.95)
     label_size: float = 9.0
+    depth: float = 0.0  # a volume's depth, in `unit`
 
     @property
     def kind(self) -> str:
-        return {"distance": "Line", "perimeter": "PolyLine"}.get(self.mode, "Polygon")
+        return {"distance": "Line", "perimeter": "PolyLine", "angle": "PolyLine"}.get(self.mode, "Polygon")
+
+    @property
+    def closed(self) -> bool:
+        """Whether it measures the inside of a shape: an area or a volume."""
+        return self.mode in ("area", "volume")
 
     @property
     def label(self) -> str:
         return self.mode.capitalize()
 
     def value(self) -> float:
+        if self.mode == "angle":
+            return angle_at(self.points)
         if self.mode == "area":
             return polygon_area(self.points) * self.scale ** 2
+        if self.mode == "volume":
+            return polygon_area(self.points) * self.scale ** 2 * self.depth
         return path_length(self.points) * self.scale
 
     def text(self) -> str:
         value = self.value()
+        if self.mode == "angle":
+            return f"{value:.1f}°"
         digits = 0 if value >= 100 else 1 if value >= 10 else 2
-        return f"{value:.{digits}f} {self.unit}{'²' if self.mode == 'area' else ''}"
+        power = {"area": "²", "volume": "³"}.get(self.mode, "")
+        return f"{value:.{digits}f} {self.unit}{power}"
+
+    def arc(self) -> tuple[Point, ...]:
+        """An angle's arc at its corner, from one arm to the other the short way round."""
+        if self.mode != "angle" or len(self.points) < 3:
+            return ()
+        (ax, ay), (cx, cy), (bx, by) = self.points[:3]
+        first, second = math.atan2(ay - cy, ax - cx), math.atan2(by - cy, bx - cx)
+        sweep = (second - first + math.pi) % (2 * math.pi) - math.pi  # -pi to pi: the short way
+        arms = min(math.hypot(ax - cx, ay - cy), math.hypot(bx - cx, by - cy))
+        radius = max(min(18.0, arms * 0.45), 2.0)
+        steps = max(int(abs(math.degrees(sweep)) / 6), 2)
+        return tuple((cx + radius * math.cos(first + sweep * i / steps), cy + radius * math.sin(first + sweep * i / steps))
+                     for i in range(steps + 1))
 
     def label_rect(self) -> Rect:
         from .textlayout import text_width
 
         width = text_width(self.text(), self.label_size) + 8
         height = self.label_size * 1.6
-        if self.mode == "area" and len(self.points) >= 3:
+        if self.mode == "angle" and len(self.points) >= 3:
+            (ax, ay), (cx, cy), (bx, by) = self.points[:3]
+            ux, uy = _unit(ax - cx, ay - cy)
+            vx, vy = _unit(bx - cx, by - cy)
+            mx, my = _unit(ux + vx, uy + vy) if abs(ux + vx) + abs(uy + vy) > 1e-6 else (-uy, ux)
+            distance = 24.0 + max(width, height) / 2  # outside the arc, along the line halving the angle
+            return cx + mx * distance - width / 2, cy + my * distance - height / 2, width, height
+        if self.closed and len(self.points) >= 3:
             cx, cy = centroid(self.points)
             return cx - width / 2, cy - height / 2, width, height
         if self.mode == "distance" and len(self.points) >= 2:
@@ -976,6 +1012,20 @@ def tape_outline(start: Point, end: Point, width: float) -> tuple[Point, ...]:
         return points[::-1] if reverse else points
 
     return tuple(edge(end, 1.0, False) + edge(start, -1.0, True))
+
+
+def _unit(dx: float, dy: float) -> tuple[float, float]:
+    length = math.hypot(dx, dy)
+    return (dx / length, dy / length) if length > 1e-9 else (1.0, 0.0)
+
+
+def angle_at(points) -> float:
+    """The angle at the second of three points, in degrees, 0 to 180."""
+    if len(points) < 3:
+        return 0.0
+    (ax, ay), (cx, cy), (bx, by) = points[:3]
+    first, second = math.atan2(ay - cy, ax - cx), math.atan2(by - cy, bx - cx)
+    return abs(math.degrees((second - first + math.pi) % (2 * math.pi) - math.pi))
 
 
 def path_length(points) -> float:

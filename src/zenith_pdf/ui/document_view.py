@@ -58,6 +58,7 @@ from ..core.annotations import (
     ImageStamp,
     Ink,
     Link,
+    Measurement,
     Note,
     Redaction,
     Tape,
@@ -1075,6 +1076,8 @@ class DocumentView(QGraphicsView):
             self.edit_note(annotation)
         elif isinstance(annotation, TextStamp):
             self.edit_stamp(annotation)
+        elif isinstance(annotation, Measurement) and annotation.mode == "volume":
+            self.edit_depth(annotation)
         elif isinstance(annotation, Tape):
             from .drawing_tools import toggle_tape
 
@@ -2201,6 +2204,12 @@ class DocumentView(QGraphicsView):
         if text is not None and text != note.contents:
             label = "Edit inserted text" if isinstance(note, Caret) else "Edit note"
             self.undo_stack.push(ChangeAnnotations(self.store, [note], [replace(note, contents=text)], label))
+
+    def edit_depth(self, volume: Measurement) -> None:
+        depth = messages.get_double(self, "Volume", "How deep the area goes, or how high it stands.", volume.depth,
+                                    0.001, 1e6, 2, suffix=f" {volume.unit}", action="Save")
+        if depth is not None and depth != volume.depth:
+            self.undo_stack.push(ChangeAnnotations(self.store, [volume], [replace(volume, depth=depth)], "Edit depth"))
 
     def edit_stamp(self, stamp: TextStamp) -> None:
         text = messages.get_text(self, "Stamp", "What the stamp says.", stamp.text, action="Save", required=True)

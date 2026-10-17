@@ -375,9 +375,12 @@ def _draw(annotation: Annotation) -> tuple[list[str], bool]:
             ops += ["0.6 w", _rgb(a.color, stroke=False), _rgb((r * 0.8, g * 0.8, b * 0.8), stroke=True), outline + " B"]
     elif isinstance(a, Measurement):
         ops += ["1 J 1 j", f"{num(a.width)} w", _rgb(a.color, stroke=True)]
-        if a.mode == "area" and len(a.points) >= 3:
+        if a.closed and len(a.points) >= 3:
             ops += ["q /GS1 gs", _rgb(a.color, stroke=False), _polyline(a.points) + " h f Q"]
             ops.append(_polyline(a.points) + " h S")
+        elif a.mode == "angle" and len(a.points) >= 3:
+            ops.append(_polyline(a.points[:3]) + " S")
+            ops.append(_polyline(a.arc()) + " S")
         elif len(a.points) >= 2:
             ops.append(_polyline(a.points) + " S")
             for end, neighbour in ((a.points[0], a.points[1]), (a.points[-1], a.points[-2])):
@@ -485,5 +488,5 @@ def build(annotation: Annotation, geometry: PageGeometry) -> Appearance:
         uses_image=isinstance(annotation, ImageStamp),
         face=annotation.face() if isinstance(annotation, FreeText) else
         textlayout.STAMP_FACE if isinstance(annotation, TextStamp) else textlayout.DEFAULT_FACE,
-        soft_fill=isinstance(annotation, Measurement) and annotation.mode == "area",
+        soft_fill=isinstance(annotation, Measurement) and annotation.closed,
     )
