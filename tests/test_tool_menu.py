@@ -469,7 +469,7 @@ def test_the_selection_style_menu_changes_dash_and_endings(workspace):
     assert menu.isVisible() and menu.title.text() == "2 annotations"
     assert "endings" not in menu.editor.blocks and "fill" not in menu.editor.blocks
     menu.close_menu()
-    assert selection_options([shape]) == ("color", "fill", "width", "opacity", "dash", "highlight")
+    assert selection_options([shape]) == ("color", "fill", "width", "opacity", "pattern", "dash", "highlight")
 
 
 def test_the_editor_alone_reports_only_what_changed():
