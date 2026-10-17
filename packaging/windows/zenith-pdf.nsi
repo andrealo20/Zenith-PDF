@@ -56,8 +56,8 @@ VIAddVersionKey "LegalCopyright" "Copyright (C) 2026 ${PUBLISHER}. GPL-3.0-or-la
 !define MUI_UNWELCOMEFINISHPAGE_BITMAP "${SIDE}"
 !define MUI_ABORTWARNING
 
-Var Desktop
-Var DesktopBox
+Var ShortcutWanted
+Var ShortcutBox
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "${LICENSE}"
@@ -81,7 +81,7 @@ Function .onInit
     Abort
   ${EndIf}
   SetRegView 64
-  StrCpy $Desktop ${BST_CHECKED}
+  StrCpy $ShortcutWanted ${BST_CHECKED}
 FunctionEnd
 
 Function un.onInit
@@ -96,13 +96,13 @@ Function ShortcutPage
     Abort
   ${EndIf}
   ${NSD_CreateCheckbox} 0 12u 100% 12u "Create a desktop shortcut for ${APP}"
-  Pop $DesktopBox
-  ${NSD_SetState} $DesktopBox $Desktop
+  Pop $ShortcutBox
+  ${NSD_SetState} $ShortcutBox $ShortcutWanted
   nsDialogs::Show
 FunctionEnd
 
 Function ShortcutPageLeave
-  ${NSD_GetState} $DesktopBox $Desktop
+  ${NSD_GetState} $ShortcutBox $ShortcutWanted
 FunctionEnd
 
 Section "Install"
@@ -118,7 +118,7 @@ Section "Install"
   WriteRegStr HKLM "Software\ZenithPDF" "InstallDir" "$INSTDIR"
 
   CreateShortcut "$SMPROGRAMS\${APP}.lnk" "$INSTDIR\${EXE}"
-  ${If} $Desktop == ${BST_CHECKED}
+  ${If} $ShortcutWanted == ${BST_CHECKED}
     CreateShortcut "$DESKTOP\${APP}.lnk" "$INSTDIR\${EXE}"
   ${EndIf}
 
