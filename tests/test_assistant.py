@@ -45,6 +45,15 @@ ENTRIES = [
     Entry("cmd:shortcuts", "command", "Keyboard shortcuts", "Command", "shortcut keys keyboard"),
     Entry("cmd:reading", "command", "Reading mode: only the pages", "Command", "reading focus hide bars"),
     Entry("tool:distance", "tool", "Distance", "Tool · Measure", "tool", "Measures the length of a line."),
+    Entry("cmd:compare", "command", "Compare with another version", "Command",
+          "compare versions difference diff changes revision"),
+    Entry("cmd:read_aloud", "command", "Read aloud", "Command", "read aloud speak voice listen speech audio"),
+    Entry("cmd:check_updates", "command", "Check for updates", "Command", "update new version upgrade download"),
+    Entry("cmd:search_all", "command", "Search inside every PDF", "Command",
+          "search all documents full text inside files library"),
+    Entry("write:flashcards", "writing", "Flashcards from highlights", "Writing",
+          "flashcards cards anki study revise quiz memorize test highlights"),
+    Entry("guide:forms", "guide", "Filling in forms", "Guide chapter", "forms fields fill"),
 ]
 
 
@@ -69,6 +78,18 @@ ENTRIES = [
     ("highligth", {"tool:highlight", "tool:marker"}),  # a typo
     ("evidenziatore", {"tool:highlight", "tool:marker"}),
     ("rot", {"cmd:rotate", "cmd:manager"}),  # typed so far
+    ("confronta due versioni", {"cmd:compare"}),
+    ("Versionen vergleichen", {"cmd:compare"}),
+    ("leggi ad alta voce", {"cmd:read_aloud"}),
+    ("vorlesen", {"cmd:read_aloud"}),
+    ("lire à voix haute", {"cmd:read_aloud"}),
+    ("aggiornamenti", {"cmd:check_updates"}),
+    ("buscar actualizaciones", {"cmd:check_updates"}),
+    ("cerca dentro tutti i pdf", {"cmd:search_all"}),
+    ("karteikarten", {"write:flashcards"}),
+    ("schede di studio", {"write:flashcards"}),
+    ("compilare un modulo", {"guide:forms"}),
+    ("remplir un formulaire", {"guide:forms"}),
 ])
 def test_questions_in_six_languages_find_the_right_thing(query, wanted):
     found = Finder(ENTRIES).search(query, 5)

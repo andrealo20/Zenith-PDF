@@ -170,6 +170,21 @@ SYNONYMS: dict[str, str] = {
     "window": "finestra finestre fenetre fenetres ventana ventanas janela janelas fenster",
     "side": "affiancati affiancato fianco cote lado lados nebeneinander",
     "comment": "commento commentaire comentario kommentar",
+    "compare": """confronta confrontare confronto paragona paragonare differenze differenza comparer comparaison
+        differences comparar comparacion diferencias comparacao diferencas vergleichen vergleich unterschiede""",
+    "version": "versione versioni revisione versions versiones versao versoes fassung",
+    "update": """aggiorna aggiornare aggiornamento aggiornamenti aggiornato mettre jour actualiser actualizar
+        actualizacion actualizaciones atualizar atualizacao atualizacoes aktualisieren aktualisierung
+        aktualisierungen upgrade""",
+    "aloud": """alta voce leggimi voix haute voz alta vorlesen laut sprachausgabe""",
+    "speak": """parla parlare pronuncia ascolta ascoltare parler ecouter hablar escuchar falar ouvir sprechen
+        anhoren listen""",
+    "flashcards": """flashcard schede carte memoria cartes memoire tarjetas tarjeta cartoes cartao karteikarten
+        lernkarten karteikarte anki""",
+    "every": "ogni tutti tutte qualsiasi tous toutes chaque todos todas cada alle jede jeder",
+    "inside": "dentro interno interni dans interieur innerhalb",
+    "forms": """modulo moduli compila compilare compilazione campi campo formulaire formulaires remplir champ champs
+        formulario formularios rellenar cumplimentar campos preencher formular formulare ausfullen felder""",
 }
 
 # Words that only carry the question: "how do I", "come faccio a", "comment", "wie kann ich" and the like.
