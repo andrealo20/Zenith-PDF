@@ -26,8 +26,6 @@ SetCompressor /SOLID lzma
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\ZenithPDF"
 !define PROG_ID "ZenithPDF.Document"
 !define REGISTERED "ZenithPDF"
-; Windows' Default apps page for Zenith PDF: Windows 11 shows a Set default button at its top
-!define DEFAULT_APPS "ms-settings:defaultapps?registeredAppMachine=${REGISTERED}"
 
 !ifdef SIGN
   !finalize '"${SIGN}" "%1"'
@@ -117,12 +115,6 @@ Function .onInstSuccess
     ; Through Explorer, so the app starts as the user, without the installer's administrator rights.
     Exec '"$WINDIR\explorer.exe" "$INSTDIR\${EXE}"'
   ${EndIf}
-  ; Windows lets no program make itself the default: its own page opens on Zenith PDF, for one click there.
-  ; Through Explorer, so it opens as the user. Never in a silent update, which asks nothing.
-  ${IfNot} ${Silent}
-  ${AndIf} $DefaultWanted == ${BST_CHECKED}
-    Exec '"$WINDIR\explorer.exe" "${DEFAULT_APPS}"'
-  ${EndIf}
 FunctionEnd
 
 Function un.onInit
@@ -142,8 +134,8 @@ Function OptionsPage
   ${NSD_CreateCheckbox} 0 36u 100% 12u "Make ${APP} the default app for PDF files"
   Pop $DefaultBox
   ${NSD_SetState} $DefaultBox $DefaultWanted
-  ${NSD_CreateLabel} 12u 52u 95% 30u "Windows asks you to confirm: when the installation ends, its Default apps \
-settings open at ${APP}. Choose Set default there (on Windows 10, pick ${APP} for .pdf files)."
+  ${NSD_CreateLabel} 12u 52u 95% 30u "Windows lets only you choose: the first time ${APP} starts, Windows' list \
+of apps opens. Pick ${APP} there, then Always."
   Pop $0
   nsDialogs::Show
 FunctionEnd

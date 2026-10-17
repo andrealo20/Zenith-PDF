@@ -74,56 +74,137 @@ def window(qt_app, tmp_path):
     window.renderer.shutdown()
 
 
-def test_the_first_start_asks_once(window, monkeypatch):
-    asked, made = [], []
+@pytest.fixture
+def question(monkeypatch):
+    """The start-up question with the system left out: PDF files open elsewhere, the installer asked nothing."""
     monkeypatch.setattr(default_app, "can_set", lambda: True)
     monkeypatch.setattr(default_app, "is_default", lambda: False)
-    monkeypatch.setattr(default_app, "installer_asked", lambda: False)
-    monkeypatch.setattr(default_app, "make_default", lambda command: made.append(command) or default_app.DONE)
-    monkeypatch.setattr(messages, "ask", lambda *args, **kwargs: asked.append(args[1]) or "make")
+    monkeypatch.setattr(default_app, "installer_choice", lambda: None)
+    answers, asked = [], []
+
+    def run(dialog):
+        asked.append(dialog.windowTitle())
+        dialog.deleteLater()
+        return answers.pop(0)
+
+    monkeypatch.setattr(messages, "run", run)
+    return answers, asked
+
+
+def test_later_asks_again_some_starts_on_and_three_times_at_most(window, monkeypatch, question):
+    from zenith_pdf.ui import main_window
+
+    answers, asked = question
+    made = []
+    monkeypatch.setattr(window, "make_default_app", lambda: made.append(1))
+    answers += [(messages.CANCEL, False)] * 3
+    assert window.offer_default_app() and asked == ["Open PDF files with Zenith PDF?"]
+    for _ in range(main_window.DEFAULT_APP_AGAIN - 1):
+        assert not window.offer_default_app()  # not every start
+    assert window.offer_default_app() and len(asked) == 2
+    window.settings.set("starts", window.settings.get("default_app_next"))
+    assert window.offer_default_app() and len(asked) == 3
+    assert window.settings.get("default_app_asked")  # three times, then no more
+    window.settings.set("starts", 10_000)
+    assert not window.offer_default_app() and not made
+
+
+@pytest.mark.parametrize("answer, made_it", [(("make", False), True), ((messages.CANCEL, True), False)])
+def test_yes_or_dont_ask_again_ends_the_questions(window, monkeypatch, question, answer, made_it):
+    answers, asked = question
+    made = []
+    monkeypatch.setattr(window, "make_default_app", lambda: made.append(1))
+    answers.append(answer)
     assert window.offer_default_app()
-    assert asked == ["Open PDF files with Zenith PDF?"] and len(made) == 1
-    assert window.settings.get("default_app_asked")
-    assert not window.offer_default_app() and len(asked) == 1  # once only
+    assert bool(made) == made_it and window.settings.get("default_app_asked")
+    window.settings.set("starts", 10_000)
+    assert not window.offer_default_app() and len(asked) == 1
 
 
-@pytest.mark.parametrize("already, by_installer", [(True, False), (None, False), (False, True)])
-def test_no_question_when_it_already_opens_them_or_the_installer_asked(window, monkeypatch, already, by_installer):
-    monkeypatch.setattr(default_app, "can_set", lambda: True)
+@pytest.mark.parametrize("wanted", [True, False])
+def test_the_installers_answer_stands(window, monkeypatch, question, wanted):
+    answers, asked = question
+    made = []
+    monkeypatch.setattr(default_app, "installer_choice", lambda: wanted)
+    monkeypatch.setattr(window, "make_default_app", lambda: made.append(1))
+    window.offer_default_app()
+    assert not asked and bool(made) == wanted and window.settings.get("default_app_asked")
+
+
+@pytest.mark.parametrize("already", [True, None])
+def test_no_question_when_it_opens_them_or_cant_tell(window, monkeypatch, question, already):
+    answers, asked = question
     monkeypatch.setattr(default_app, "is_default", lambda: already)
-    monkeypatch.setattr(default_app, "installer_asked", lambda: by_installer)
-    monkeypatch.setattr(messages, "ask", lambda *args, **kwargs: pytest.fail("asked"))
-    assert not window.offer_default_app()
+    assert not window.offer_default_app() and not asked
+
+
+@pytest.fixture
+def windows_list(monkeypatch):
+    """Windows' list of apps, played: each pick in turn, and whether PDF files open here after it."""
+    from zenith_pdf.ui import main_window
+
+    monkeypatch.setattr(main_window.sys, "platform", "win32")
+    monkeypatch.setattr(default_app, "register_for_user", lambda command: True)
+    monkeypatch.setattr(default_app, "current_app_name", lambda: "Microsoft Edge")
+    picks, after = [], []
+    monkeypatch.setattr(default_app, "choose_in_windows", lambda handle: picks.pop(0))
+    monkeypatch.setattr(default_app, "is_default", lambda: after.pop(0))
+    said = []
+    monkeypatch.setattr(messages, "inform", lambda parent, title, *args, **kwargs: said.append(title))
+    return picks, after, said
+
+
+def test_windows_list_then_a_check_and_a_hint_until_it_is_chosen(window, monkeypatch, windows_list):
+    picks, after, said = windows_list
+    hints = []
+    monkeypatch.setattr(messages, "ask", lambda parent, title, text, *args, **kwargs: hints.append(text) or "again")
+    picks += [default_app.CHOSEN, default_app.CHOSEN]
+    after += [False, True]  # "Always" missed the first time
+    assert window.make_default_app() == default_app.DONE
+    assert len(hints) == 1 and "Microsoft Edge" in hints[0] and "Always" in hints[0]
+    assert said == ["Zenith PDF opens your PDF files"]
+
+
+def test_a_cancelled_list_is_left_alone_and_a_missing_one_falls_back(window, monkeypatch, windows_list):
+    picks, after, said = windows_list
+    pages = []
+    monkeypatch.setattr(default_app, "make_default", lambda command: pages.append(1) or default_app.CONFIRM)
+    picks.append(default_app.CANCELLED)
+    assert window.make_default_app() == default_app.CANCELLED and not pages and not said
+    picks.append(default_app.FAILED)
+    assert window.make_default_app() == default_app.CONFIRM and pages == [1]  # Default apps settings instead
 
 
 def test_settings_say_whether_it_opens_pdf_files(window, monkeypatch):
     state = {"default": False}
-    made = []
     monkeypatch.setattr(default_app, "can_set", lambda: True)
     monkeypatch.setattr(default_app, "is_default", lambda: state["default"])
-
-    def make(command):
-        made.append(command)
-        state["default"] = True
-        return default_app.DONE
-
-    monkeypatch.setattr(default_app, "make_default", make)
+    monkeypatch.setattr(window, "make_default_app", lambda: state.update(default=True))
     window.open_settings("files")
     QApplication.processEvents()
     button = window._settings_window._default_app
     assert button.text() == "Make it the default" and button.isEnabled()
     button.click()
-    assert made and button.text() == "Zenith PDF opens them" and not button.isEnabled()
+    assert button.text() == "Zenith PDF opens them" and not button.isEnabled()
 
 
-def test_a_failure_says_how_to_do_it_by_hand(window, monkeypatch):
+def test_a_failure_elsewhere_says_how_to_do_it_by_hand(window, monkeypatch):
+    from zenith_pdf.ui import main_window
+
     warned = []
+    monkeypatch.setattr(main_window.sys, "platform", "linux")
     monkeypatch.setattr(default_app, "make_default", lambda command: default_app.FAILED)
     monkeypatch.setattr(messages, "warn", lambda parent, title, text, *args, **kwargs: warned.append(text))
     assert window.make_default_app() == default_app.FAILED
-    assert warned and ("Open With" in warned[0] or "Get Info" in warned[0])
+    assert warned and "Open With" in warned[0]
 
 
-def test_the_installer_records_the_question(tmp_path):
+def test_the_list_of_apps_has_a_pdf_to_be_about():
+    sample = default_app.sample_pdf()
+    assert sample.suffix == ".pdf" and sample.read_bytes().startswith(b"%PDF-")
+
+
+def test_the_installer_records_its_answer_for_the_first_start():
     script = (Path(__file__).resolve().parents[1] / "packaging" / "windows" / "zenith-pdf.nsi").read_text("utf-8")
-    assert '"DefaultAsked"' in script and "RegisteredApplications" in script and "${DEFAULT_APPS}" in script
+    assert '"DefaultAsked"' in script and '"DefaultPdf"' in script and "RegisteredApplications" in script
+    assert "ms-settings" not in script  # Windows' list opens from the app, as the user, not from the installer

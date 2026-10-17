@@ -56,8 +56,8 @@ LOGO = ASSETS / "zenith.svg"  # drawn at every size, so it stays sharp on any sc
 CONTROL_WIDTH = 280  # combos and fields on the right of a setting
 FLASH_MS = 1600  # how long a setting the assistant opened stays lit
 DEFAULT_APP_TEXT = {
-    "win32": "Double-clicking a PDF opens it in Zenith PDF. Windows asks you to confirm, on a page of its own "
-             "settings: choose Set default there.",
+    "win32": "Double-clicking a PDF opens it in Zenith PDF. Windows shows its list of apps: pick Zenith PDF, "
+             "then Always.",
     "": "Double-clicking a PDF opens it in Zenith PDF.",
 }
 CATEGORIES = [

@@ -137,6 +137,7 @@ def windows_page(machine: bool, name: str = REGISTERED) -> str:
 
 
 def _make_default_windows(command: list[str]) -> str:
+    """Windows' Default apps page at Zenith PDF: the way when its list of apps can't open."""
     machine = getattr(sys, "frozen", False) and installed()
     if not machine and not register_for_user(command):
         return FAILED
@@ -147,18 +148,76 @@ def _make_default_windows(command: list[str]) -> str:
     return CONFIRM
 
 
-def installer_asked() -> bool:
-    """Whether the Windows installer already offered it: then the app doesn't ask again."""
+CHOSEN, CANCELLED = "chosen", "cancelled"  # what the list of apps came back with, besides FAILED
+
+# SHOpenWithDialog: offer "Always use this app" (Windows 10) or "Always" (Windows 11), and keep the choice
+OAIF_ALLOW_REGISTRATION, OAIF_REGISTER_EXT = 0x1, 0x2
+ERROR_CANCELLED_HRESULT = 0x800704C7
+
+
+def sample_pdf() -> Path:
+    """A one-page PDF for Windows' list of apps to be about: it asks for a file, not a type."""
+    folder = Path(os.environ.get("TEMP") or Path.home()) / "Zenith PDF"
+    path = folder / "Choose the PDF app.pdf"
+    if not path.exists():
+        folder.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(_BLANK_PDF)
+    return path
+
+
+_BLANK_PDF = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+              b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n")
+
+
+def choose_in_windows(window_handle: int) -> str:
+    """Windows' own list of apps for PDF files, where Zenith PDF is among the suggested ones: the user picks it
+    and Always there, which is the only way a program can become the default. CHOSEN, CANCELLED or FAILED."""
+    import ctypes
+
+    class OpenAsInfo(ctypes.Structure):
+        _fields_ = [("pcszFile", ctypes.c_wchar_p), ("pcszClass", ctypes.c_wchar_p), ("oaifInFlags", ctypes.c_int)]
+
+    try:
+        info = OpenAsInfo(str(sample_pdf()), None, OAIF_ALLOW_REGISTRATION | OAIF_REGISTER_EXT)
+        result = ctypes.windll.shell32.SHOpenWithDialog(ctypes.c_void_p(window_handle), ctypes.byref(info))
+    except (OSError, AttributeError):
+        return FAILED
+    if result == 0:
+        return CHOSEN
+    return CANCELLED if (result & 0xFFFFFFFF) == ERROR_CANCELLED_HRESULT else FAILED
+
+
+def current_app_name() -> str:
+    """The app that opens PDF files now, by the name Windows gives it; "" when it can't tell or elsewhere."""
     if sys.platform != "win32":
-        return False
+        return ""
+    import ctypes
+    from ctypes import wintypes
+
+    size = wintypes.DWORD(512)
+    buffer = ctypes.create_unicode_buffer(size.value)
+    try:  # ASSOCF_INIT_IGNOREUNKNOWN, ASSOCSTR_FRIENDLYAPPNAME
+        result = ctypes.windll.shlwapi.AssocQueryStringW(0x400, 4, ".pdf", None, buffer, ctypes.byref(size))
+    except (OSError, AttributeError):
+        return ""
+    return buffer.value if result == 0 else ""
+
+
+def installer_choice() -> bool | None:
+    """What the Windows installer was told: True to open PDF files with Zenith PDF (Windows' list of apps opens at
+    the first start, as only the user may choose there), False not to, None when it didn't ask."""
+    if sys.platform != "win32":
+        return None
     import winreg
 
     try:
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"Software\ZenithPDF", 0,
                             winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as key:
-            return bool(winreg.QueryValueEx(key, "DefaultAsked")[0])
+            if not winreg.QueryValueEx(key, "DefaultAsked")[0]:
+                return None
+            return bool(winreg.QueryValueEx(key, "DefaultPdf")[0])
     except OSError:
-        return False
+        return None
 
 
 # macOS -------------------------------------------------------------------------------------------------------

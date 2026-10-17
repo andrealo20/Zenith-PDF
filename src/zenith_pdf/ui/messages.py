@@ -185,6 +185,11 @@ def _default_key(buttons: list[Button], default: str | None) -> str | None:
     return keys[0] if keys else None
 
 
+def run(dialog: MessageDialog) -> tuple[str | None, bool]:
+    """Show `dialog`; the key of the button pressed and whether its box is ticked."""
+    return _run(dialog)
+
+
 def _run(dialog: MessageDialog) -> tuple[str | None, bool]:
     dialog.exec()
     answer = dialog.choice, dialog.is_checked()

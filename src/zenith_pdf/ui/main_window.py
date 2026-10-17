@@ -59,10 +59,12 @@ REMEMBER_STYLES_MS = 300  # tool styles are written this long after the last cha
 
 
 DEFAULT_APP_QUESTION = {
-    "win32": "Double-clicking a PDF would open it here. Windows asks you to confirm, on a page of its settings: "
-             "choose Set default there. Settings > Files & Saving can do it later too.",
+    "win32": "Double-clicking a PDF would open it here. Windows shows its list of apps: pick Zenith PDF, then "
+             "Always. Settings > Files & Saving can do it later too.",
     "": "Double-clicking a PDF would open it here. Settings > Files & Saving can do it later too.",
 }
+DEFAULT_APP_AGAIN = 10  # starts before "Later" asks again
+DEFAULT_APP_TIMES = 3  # questions at most, "Later" included
 DEFAULT_APP_BY_HAND = {
     "darwin": "Choose it in the Finder: select a PDF, File > Get Info, pick Zenith PDF under Open with, then "
               "Change All.",
@@ -958,32 +960,73 @@ class MainWindow(QMainWindow):
         return True
 
     def offer_default_app(self) -> bool:
-        """The first time Zenith PDF starts: should it open PDF files? Asked once, and not when the installer did,
-        or when it already does. True if it asked."""
+        """At a start: should Zenith PDF open PDF files? The first time, and after Later a few starts on, three
+        times at most; never when it opens them already. When the installer asked, its answer stands: Windows'
+        list of apps opens at the first start if it was yes. True if it asked or acted."""
         from ..core import default_app
 
+        starts = self._settings.get("starts") + 1
+        self._settings.set("starts", starts)
         if self._settings.get("default_app_asked") or not default_app.can_set():
             return False
-        self._settings.set("default_app_asked", True)
-        if default_app.is_default() is not False or default_app.installer_asked():
+        if starts < self._settings.get("default_app_next"):
             return False
+        if default_app.is_default() is not False:
+            self._settings.set("default_app_asked", True)
+            return False
+        wanted = default_app.installer_choice()
+        if wanted is not None:  # asked in the installer: its answer, at once
+            self._settings.set("default_app_asked", True)
+            if wanted:
+                self.make_default_app()
+            return wanted
+        times = self._settings.get("default_app_times") + 1
+        self._settings.set("default_app_times", times)
         text = DEFAULT_APP_QUESTION.get(sys.platform, DEFAULT_APP_QUESTION[""])
-        choice = messages.ask(self, "Open PDF files with Zenith PDF?", text,
-                              [("make", "Make it the default", "primary"), (messages.CANCEL, "Not now", "")],
-                              icon="file-pdf")
+        dialog = messages.MessageDialog(self, "Open PDF files with Zenith PDF?", text,
+                                        [("make", "Make it the default", "primary"), (messages.CANCEL, "Later", "")],
+                                        icon="file-pdf", check="Don't ask again")
+        choice, never = messages.run(dialog)
+        if choice == "make" or never or times >= DEFAULT_APP_TIMES:
+            self._settings.set("default_app_asked", True)
+        else:
+            self._settings.set("default_app_next", starts + DEFAULT_APP_AGAIN)
         if choice == "make":
             self.make_default_app()
         return True
 
     def make_default_app(self) -> str:
-        """Ask the system to open PDF files with Zenith PDF; on Windows its own page opens, to confirm there."""
+        """Make Zenith PDF open PDF files. Windows lets only the user choose: its own list of apps opens, with
+        Zenith PDF among the suggested ones, and afterwards Zenith PDF looks whether the choice was made."""
         from ..core import default_app
 
-        result = default_app.make_default(own_command())
-        if result == default_app.FAILED:
-            messages.warn(self, "Zenith PDF could not be made the default",
-                          DEFAULT_APP_BY_HAND.get(sys.platform, DEFAULT_APP_BY_HAND[""]))
-        return result
+        if sys.platform != "win32":
+            result = default_app.make_default(own_command())
+            if result == default_app.FAILED:
+                messages.warn(self, "Zenith PDF could not be made the default",
+                              DEFAULT_APP_BY_HAND.get(sys.platform, DEFAULT_APP_BY_HAND[""]))
+            return result
+        default_app.register_for_user(own_command())  # a copy run from source: listed by its name and logo
+        while True:
+            picked = default_app.choose_in_windows(int(self.winId()))
+            if picked == default_app.CANCELLED:
+                return picked
+            if picked == default_app.FAILED:  # no list of apps: Windows' Default apps page instead
+                return default_app.make_default(own_command())
+            if default_app.is_default():
+                messages.inform(self, "Zenith PDF opens your PDF files", "Double-click a PDF and it opens here.",
+                                icon="check-circle")
+                return default_app.DONE
+            now = default_app.current_app_name() or tr("another app")
+            again = messages.ask(self, "PDF files still open elsewhere", tr(
+                f"They open with {now}. In Windows' list, pick Zenith PDF, then Always: on Windows 10, tick "
+                f"Always use this app to open .pdf files before OK."),
+                [("again", "Try again", "primary"), ("settings", "Default apps settings", ""),
+                 (messages.CANCEL, "Close", "")], icon="info")
+            if again == "settings":
+                return default_app.make_default(own_command())
+            if again != "again":
+                return picked
 
     def show_whats_new(self, releases=None) -> None:
         from .whats_new import WhatsNewDialog
