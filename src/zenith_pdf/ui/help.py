@@ -208,6 +208,11 @@ TOPICS: dict[str, Topic] = {
                      "Ctrl+="),
     "zoom_menu": Topic("Zoom level", "The current zoom. Click it for preset levels.", keys="Ctrl+1 is actual size"),
     "fit_width": Topic("Fit width", "Zooms so the page fills the width of the window.", keys="Ctrl+2"),
+    "view_menu": Topic("View", "How the pages show: the annotations, lines over the pages, the PDF's layers, the "
+                       "zoom, read only and touch mode.",
+                       "Hiding the annotations or turning layers off changes only the screen: nothing is deleted "
+                       "and the file keeps its own. Lock zoom keeps the zoom as it is; read only turns off every "
+                       "tool that changes the document."),
     "fit_page": Topic("Fit page", "Zooms so the whole page fits in the window.", keys="Ctrl+0"),
     "reading_mode": Topic("Reading mode", "Shows only the pages: the bars, the side panel and the tabs go away "
                           "until you come back, and nothing you were doing is lost.",
@@ -346,6 +351,13 @@ MENU_TIPS = {
     "Replace the text…": "Strike the selected text out, with what replaces it on a caret after it.",
     "Redact": "Mark the selected text to black out for good, when redactions are applied.",
     "Group": "Make the selection one group: picked, moved and deleted as one.",
+    "Show annotations": "Show the annotations, or hide them to see the pages alone.",
+    "Lines over the pages": "A grid, ruled lines or dots on screen, to write and draw straight; never saved.",
+    "Layers…": "Show or hide the PDF's layers.",
+    "Lock zoom": "Keep the zoom as it is: the wheel, a pinch or the window's size change nothing.",
+    "Fit height": "Zoom so the whole height of the page fits.",
+    "Read only": "Turn off every tool that changes the document, to read without changing it by accident.",
+    "Touch mode": "A finger moves the pages and the pen draws; bigger handles.",
     "Copy style": "Keep this annotation's look, to give it to others with Paste style.",
     "Paste style": "Give the selection the look you copied.",
     "Align": "Line the selection up along one edge, or along its middle.",

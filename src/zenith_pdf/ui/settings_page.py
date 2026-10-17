@@ -747,6 +747,9 @@ class SettingsWindow(QDialog):
         s.add(Row("Pen pressure", "With a pen on a Surface or a tablet, lines get thicker the harder you press. A hand "
                   "resting on the screen draws nothing while the pen is near, and the pen's eraser or its button "
                   "rubs out.", self._switch("pen_pressure"), "pen stylus pressure tablet surface wacom palm eraser"))
+        s.add(Row("Touch mode", "On a touch screen a finger moves the pages and the pen draws, and the handles "
+                  "that resize annotations are bigger, for fingertips.", self._switch("touch_mode"),
+                  "touch finger tablet surface pan scroll big handles"))
         s.add(Row("Snap to annotations", "While moving, resizing or drawing, edges and centres line up with other "
                   "annotations. Hold Alt to place freely.", self._switch("snap_annotations"), "snapping align guides"))
         s.add(Row("Snap to PDF content", "Line up with the page's text, pictures, drawings and edges.",

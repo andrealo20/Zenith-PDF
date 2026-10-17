@@ -224,7 +224,7 @@ class RenderPool(QObject):
         """Share the file bytes with the processes once; they open the PDF from there."""
         memory = None
         if len(self._workers) > 1:
-            data = document.data
+            data = document.display_data
             memory = shared_memory.SharedMemory(create=True, size=max(len(data), 1))
             memory.buf[: len(data)] = data
             message = ("open", document.key, memory.name, len(data), document.password, document.hidden)
@@ -380,7 +380,8 @@ class RenderPool(QObject):
             worker.restart()
             for key, (document, memory) in list(self._documents.items()):
                 if memory is not None:
-                    worker.send(("open", key, memory.name, len(document.data), document.password, document.hidden))
+                    worker.send(("open", key, memory.name, len(document.display_data), document.password,
+                                 document.hidden))
 
     def shutdown(self) -> None:
         with self._lock:

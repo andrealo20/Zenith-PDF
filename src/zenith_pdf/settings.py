@@ -68,6 +68,7 @@ DEFAULTS: dict[str, object] = {
     "snap_content": False,  # line up with the page's text, pictures and edges
     "select_new": False,  # select an annotation right after making it
     "pen_pressure": True,  # with a pen that feels pressure, the line follows how hard it presses
+    "touch_mode": False,  # a finger pans the pages and the pen draws; handles are bigger, for fingertips
     # Canvas navigation
     "wheel": "scroll",  # scroll (Ctrl zooms) or zoom (Ctrl scrolls)
     "scroll_speed": 100,  # percent

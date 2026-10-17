@@ -27,6 +27,7 @@ from PySide6.QtGui import (
     QInputDevice,
     QPainter,
     QPainterPath,
+    QPen,
     QPixmap,
     QPointingDevice,
     QTransform,
@@ -106,7 +107,12 @@ BASE_ZOOM = 0.5  # quality of the whole-page fallback shown while tiles arrive
 SPECULATIVE_TILES = 96  # cap on tiles rendered ahead for the neighbouring zoom levels
 ZOOM_SETTLE_MS = 30  # continuous (touchpad) zoom renders once it pauses this long
 FOLLOWUP_MS = 30  # quiet time after results before rendering ahead of the user
-VIEW_ONLY_TOOLS = ("select", "hand", "lasso", "laser", "snapshot")  # they change nothing: on for view-only files
+VIEW_ONLY_TOOLS = ("select", "hand", "lasso", "laser", "snapshot")
+# Lines over the pages, on screen only, to write or draw straight: their kind, and the distance between them.
+OVERLAYS = {"none": "No lines", "grid": "Grid", "lines": "Lines", "dots": "Dots"}
+OVERLAY_STEPS = {"grid": 72 / 2.54, "lines": 72 / 2.54 * 0.8, "dots": 72 / 2.54 * 0.5}  # 1 cm, 8 mm, 5 mm
+# Opaque, so a line painted twice, where two repainted areas meet, looks the same as once.
+OVERLAY_INK = {"normal": QColor(200, 218, 244), "sepia": QColor(196, 208, 222), "dark": QColor(52, 70, 100)}  # they change nothing: on for view-only files
 Z_STEP = 1e-4  # z-value between annotations, in drawing order
 LANDING = 48  # pixels below the toolbar band where the spot a link or bookmark goes to lands
 PEN_FRESH = 0.25  # seconds a pen's pressure counts after its last event: then the mouse is drawing
@@ -191,6 +197,7 @@ class PageItem(QGraphicsItem):
         self.rect = QRectF(0, 0, width, height)
         self.cache = cache
         self.tint = tint
+        self.overlay = "none"  # OVERLAYS
         self.base: QPixmap | None = None
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemUsesExtendedStyleOption)
 
@@ -222,6 +229,38 @@ class PageItem(QGraphicsItem):
         elif self.tint == "sepia":
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
             painter.fillRect(exposed, SEPIA)
+        if self.overlay in OVERLAY_STEPS:
+            paint_overlay(painter, self.rect, exposed, self.overlay, OVERLAY_INK.get(self.tint, OVERLAY_INK["normal"]))
+
+
+def paint_overlay(painter: QPainter, page: QRectF, exposed: QRectF, kind: str, ink: QColor) -> None:
+    """A grid, ruled lines or dots over a page, the part of it in `exposed`; never written into the PDF.
+
+    Crisp one-pixel lines that only darken (or, on a dark page, only lighten): the text stays as it is, and a
+    line painted again where two repainted areas meet looks the same.
+    """
+    step = OVERLAY_STEPS[kind]
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Lighten if ink.lightness() < 128 else
+                               QPainter.CompositionMode.CompositionMode_Darken)
+    painter.setClipRect(exposed)
+    first_column, last_column = int(exposed.left() // step) + 1, int(exposed.right() // step)
+    first_row, last_row = int(exposed.top() // step) + 1, int(exposed.bottom() // step)
+    line = QPen(ink if kind != "dots" else ink.darker(125), 2 if kind == "dots" else 1)
+    line.setCosmetic(True)  # a screen pixel at any zoom
+    painter.setPen(line)
+    if kind == "dots":
+        for row in range(first_row, last_row + 1):
+            for column in range(first_column, last_column + 1):
+                painter.drawPoint(QPointF(column * step, row * step))
+    else:
+        for row in range(first_row, last_row + 1):
+            painter.drawLine(QPointF(page.left(), row * step), QPointF(page.right(), row * step))
+        if kind == "grid":
+            for column in range(first_column, last_column + 1):
+                painter.drawLine(QPointF(column * step, page.top()), QPointF(column * step, page.bottom()))
+    painter.restore()
 
 
 class DocumentView(QGraphicsView):
@@ -258,6 +297,10 @@ class DocumentView(QGraphicsView):
         self._zoom = 1.0
         self._zoom_direction = 0  # +1 after zooming in, -1 after zooming out
         self._fit: str | None = "width"
+        self.zoom_locked = False  # the zoom stays as it is, whatever asks for another
+        self._lock_told = 0.0  # when the reader was last told the zoom is locked
+        self.annotations_shown = True
+        self.overlay = "none"  # OVERLAYS, over every page
         self._current = 0
         self._hit_items: dict[SearchHit, list[QGraphicsRectItem]] = {}
         self._focused_hit: SearchHit | None = None
@@ -377,6 +420,7 @@ class DocumentView(QGraphicsView):
             for index, x in zip(row, xs):
                 width, page_height = sizes[index]
                 item = PageItem(index, width, page_height, self._cache, self.page_tint)
+                item.overlay = self.overlay
                 item.setPos(x, y + (height - page_height) / 2)
                 self.scene().addItem(item)
                 self._pages[index] = item
@@ -441,10 +485,14 @@ class DocumentView(QGraphicsView):
         for annotation in self.store.all():
             self._add_item(annotation)
         self._current = -1
-        if fit == "width":
+        if self.zoom_locked:
+            self.set_zoom(zoom, forced=True)
+        elif fit == "width":
             self.fit_width()
         elif fit == "page":
             self.fit_page()
+        elif fit == "height":
+            self.fit_height()
         else:
             self.set_zoom(zoom)
         self.goto_page(min(current, len(self._pages) - 1))
@@ -471,10 +519,15 @@ class DocumentView(QGraphicsView):
         """Screen pixels per point. At 100% a page shows at its physical size."""
         return self._zoom * self.logicalDpiX() / 72.0
 
-    def set_zoom(self, zoom: float, anchor: QPointF | None = None, fit: str | None = None) -> None:
+    def set_zoom(self, zoom: float, anchor: QPointF | None = None, fit: str | None = None, forced: bool = False) -> None:
+        zoom = min(max(zoom, ZOOM_MIN), ZOOM_MAX)
+        if self.zoom_locked and not forced and abs(zoom - self._zoom) > 1e-6:
+            if time.monotonic() - self._lock_told > 4:
+                self._lock_told = time.monotonic()
+                self.message.emit("The zoom is locked. The view menu unlocks it.")
+            return
         self._fit = fit
         self._leave_link()
-        zoom = min(max(zoom, ZOOM_MIN), ZOOM_MAX)
         if abs(zoom - self._zoom) > 1e-6:
             self._zoom_direction = 1 if zoom > self._zoom else -1
         anchor_px = (anchor or QPointF(self.viewport().rect().center())).toPoint()
@@ -516,6 +569,46 @@ class DocumentView(QGraphicsView):
         )
         self._refit(zoom, "page")
 
+    def fit_height(self) -> None:
+        """Zoom so the whole height of the page, or of the spread, fits in the window."""
+        points_to_px = self.logicalDpiX() / 72.0
+        row = self._row_of.get(self._current, [self._current])
+        height = max(self._pages[i].rect.height() for i in row)
+        self._refit((self.viewport().height() - self.top_inset) / ((height + 2 * PAGE_GAP) * points_to_px), "height")
+
+    def lock_zoom(self, locked: bool) -> None:
+        self.zoom_locked = locked
+        self._lock_told = 0.0
+
+    def show_annotations(self, shown: bool) -> None:
+        """Show the annotations, or hide them to see the pages alone. Nothing is deleted: they come back as
+        they were, and drawing or pasting brings them back."""
+        if shown == self.annotations_shown:
+            return
+        self.annotations_shown = shown
+        if not shown:
+            self.finish_text_edit()
+            self.scene().clearSelection()
+        for item in self._items.values():
+            item.setVisible(shown)
+
+    def set_overlay(self, kind: str) -> None:
+        """Lines over every page to write or draw straight, on screen only: one of OVERLAYS."""
+        self.overlay = kind if kind in OVERLAYS else "none"
+        for page in self._pages:
+            page.overlay = self.overlay
+            page.update()
+
+    def rerender(self) -> None:
+        """Draw the pages again from the document, keeping everything else: after its layers changed."""
+        token = self._token
+        self._renderer.discard(lambda key: isinstance(key, tuple) and key[0] is token)
+        self._token = object()
+        self._cache.clear()
+        for page in self._pages:
+            page.set_base(None)
+        self._schedule_renders(0)
+
     def _refit(self, zoom: float, fit: str) -> None:
         page = self._current
         self.set_zoom(zoom, fit=fit)
@@ -527,6 +620,8 @@ class DocumentView(QGraphicsView):
             self.fit_width()
         elif self._fit == "page":
             self.fit_page()
+        elif self._fit == "height":
+            self.fit_height()
         if self._held is not None:
             self._apply_hold()
         self._schedule_renders(0)
@@ -741,6 +836,8 @@ class DocumentView(QGraphicsView):
         for tool in self._tools.values():
             if tool.busy or tool.wants_hover:
                 tool.cancel()
+        if name not in VIEW_ONLY_TOOLS:
+            self.show_annotations(True)  # a tool that draws: what it draws on shows
         if name != "select":
             self.scene().clearSelection()
             self.clear_text_selection()  # text is selected with Select; other tools let it go, as annotations
@@ -827,6 +924,12 @@ class DocumentView(QGraphicsView):
             return None
         return self._pen_pressure
 
+    def _finger_pans(self, event) -> bool:
+        """In touch mode a finger moves the pages; only the pen and the mouse draw and select."""
+        device = event.pointingDevice()
+        return bool(self._pref("touch_mode")) and device is not None and \
+            device.type() == QInputDevice.DeviceType.TouchScreen
+
     def _resting_hand(self, event) -> bool:
         """A touch while a pen is near or was just used: a hand resting on the screen, which draws nothing."""
         device = event.pointingDevice()
@@ -859,7 +962,7 @@ class DocumentView(QGraphicsView):
             event.accept()  # a form's field: filled in, not selected or panned
             return
         panning = event.button() == Qt.MouseButton.MiddleButton or (
-            left and (self._space_down or self._tool_key() == "hand")
+            left and (self._space_down or self._tool_key() == "hand" or self._finger_pans(event))
         )
         if panning:
             # Reading: a press on a link pans like any other, and follows the link if it ends without a drag.
@@ -1707,6 +1810,7 @@ class DocumentView(QGraphicsView):
 
     def _add_item(self, annotation: Annotation) -> None:
         item = AnnotationItem(annotation, self._pages[annotation.page])
+        item.setVisible(self.annotations_shown)
         item.on_resized = self._on_item_resized
         item.setZValue(Z_ANNOTATION + len(self._items) * Z_STEP)  # new ones go on top
         item.show_marks(not self.reading)
@@ -1731,9 +1835,17 @@ class DocumentView(QGraphicsView):
         item.set_annotation(new)
 
     def _on_item_resized(self, old: Annotation, new: Annotation) -> None:
+        if self.document.read_only:  # only reading: it goes back
+            self._items[new.id].set_annotation(old)
+            return
         self.undo_stack.push(ChangeAnnotations(self.store, [old], [new], f"Resize {new.label.lower()}"))
 
     def _commit_moves(self) -> None:
+        if self.document.read_only:  # only reading: whatever was dragged goes back
+            for item in self.scene().selectedItems():
+                if isinstance(item, AnnotationItem):
+                    item.setPos(0, 0)
+            return
         old, new = [], []
         for item in self.scene().selectedItems():
             if isinstance(item, AnnotationItem) and item.pos() != QPointF(0, 0):
@@ -1829,6 +1941,7 @@ class DocumentView(QGraphicsView):
         return [i.annotation for i in self.scene().selectedItems() if isinstance(i, AnnotationItem)]
 
     def add_annotations(self, annotations: list[Annotation], label: str) -> None:
+        self.show_annotations(True)  # what was just made shows, and so does the rest
         self.undo_stack.push(AddAnnotations(self.store, annotations, f"Add {label.lower()}"))
 
     def created(self, annotations: list[Annotation], tool: str | None = None) -> None:

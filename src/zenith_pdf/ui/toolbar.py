@@ -284,6 +284,12 @@ class AnnotationToolbar(FloatingBar):
         if key == "toolbar_tools":
             self.rebuild()
 
+    def set_read_only(self, read_only: bool) -> None:
+        """Only the tools that change nothing work while the document is only read."""
+        if read_only != self._read_only:
+            self._read_only = read_only
+            self.rebuild()
+
     def rebuild(self) -> None:
         while self._row.count():
             item = self._row.takeAt(0)

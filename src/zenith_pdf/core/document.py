@@ -105,6 +105,10 @@ class Document:
         self._closed = False
         self._pdf = None
         self._source = None
+        # Layers shown or hidden here unlike the file says (index -> shown): only the pages on screen change,
+        # never what is saved.
+        self.layer_changes: dict[int, bool] = {}
+        self.view_only = False  # the reader chose to only read: nothing can be changed until they choose again
         self._load(data if data is not None else self.path.read_bytes())
         self._opened_encrypted = self._source is not None and self._source.is_encrypted
         # The file's encryption as settings, for a save from bytes that lost it (see _encryption).
@@ -113,6 +117,7 @@ class Document:
     def _load(self, data: bytes) -> None:
         """(Re)build everything from the bytes of a PDF: display copy, editable copy, annotations."""
         self.data = data
+        self._display: bytes | None = None  # the bytes the pages are drawn from, when layers differ from data's
         self.key = uuid.uuid4().hex  # names this version to the render processes
         # Bytes that load back into exactly the editable PDF, annotation ids included, while
         # nothing has changed: snapshot() hands them out instead of serializing again.
@@ -148,6 +153,76 @@ class Document:
             self._source = None
         if self._source is not None:
             self._import_annotations()
+        if self.layer_changes:
+            self._draw_layers()
+
+    @property
+    def display_data(self) -> bytes:
+        """The bytes the render processes draw: the document's own, with the layers as shown here."""
+        return self._display if self._display is not None else self.data
+
+    def _layer_config(self):
+        """The groups of the PDF's layers, and the file's default visibility of each."""
+        if self._source is None:
+            return [], []
+        properties = self._source.Root.get("/OCProperties")
+        if not isinstance(properties, pikepdf.Dictionary):
+            return [], []
+        groups = [g for g in properties.get("/OCGs", pikepdf.Array()) if isinstance(g, pikepdf.Dictionary)]
+        config = properties.get("/D", pikepdf.Dictionary())
+        off = {g.objgen for g in config.get("/OFF", pikepdf.Array()) if isinstance(g, pikepdf.Dictionary)}
+        on = {g.objgen for g in config.get("/ON", pikepdf.Array()) if isinstance(g, pikepdf.Dictionary)}
+        hidden_first = str(config.get("/BaseState", "/ON")) == "/OFF"
+        defaults = [(g.objgen in on) if hidden_first else (g.objgen not in off) for g in groups]
+        return groups, defaults
+
+    def layers(self) -> list[tuple[str, bool]]:
+        """The PDF's layers (optional content), each (name, shown here)."""
+        groups, defaults = self._layer_config()
+        return [(str(group.get("/Name", f"Layer {i + 1}")), self.layer_changes.get(i, defaults[i]))
+                for i, group in enumerate(groups)]
+
+    def set_layer_shown(self, index: int, shown: bool) -> None:
+        """Show or hide a layer on screen. The file keeps its own setting: saving does not change it."""
+        _, defaults = self._layer_config()
+        if not 0 <= index < len(defaults):
+            return
+        if shown == defaults[index]:
+            self.layer_changes.pop(index, None)
+        else:
+            self.layer_changes[index] = shown
+        with PDFIUM_LOCK:
+            self._draw_layers()
+
+    def _draw_layers(self) -> None:
+        """Reopen the display copy with the layers as shown here. The caller holds PDFIUM_LOCK (or is _load)."""
+        display = None
+        if self.layer_changes:
+            with pikepdf.open(io.BytesIO(self.data), password=self.password or "") as copy:
+                properties = copy.Root.get("/OCProperties")
+                groups = [g for g in properties.get("/OCGs", pikepdf.Array()) if isinstance(g, pikepdf.Dictionary)]
+                shown = [shown for _, shown in self.layers()]
+                config = properties.get("/D", pikepdf.Dictionary())
+                config.BaseState = pikepdf.Name.ON
+                config.ON = pikepdf.Array([g for g, on in zip(groups, shown) if on])
+                config.OFF = pikepdf.Array([g for g, on in zip(groups, shown) if not on])
+                if "/AS" in config:
+                    del config["/AS"]  # its automatic states (for print, say) would override the choice
+                properties.D = config
+                out = io.BytesIO()
+                copy.save(out)
+                display = out.getvalue()
+        if display == self._display:
+            return
+        self._display = display
+        self._unload()
+        self._pages.clear()
+        if self._pdf is not None:
+            self._pdf.close()
+        self._pdf = pdfium.PdfDocument(self.display_data, password=self.password)
+        self._pdf.init_forms()
+        self.key = uuid.uuid4().hex  # the render processes open this version
+        hide_annotations(self._pdf, self.hidden)
 
     def _unload(self) -> None:
         with PDFIUM_LOCK:
@@ -164,7 +239,12 @@ class Document:
 
     @property
     def read_only(self) -> bool:
-        return self._source is None
+        """Nothing can be changed: the file could not be fully parsed, or the reader chose to only read it."""
+        return self._source is None or self.view_only
+
+    @property
+    def can_save(self) -> bool:
+        return self._source is not None
 
     @property
     def page_count(self) -> int:

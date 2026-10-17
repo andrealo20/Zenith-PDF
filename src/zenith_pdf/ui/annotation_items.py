@@ -803,10 +803,13 @@ class Handle(QGraphicsEllipseItem):
     """A resize handle: a white dot with an accent ring, the same size at any zoom."""
 
     SIZE = 10.0  # screen pixels, ring included
+    TOUCH_SIZE = 18.0  # in touch mode: a fingertip's worth
+    touch = False  # touch mode is on: new handles are TOUCH_SIZE
 
     def __init__(self, owner: AnnotationItem, role: str):
         ring = 1.5
-        half = (self.SIZE - ring) / 2  # the ring is centred on the edge: the whole dot is SIZE wide
+        size = self.TOUCH_SIZE if Handle.touch else self.SIZE
+        half = (size - ring) / 2  # the ring is centred on the edge: the whole dot is `size` wide
         super().__init__(-half, -half, 2 * half, 2 * half, owner)
         self.owner = owner
         self.role = role

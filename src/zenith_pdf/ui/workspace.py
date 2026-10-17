@@ -34,8 +34,8 @@ from .commands import ChangePages
 from .dialogs import ApplyToPagesDialog, PropertiesDialog
 from .library import Library, LibraryPanel
 from .selection_bar import SelectionBar
-from .document_view import LAYOUTS, TINTS, DocumentView
-from .help import attach_help
+from .document_view import LAYOUTS, OVERLAYS, TINTS, VIEW_ONLY_TOOLS, DocumentView
+from .help import attach_help, explain_menu
 from .link_preview import LinkPreview
 from .outline import OutlinePanel
 from .page_actions import PageActions
@@ -45,6 +45,7 @@ from .side_panel import SidePanel
 from .text_bar import TextSelectionBar
 from .thumbnails import ThumbnailPanel
 from .tips import ToolTips
+from .tool_catalog import base_of
 from .toolbar import AnnotationToolbar
 from .tools import ToolSettings
 from .widgets import GLASS_BLEED, Fade, FloatingBar, IconButton, Switch, icon_pixmap, muted_label, separator
@@ -149,6 +150,7 @@ class ZoomBar(FloatingBar):
     def __init__(self, view: DocumentView, parent=None):
         super().__init__(parent)
         self._view = view
+        self.workspace = None  # the tab it belongs to, for the view menu's layers and read only
         layout_button = self._menu_button("book-open", "Page layout", LAYOUTS, view.set_layout, lambda: view.layout_mode,
                                           "layout")
         tint_button = self._menu_button("circle-half", "Page colours", TINTS, view.set_page_tint, lambda: view.page_tint,
@@ -168,11 +170,18 @@ class ZoomBar(FloatingBar):
         menu.addSeparator()
         menu.addAction(tr("Fit width"), view.fit_width)
         menu.addAction(tr("Fit page"), view.fit_page)
+        menu.addAction(tr("Fit height"), view.fit_height)
         self.zoom_button.setMenu(menu)
         attach_help(self.zoom_button, "zoom_menu")
         fit_width = IconButton("arrows-out-line-horizontal", "Fit width (Ctrl+2)", icon_size=18, help="fit_width")
         fit_width.clicked.connect(view.fit_width)
         fit_page = IconButton("frame-corners", "Fit page (Ctrl+0)", icon_size=18, help="fit_page")
+        self.view_button = IconButton("eye", "View: annotations, lines over the pages, layers, zoom", icon_size=18,
+                                      help="view_menu")
+        self.view_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.view_menu = QMenu(self.view_button)
+        self.view_menu.aboutToShow.connect(lambda: self.fill_view_menu(self.view_menu))
+        self.view_button.setMenu(self.view_menu)
         self.snap_button = IconButton("magnet", "Snapping", icon_size=18, checkable=True, help="snapping")
         self.snap_button.clicked.connect(self._show_snapping)
         if view.settings is not None:
@@ -193,13 +202,14 @@ class ZoomBar(FloatingBar):
         self._folded = 0
         view_separator, fit_separator = separator(), separator()
         self._folds = [  # what goes first, then next
-            [layout_button, tint_button, self.snap_button, view_separator],
+            [layout_button, tint_button, self.view_button, self.snap_button, view_separator],
             [fit_width, fit_page, fit_separator],
         ]
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
-        for widget in (self.more_button, layout_button, tint_button, self.snap_button, view_separator, zoom_out,
+        for widget in (self.more_button, layout_button, tint_button, self.view_button, self.snap_button,
+                       view_separator, zoom_out,
                        self.zoom_button, zoom_in, fit_separator, fit_width, fit_page, separator(),
                        self.reading_button):
             layout.addWidget(widget)
@@ -231,6 +241,7 @@ class ZoomBar(FloatingBar):
                 action = sub.addAction(tr(label), lambda k=key, a=apply: a(k))
                 action.setCheckable(True)
                 action.setChecked(key == current)
+        self.fill_view_menu(menu.addMenu(tr("View")))
         if view.settings is not None:
             menu.addSeparator()
             for key, text in (("snap_annotations", "Snap to annotations"), ("snap_content", "Snap to PDF content")):
@@ -241,6 +252,41 @@ class ZoomBar(FloatingBar):
             menu.addSeparator()
             menu.addAction(tr("Fit width\tCtrl+2"), view.fit_width)
             menu.addAction(tr("Fit page\tCtrl+0"), view.fit_page)
+
+    def fill_view_menu(self, menu: QMenu) -> None:
+        """How the pages show: the annotations, lines over the pages, the PDF's layers, the zoom, and whether
+        the document can be changed."""
+        menu.clear()
+        view = self._view
+        workspace = self.workspace
+
+        def check(text: str, on: bool, slot) -> None:
+            action = menu.addAction(tr(text), slot)
+            action.setCheckable(True)
+            action.setChecked(on)
+
+        check("Show annotations", view.annotations_shown, lambda: view.show_annotations(not view.annotations_shown))
+        lines = menu.addMenu(tr("Lines over the pages"))
+        for key, label in OVERLAYS.items():
+            action = lines.addAction(tr(label), lambda k=key: view.set_overlay(k))
+            action.setCheckable(True)
+            action.setChecked(view.overlay == key)
+        layers = view.document.layers()
+        if layers and workspace is not None:
+            menu.addAction(tr("Layers…"), workspace.show_layers)
+        menu.addSeparator()
+        check("Lock zoom", view.zoom_locked, lambda: view.lock_zoom(not view.zoom_locked))
+        menu.addAction(tr("Fit height"), view.fit_height)
+        if workspace is not None:
+            menu.addSeparator()
+            read = menu.addAction(tr("Read only"), lambda: workspace.set_view_only(not view.document.view_only))
+            read.setCheckable(True)
+            read.setChecked(view.document.read_only)
+            read.setEnabled(view.document.can_save)  # a file that can't be parsed stays read only
+        if view.settings is not None:
+            check("Touch mode", bool(view.settings.get("touch_mode")),
+                  lambda: view.settings.set("touch_mode", not view.settings.get("touch_mode")))
+        explain_menu(menu)
 
     def _menu_button(self, icon_name: str, tip: str, choices: dict, apply, current, help: str) -> IconButton:
         button = IconButton(icon_name, tip, icon_size=18, help=help)
@@ -312,6 +358,32 @@ class SnappingPopup(FloatingBar):
         window = self.parent().window() if self.parent() is not None else None
         if hasattr(window, "open_settings"):
             window.open_settings("annotation")
+
+
+class LayersPopup(FloatingBar):
+    """The PDF's layers, each with a switch: what shows on the pages, never what the file saves."""
+
+    def __init__(self, workspace, parent=None):
+        super().__init__(parent, popup=True)
+        title = QLabel(tr("Layers"))
+        title.setObjectName("SectionTitle")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 14, 18, 16)
+        layout.setSpacing(10)
+        layout.addWidget(title)
+        self.switches: list[Switch] = []
+        for index, (name, shown) in enumerate(workspace.document.layers()):
+            row = QHBoxLayout()
+            label = QLabel(name)
+            label.setMaximumWidth(260)
+            switch = Switch(shown)
+            switch.toggled.connect(lambda on, i=index: workspace.set_layer(i, on))
+            row.addWidget(label, 1)
+            row.addSpacing(24)
+            row.addWidget(switch)
+            layout.addLayout(row)
+            self.switches.append(switch)
+        layout.addWidget(muted_label("Only what shows here changes: the file keeps its own layers."))
 
 
 class UndoBar(FloatingBar):
@@ -736,6 +808,7 @@ class Workspace(QWidget):
         self._chooser = None
         self.page_counter = PageCounter(self.view, self.toggle_page_manager)
         self.zoom_bar = ZoomBar(self.view)
+        self.zoom_bar.workspace = self
         self.zoom_bar.reading_requested.connect(self.reading_requested)
         self._style_menu_back = False  # reading mode closed a pinned style menu of the selection: it comes back
         self._manager_back = False  # reading mode closed the page manager: it comes back
@@ -884,6 +957,39 @@ class Workspace(QWidget):
             self.canvas.place_selection(self.view.selection_rect())
         if self.view.has_text_selection():  # also when scrolled off screen: it comes back with the text
             self.canvas.place_over_text(self.text_bar, self.view.text_selection_rect())
+
+    def set_view_only(self, on: bool) -> None:
+        """Only read the document, or change it again: the tools that would change it turn off, then on."""
+        if not self.document.can_save or on == self.document.view_only:
+            return
+        self.view.finish_text_edit()
+        self.document.view_only = on
+        if on and base_of(self.tool_settings.tool) not in VIEW_ONLY_TOOLS:
+            self.tool_settings.set_tool("select")
+        self.view.scene().clearSelection()
+        self.toolbar.set_read_only(on)
+        self.text_bar.sync(on)
+        self.notify("Read only: nothing changes until you turn it off in the view menu." if on else
+                    "The document can be changed again.")
+
+    def show_layers(self) -> None:
+        """The layers popup, above the view button."""
+        if not self.document.layers():
+            return
+        popup = LayersPopup(self, self.zoom_bar)
+        popup.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        button = self.zoom_bar.view_button
+        corner = button.mapToGlobal(QPoint(button.width() // 2, 0))
+        popup.adjustSize()
+        popup.move(corner.x() - popup.width() // 2, corner.y() - popup.height() - 10)
+        popup.show()
+        self.layers_popup = popup
+
+    def set_layer(self, index: int, shown: bool) -> None:
+        self._renderer.forget(self.document)  # the pages are drawn from another version now
+        self.document.set_layer_shown(index, shown)
+        self.view.rerender()
+        self.thumbnails.reload()
 
     def _on_tool_changed(self, _tool) -> None:
         self._update_selection_bar(self.view.selected_annotations())
