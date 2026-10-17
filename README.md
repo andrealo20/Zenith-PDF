@@ -34,14 +34,44 @@ and an assistant that understands six languages. Everything runs on your PC.
 
 <br>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/editor-dark.png">
-  <img src="docs/images/editor-light.png" alt="Zenith PDF with a lecture open: highlights, a pen loop, a callout and notes on the page, the toolbar on frosted glass" width="100%">
-</picture>
+<img src="docs/images/editor-dark.png" alt="Zenith PDF in the dark theme, with a lecture open: highlights, a pen loop, a callout and notes on the page, the toolbar on frosted glass" width="100%">
 
 </div>
 
 ## A quick tour
+
+### Light or dark
+
+Pick a theme, or let Zenith PDF follow Windows, and an accent colour of your own. The floating bars are
+frosted glass: the pages show through, blurred, and the text on them stays easy to read.
+
+<img src="docs/images/editor-light.png" alt="The same lecture in the light theme" width="100%">
+
+### Home
+
+Every file you opened, with a thumbnail, its folder, its pages and when you last read it. Star the ones you
+need, tag them, pin the folders you use, and start a new document, the Doc Builder or a PDF tool from the
+cards at the top.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/home-light.png" alt="The home page in the light theme: recent files, stars and tags" width="100%"></td>
+    <td width="50%"><img src="docs/images/home-dark.png" alt="The home page in the dark theme" width="100%"></td>
+  </tr>
+</table>
+
+### Settings
+
+Changes apply the moment you make them: theme and accent colour, how clear the glass is, the tools and their
+locks, navigation, saving, text recognition, help. The search box finds any setting by name, and so does
+the assistant.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/settings-light.png" alt="Settings, View and Layout, in the light theme" width="100%"></td>
+    <td width="50%"><img src="docs/images/settings-dark.png" alt="Settings, View and Layout, in the dark theme" width="100%"></td>
+  </tr>
+</table>
 
 ### Every tool has its own menu
 
@@ -49,10 +79,7 @@ Click the tool that is on, and its menu opens under it: colour, thickness, opaci
 fill, pens that thin out when you go fast, ink that turns into clean lines and shapes. The lock keeps a tool
 on to draw again, or lets it go back to Pan after one use. The pin keeps the menu open while you draw.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/tool-menu-dark.png">
-  <img src="docs/images/tool-menu-light.png" alt="The pen's menu: basic, pro and calligraphy pens, colours, thickness, opacity and smart ink" width="100%">
-</picture>
+<img src="docs/images/tool-menu-light.png" alt="The pen's menu: basic, pro and calligraphy pens, colours, thickness, opacity and smart ink" width="100%">
 
 ### Thirty-five tools, your toolbar
 
@@ -89,18 +116,6 @@ bars, the panels and the tabs away, and brings them back as they were.
 <img src="docs/images/page-manager.png" alt="The page manager" width="100%">
 
 <img src="docs/images/reading-mode.png" alt="Reading mode, with tape over the answers and a voice note" width="100%">
-
-### Home and settings
-
-The home page lists every file you opened, with stars, tags and pinned folders. Settings apply the moment
-you change them: theme, accent colour, how clear the glass is, tools, navigation, saving, text recognition.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/home-dark.png">
-  <img src="docs/images/home-light.png" alt="The home page with recent files, stars and tags" width="100%">
-</picture>
-
-<img src="docs/images/settings.png" alt="Settings, View and Layout" width="100%">
 
 ## Download and run
 

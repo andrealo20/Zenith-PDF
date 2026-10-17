@@ -636,13 +636,14 @@ def main() -> None:
         show_page(1 if dark else 0, 1.15, 70)
         save(to_pil(window.grab()), out, f"editor-{theme}.png", dark)
 
-        tools.set_tool("pen")
-        workspace.toolbar.open_menu("pen")
-        settle(300)
-        menu = workspace.toolbar.tool_menu
-        save(with_popups(window, [menu]), out, f"tool-menu-{theme}.png", dark)
-        menu.close_menu()
-        settle()
+        if not dark:  # the README shows the menu once, in the light theme, next to the dark editor
+            tools.set_tool("pen")
+            workspace.toolbar.open_menu("pen")
+            settle(300)
+            menu = workspace.toolbar.tool_menu
+            save(with_popups(window, [menu]), out, "tool-menu-light.png", dark)
+            menu.close_menu()
+            settle()
 
         if dark:
             workspace.show_tool_chooser()
@@ -700,15 +701,13 @@ def main() -> None:
         window._show_tab(window.workspaces.index(workspace))
         settle(300)
 
-    settings.theme = "dark"
-    settle(300)
-    settings_window = window.settings_window()
-    settings_window.resize(1100, 760)
-    settings_window.show()
-    settings_window.show_category("view")
-    settle(400)
-    save(to_pil(settings_window.grab()), out, "settings.png", True)
-    settings_window.hide()
+        settings_window = window.settings_window()
+        settings_window.resize(1100, 760)
+        settings_window.show()
+        settings_window.show_category("view")
+        settle(400)
+        save(to_pil(settings_window.grab()), out, f"settings-{theme}.png", dark)
+        settings_window.hide()
 
     for index in reversed(range(len(window.workspaces))):
         window.close_tab(index, confirm=False)
