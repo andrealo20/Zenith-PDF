@@ -5,13 +5,14 @@ import shutil
 
 import pikepdf
 import pytest
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QPointF, QSettings
 from PySide6.QtTest import QTest
 
 from zenith_pdf.app import create_app
 from zenith_pdf.core.annotations import Shape
 from zenith_pdf.core.document import Document
 from zenith_pdf.settings import Settings
+from zenith_pdf.ui.document_view import ZOOM_GLIDE_MS
 
 pytestmark = pytest.mark.usefixtures("qt_app")
 
@@ -115,6 +116,21 @@ def test_a_locked_zoom_stays_and_fit_height_fits_the_page(workspace):
     height_px = view.mapFromScene(shown).boundingRect().height()
     assert height_px <= view.viewport().height() - view.top_inset and height_px > 0.8 * view.viewport().height() - \
         view.top_inset
+
+
+def test_a_zoom_step_glides_and_keeps_the_point_under_the_pointer(workspace):
+    view = workspace.view
+    view.set_zoom(1.0)
+    anchor = QPointF(view.viewport().width() / 3, view.viewport().height() / 3)
+    under = view.mapToScene(anchor.toPoint())
+    view._mouse = anchor
+    view.zoom_in()
+    view.zoom_in()  # while it glides: on from the level it was heading for
+    assert view.zoom < 1.3 and view.zoom_target() == pytest.approx(1.3)
+    QTest.qWait(ZOOM_GLIDE_MS + 150)
+    assert view.zoom == pytest.approx(1.3)
+    # Across, a page narrower than the window stays centred; down, the line under the pointer stays.
+    assert abs((view.mapFromScene(under) - anchor.toPoint()).y()) <= 2
 
 
 def test_read_only_turns_the_tools_that_change_things_off(workspace):

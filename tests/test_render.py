@@ -163,3 +163,28 @@ def test_threads_using_pdfium_stop_before_the_finalizers_at_exit(qt_app, monkeyp
     render._stop_local_workers()
     assert not worker._thread.is_alive()
     pool.shutdown()
+
+
+def test_a_zoom_between_levels_paints_from_the_sharpest_level_that_covers_the_page(qt_app):
+    from PySide6.QtGui import QPixmap, QTransform
+
+    from zenith_pdf.ui.tiles import Tile, TileCache, paint_page, scale_key
+
+    class Counting(QPainter):
+        drawn = 0
+
+        def drawPixmap(self, *args):
+            Counting.drawn += 1
+            super().drawPixmap(*args)
+
+    size = (100.0, 100.0)
+    cache = TileCache()
+    for scale in (1.0, 2.0):  # two levels, each covering the whole page
+        for col, row, rect in tile_grid(size, scale, QRectF(0, 0, *size)):
+            cache.put(0, scale_key(scale), col, row, Tile(QPixmap(rect.size()), scale, rect, rect.translated(-rect.topLeft())))
+    image = QImage(300, 300, QImage.Format.Format_ARGB32)
+    painter = Counting(image)
+    painter.setTransform(QTransform.fromScale(1.5, 1.5))  # between the two
+    paint_page(painter, 0, QRectF(0, 0, *size), QRectF(0, 0, *size), cache, QPixmap(10, 10))
+    painter.end()
+    assert Counting.drawn == len(cache.level(0, scale_key(2.0)))  # neither the base nor the coarser level

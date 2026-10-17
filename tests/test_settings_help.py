@@ -116,7 +116,7 @@ def test_wheel_can_zoom_without_ctrl(window, workspace):
     event = QWheelEvent(centre, view.viewport().mapToGlobal(centre), QPoint(0, 0), QPoint(0, 120),
                         Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False)
     view.wheelEvent(event)
-    assert view.zoom > before
+    assert view.zoom_target() > before  # gliding there
     window.settings.set("wheel", "scroll")
 
 

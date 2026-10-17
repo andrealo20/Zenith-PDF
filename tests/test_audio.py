@@ -104,6 +104,7 @@ def fake_players(made: list, length_ms: int = 1500):
 def clipped_text(dialog) -> list[str]:
     """Labels and buttons of a shown dialog whose one-line text doesn't fit their width."""
     dialog.show()
+    dialog.layout().activate()  # shown again after closing, macOS can keep the old geometry for a moment
     QApplication.processEvents()
     clipped = []
     for label in dialog.findChildren(QLabel):

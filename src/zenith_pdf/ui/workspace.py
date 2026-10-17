@@ -7,7 +7,7 @@ top right, zoom and view options bottom right, undo and redo bottom left.
 from __future__ import annotations
 
 import shiboken6
-from PySide6.QtCore import QElapsedTimer, QPoint, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QAbstractAnimation, QElapsedTimer, QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIntValidator, QPainter, QUndoStack
 from PySide6.QtWidgets import (
     QApplication,
@@ -493,6 +493,7 @@ class _Canvas(QWidget):
         view.horizontalScrollBar().valueChanged.connect(self._on_scrolled)
         view.verticalScrollBar().valueChanged.connect(self._on_scrolled)
         view.zoom_changed.connect(self._on_zoomed)
+        view.glide.finished.connect(self.schedule_glass)
         view.scene().changed.connect(self._on_scene_changed)
         themes.changed.connect(self._on_theme)
 
@@ -556,6 +557,8 @@ class _Canvas(QWidget):
     def schedule_glass(self, bars=None) -> None:
         """Resample these bars (all by default): now if a frame has passed since the last sample, else then."""
         self._stale.update(self._glass() if bars is None else bars)
+        if self.view.glide.state() == QAbstractAnimation.State.Running:
+            return  # a sample per frame would halve the frames of a zoom: one when it lands (glide.finished)
         wait = self.GLASS_REFRESH_MS - self._since.elapsed()
         if wait <= 0:
             self._glass_timer.stop()
@@ -589,9 +592,7 @@ class _Canvas(QWidget):
             self.schedule_glass([bar for bar in bars if bar not in far])
 
     def _on_zoomed(self, _zoom=None) -> None:
-        self._stale.update(self._glass())
-        self._glass_timer.stop()
-        self._refresh_glass()
+        self.schedule_glass()  # at most once a frame: a zoom glides through several
 
     def _on_scene_changed(self, regions) -> None:
         bars = [bar for bar in self._glass() if bar.isVisible()]

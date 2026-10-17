@@ -137,6 +137,12 @@ class TileCache:
         self._bytes = 0
 
 
+def _covers(level: dict, page_size: tuple[float, float], area: QRectF) -> bool:
+    """Whether the tiles of one zoom level cover all of `area`."""
+    scale = next(iter(level.values())).scale
+    return all((col, row) in level for col, row, _ in tile_grid(page_size, scale, area))
+
+
 def paint_page(
     painter: QPainter,
     page: int,
@@ -154,12 +160,14 @@ def paint_page(
     exact = cache.level(page, key)
 
     if not all((col, row) in exact for col, row, _ in needed):
-        if base is not None:
+        # Other zoom levels, coarsest first so the sharpest end up on top. The sharpest that covers the whole
+        # exposed area hides whatever is under it, so painting starts there: a zoom glides at a frame's pace.
+        others = [k for k in sorted(cache.levels(page)) if k != key]
+        whole = next((i for i in reversed(range(len(others))) if _covers(cache.level(page, others[i]), size, exposed)),
+                     None)
+        if whole is None and base is not None:
             painter.drawPixmap(page_rect, base, QRectF(base.rect()))
-        # Other zoom levels, coarsest first so the sharpest end up on top.
-        for other_key in sorted(cache.levels(page)):
-            if other_key == key:
-                continue
+        for other_key in others[whole or 0:]:
             for tile in cache.level(page, other_key).values():
                 r, s = tile.rect, tile.scale
                 target = QRectF(r.x() / s, r.y() / s, r.width() / s, r.height() / s)

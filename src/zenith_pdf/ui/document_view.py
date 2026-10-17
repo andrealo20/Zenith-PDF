@@ -17,7 +17,21 @@ import time
 from dataclasses import fields, replace
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QEventLoop, QObject, QPoint, QPointF, QRect, QRectF, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QEventLoop,
+    QObject,
+    QPoint,
+    QPointF,
+    QRect,
+    QRectF,
+    Qt,
+    QTimer,
+    QUrl,
+    QVariantAnimation,
+    Signal,
+)
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -106,6 +120,7 @@ ZOOM_MIN, ZOOM_MAX = ZOOM_LADDER[0], ZOOM_LADDER[-1]
 BASE_ZOOM = 0.5  # quality of the whole-page fallback shown while tiles arrive
 SPECULATIVE_TILES = 96  # cap on tiles rendered ahead for the neighbouring zoom levels
 ZOOM_SETTLE_MS = 30  # continuous (touchpad) zoom renders once it pauses this long
+ZOOM_GLIDE_MS = 180  # a wheel notch or a zoom key glides to the next level in this time
 FOLLOWUP_MS = 30  # quiet time after results before rendering ahead of the user
 VIEW_ONLY_TOOLS = ("select", "hand", "lasso", "laser", "snapshot")
 # Lines over the pages, on screen only, to write or draw straight: their kind, and the distance between them.
@@ -296,6 +311,12 @@ class DocumentView(QGraphicsView):
         self._token = object()  # identifies this view's jobs in the shared render queue
         self._zoom = 1.0
         self._zoom_direction = 0  # +1 after zooming in, -1 after zooming out
+        self.glide = QVariantAnimation(self)
+        self.glide.setDuration(ZOOM_GLIDE_MS)
+        self.glide.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._glide_anchor: QPointF | None = None
+        self.glide.valueChanged.connect(lambda zoom: self._apply_zoom(zoom, self._glide_anchor))
+        self.glide.finished.connect(lambda: self._schedule_renders(0))
         self._fit: str | None = "width"
         self.zoom_locked = False  # the zoom stays as it is, whatever asks for another
         self._lock_told = 0.0  # when the reader was last told the zoom is locked
@@ -521,11 +542,37 @@ class DocumentView(QGraphicsView):
 
     def set_zoom(self, zoom: float, anchor: QPointF | None = None, fit: str | None = None, forced: bool = False) -> None:
         zoom = min(max(zoom, ZOOM_MIN), ZOOM_MAX)
+        if self._zoom_refused(zoom, forced):
+            return
+        self.glide.stop()
+        self._apply_zoom(zoom, anchor, fit)
+
+    def glide_zoom(self, zoom: float, anchor: QPointF | None = None) -> None:
+        """Zoom to `zoom` over a few frames, the point under `anchor` staying put. Another step while it glides
+        goes on from the level it was heading for (zoom_target)."""
+        zoom = min(max(zoom, ZOOM_MIN), ZOOM_MAX)
+        if self._zoom_refused(zoom, False):
+            return
+        self._leave_link()
+        self.glide.stop()
+        self._glide_anchor = anchor
+        self.glide.setStartValue(self._zoom)
+        self.glide.setEndValue(zoom)
+        self.glide.start()
+
+    def zoom_target(self) -> float:
+        """The zoom the view shows, or is gliding to."""
+        return self.glide.endValue() if self.glide.state() == QVariantAnimation.State.Running else self._zoom
+
+    def _zoom_refused(self, zoom: float, forced: bool) -> bool:
         if self.zoom_locked and not forced and abs(zoom - self._zoom) > 1e-6:
             if time.monotonic() - self._lock_told > 4:
                 self._lock_told = time.monotonic()
                 self.message.emit("The zoom is locked. The view menu unlocks it.")
-            return
+            return True
+        return False
+
+    def _apply_zoom(self, zoom: float, anchor: QPointF | None = None, fit: str | None = None) -> None:
         self._fit = fit
         self._leave_link()
         if abs(zoom - self._zoom) > 1e-6:
@@ -542,15 +589,16 @@ class DocumentView(QGraphicsView):
         self.verticalScrollBar().setValue(self.verticalScrollBar().value() + drift.y())
         self.zoom_changed.emit(zoom)
         self.content_changed.emit()
-        self._schedule_renders(ZOOM_SETTLE_MS)
+        if self.glide.state() != QVariantAnimation.State.Running:  # a glide renders once it lands
+            self._schedule_renders(ZOOM_SETTLE_MS)
 
     ladder_step = staticmethod(ladder_step)
 
     def zoom_in(self) -> None:
-        self.set_zoom(self.ladder_step(self._zoom, 1), anchor=self._mouse)
+        self.glide_zoom(self.ladder_step(self.zoom_target(), 1), anchor=self._mouse)
 
     def zoom_out(self) -> None:
-        self.set_zoom(self.ladder_step(self._zoom, -1), anchor=self._mouse)
+        self.glide_zoom(self.ladder_step(self.zoom_target(), -1), anchor=self._mouse)
 
     def fit_width(self) -> None:
         points_to_px = self.logicalDpiX() / 72.0
@@ -681,11 +729,10 @@ class DocumentView(QGraphicsView):
         if ctrl != (self._pref("wheel") == "zoom"):  # Ctrl swaps scrolling and zooming
             delta = event.angleDelta().y()
             if delta and delta % 120 == 0:
-                # A mouse wheel notch: move along the ladder, whose levels are pre-rendered.
-                zoom = self.ladder_step(self._zoom, delta // 120)
+                # A mouse wheel notch: glide along the ladder, whose levels are pre-rendered.
+                self.glide_zoom(self.ladder_step(self.zoom_target(), delta // 120), anchor=event.position())
             else:
-                zoom = self._zoom * 1.2 ** (delta / 120)  # touchpad pinch: continuous
-            self.set_zoom(zoom, anchor=event.position())
+                self.set_zoom(self._zoom * 1.2 ** (delta / 120), anchor=event.position())  # touchpad pinch: continuous
             event.accept()
             return
         speed = self._pref("scroll_speed") / 100
