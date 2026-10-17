@@ -29,7 +29,7 @@ In continuous development: new versions come out often.
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Works offline](https://img.shields.io/badge/works-offline-6E40C9?style=flat-square)
-![Languages: fifteen](https://img.shields.io/badge/languages-15-E3A008?style=flat-square)
+![Languages: EN, IT, FR, ES, DE, PT, NL, PL, CS, TR, RU, UK, ZH, JA, KO](https://img.shields.io/badge/languages-EN%20%C2%B7%20IT%20%C2%B7%20FR%20%C2%B7%20ES%20%C2%B7%20DE%20%C2%B7%20PT%20%C2%B7%20NL%20%C2%B7%20PL%20%C2%B7%20CS%20%C2%B7%20TR%20%C2%B7%20RU%20%C2%B7%20UK%20%C2%B7%20ZH%20%C2%B7%20JA%20%C2%B7%20KO-E3A008?style=flat-square)
 
 <br>
 
@@ -136,17 +136,18 @@ PDFs side by side, with what was added, removed or changed marked on both and li
   </tr>
 </table>
 
-### Also new in 0.5
+### New in 0.6
 
-- A pen that feels the pressure on a Surface or a Wacom tablet, draws nothing under the hand resting on the
-  screen, and rubs out with its button or its other end.
-- Glass that turns light over a bright page and dark over a dark one, whatever the theme.
-- The home page searches inside every PDF you opened, offline, and opens the one you pick at the right page.
-- PDF forms: text fields, check boxes, radio buttons and lists, filled in, saved and undone like any change.
-- Study notes go straight into an Obsidian vault, each page a link that opens the PDF there.
-- Read aloud, with the system's voices, sentence by sentence.
-- Icons in colour by what they do.
-- A card when a new version is out, an install that can happen by itself, and a short tour of what changed.
+- Text boxes in Helvetica, Times or Courier, bold, italic or underlined, aligned left, centred or right.
+- Stamps: APPROVED, DRAFT, CONFIDENTIAL and more, or your own words, with who stamped them and when.
+- Proofreading marks on selected text: insert, replace, or mark for redaction.
+- Groups, alignment, even spacing and flipping; a brush that copies one annotation's look, and an eyedropper.
+- Angles and volumes among the measurements; shapes filled with hatching, cross-hatching or dots.
+- A view menu: hide the annotations, a grid or ruled lines over the pages, the PDF's layers, a locked zoom, read
+  only, and touch mode.
+- Word, Excel, PowerPoint, OpenDocument and RTF files open as PDFs, with LibreOffice or Microsoft Office, and so
+  do text, Markdown and web pages.
+- Nine more languages: Dutch, Polish, Czech, Turkish, Russian, Ukrainian, Chinese, Japanese and Korean.
 
 ## Download and install
 
@@ -191,216 +192,6 @@ python -m venv .venv
 the system it runs on, in `dist/release`: the installer on Windows (it needs [NSIS](https://nsis.sourceforge.io)),
 the .dmg on macOS, the AppImage on Linux (it needs appimagetool). GitHub Actions builds and tests all three on
 every change, and publishes them with each new version.
-
-## Everything it does
-
-- Several windows: drag a tab out of the strip and the document opens in a
-  window of its own; drop it on another window to move it there (or right-click
-  the tab). Every window shares the tools, their styles and the markup library
-- Tabs, drag and drop to open; a home page listing every file you opened with a
-  thumbnail, folder, author, page count and when you last opened it, sortable
-  and searchable, with stars, tags, pinned folders and quick actions
-- Reopen the last session's documents at the same page and zoom, or start
-  fresh (a setting); each file also remembers where you left it
-- Continuous scrolling with lazy, prioritised background rendering
-- Zoom anchored under the cursor (Ctrl + wheel), presets, fit width, fit page
-- Page thumbnails, bookmarks (PDF outline), full-text search with highlights
-- Text selection by dragging or by double-clicking a word, with a small bar
-  just above it: highlight, in a colour picked right there that the
-  highlight tool keeps, underline, strikethrough, squiggle, copy, a note on
-  the text (a highlight that carries it, shown when pointed at) and search
-- More than thirty tools, in a tool chooser grouped as free-form (pen,
-  highlighter, eraser, tape for studying, laser pointer), shapes (line,
-  polyline, arrow, rectangle, ellipse, cloud, polygon), review (highlight,
-  underline, squiggle, strikethrough, text cleaner, text box, callout,
-  redaction), measure (distance, perimeter, area, angle, volume, at a drawing
-  scale), insert (note, stamp, bookmark, signature, image from camera or file,
-  hyperlink, audio note, equation written in LaTeX, snapshot) and select
-  (select, lasso, pan)
-- A toolbar you arrange: add tools from the chooser or by dragging them on,
-  reorder by dragging, remove from the tool's menu; extra tools fold into a
-  menu on narrow windows
-- Every tool has its own menu: click the tool
-  that is on (or right-click, or hold it) to open it. The header has the
-  tool's name, a lock, remove, more (duplicate, reset, move, help) and a pin
-  that keeps the menu open while drawing; under it the subject the tool's
-  annotations get (written to the PDF as /Subj), a live preview painted by
-  the page's own painter, and the tool's options. Every change applies at once
-- A locked tool stays on to draw again; an unlocked one goes back to Select (or
-  to Pan, a setting) after one use. Each tool has its own default lock
-- Copies of a tool, each with its own style and subject: a yellow and a green
-  highlighter side by side, told apart by the colour of their icons
-- Pens: basic, pro (thinner when moving fast) and calligraphy (angled nib);
-  ink that turns into a straight line or a rectangle, ellipse or polygon;
-  an eraser that takes whole strokes or only the part it passes over
-- Text boxes in Helvetica, Times or Courier, bold, italic or underlined, left,
-  centred or right; stamps (APPROVED, DRAFT, CONFIDENTIAL and more, or your own
-  words) with who stamped them and when
-- Proofreading marks on selected text: insert text at a caret, replace it
-  (struck out, with the new words on a caret), or mark it for redaction
-- Groups, alignment by an edge or the middle, even spacing, flipping; a brush
-  that copies one annotation's look onto the next, and an eyedropper that takes
-  a colour from the page
-- Line styles (solid, dotted, dashed, dash and dot) and ten line endings on
-  lines, arrows and polylines; shapes with no border or no fill, and fills that
-  are solid, hatched, cross-hatched or dotted; highlight
-  mode, which darkens what is under a shape like a highlighter; note icons;
-  laser size and fade time; tape that starts covered or peeled
-- Audio notes recorded from the microphone (up to 10 minutes, with a level
-  meter) or attached from a file, played in a small player next to the note
-- Snapping to other annotations and to the page's text, pictures and edges,
-  with guide lines; Alt places freely
-- Move, resize, restyle, delete, undo and redo every annotation; lines and
-  polylines have a handle on each point
-- Annotations are saved as standard PDF annotations with appearance streams,
-  so other viewers show them and can edit them; existing ones are imported
-- Annotation list with export to CSV or plain text; copy, cut and paste
-  annotations, also between documents
-- Pages: add (blank, lined, grid, dotted), copy, paste, duplicate, delete,
-  rotate, reorder in a page manager, extract, insert from PDF or image,
-  extend the margin for notes, watermark. Annotations move with their pages and
-  every change can be undone
-- Selected annotations get a small bar of their own: Style (the options of the
-  tool menus, for everything selected at once, one undo step per change),
-  duplicate, drawing order, lock, and a menu with properties, flatten into
-  the page, apply to other pages, copy as image and a markup library to reuse
-  them in any document
-- Pictures on the page: paste one with Ctrl+V, drag image files in, or pick
-  a file. They move and resize (corners keep the proportions) and are saved
-  as standard stamp annotations. Photos stay JPEG, screenshots stay lossless
-- Ctrl+V pastes whatever the clipboard holds: annotations, pages, a picture,
-  or text as a text box
-- Redaction: mark areas, or every match of a word, then apply. Redacted pages
-  become pictures of themselves with the areas filled in, so the text under
-  them is gone from the file; OCR can make the rest searchable again
-- PDF tools, following the list of the open source Stirling-PDF project:
-  page numbers, crop (also trimming white margins), page size, pages per
-  sheet, split into files, remove blank pages, reverse order, export pages as
-  images or text, images to PDF, extract images, password and permissions
-  (AES-256), sanitize, flatten forms, remove annotations, properties and
-  metadata, attachments, compress, repair. Changes to the document can be
-  undone like any edit
-- Links in documents can be clicked; the hyperlink tool adds and edits them.
-  Links and bookmarks land on the line they point at, not the top of the
-  page, and edited links keep that spot when saved. Back (Alt+Left, the
-  mouse's back button, or the chip that appears in the page counter) returns
-  to where a link, a bookmark, Ctrl+G, Home or End started; Alt+Right goes
-  forward again
-- Pointing at a link to another page for a moment shows a card with the spot
-  it goes to: the reference behind "[3]", the figure above its caption, the
-  section heading. A setting turns it off
-- Page thumbnails show the annotations
-- A guide to the whole editor (F1), written from the same data as the in-app
-  help, plus what's new and the keyboard shortcuts
-- Settings with categories, search, and changes that
-  apply at once (theme or follow the system, accent colour, glass, opening
-  zoom and layout, every tool's menu and lock, tool styles that are
-  remembered, mouse wheel and scrolling speed, autosave, reopening the last
-  documents, memory, OCR language)
-- Help on every button: point at it for a moment and a card says what it does
-  and how to use it
-- An assistant (Ctrl+K, or the sparkle at the top right) that finds any tool,
-  command, setting, keyboard shortcut or guide chapter from a few words or a
-  question, in any of the app's languages, typos forgiven, and runs it with
-  Enter. It works offline, with no language model: the names the app shows, and
-  a vocabulary of how people name each thing in six of the languages, matched by
-  whole words, beginnings and near misses, weighted by how rare a word is
-- Writing help, also offline: spelling and punctuation for text boxes, callouts
-  and notes (with the system's spell checker, for every language it has a
-  dictionary for: Windows' own, NSSpellChecker on macOS, Hunspell through
-  Enchant on Linux), the key sentences of selected text or a page, kept as
-  a note, and study notes gathered from every highlight and underline, by page
-  or by colour, saved as Markdown
-- Tips the first time each tool is used: a small card under it with two or
-  three ways to use it well, shown once and gone as soon as the tool is used
-- Doc Builder: combine several PDFs, drag files and pages into order, rotate,
-  delete, duplicate, insert blank pages, extract a selection, build the result
-- New documents and saved templates (paper, orientation, ruling, length);
-  pinned folders
-- Floating bars of frosted glass that blur the pages scrolling under them,
-  with their colours lifted; the tint rises only where the page under a bar
-  needs it for text to read at 4.5:1 in the Clear glass, 7:1 in the Balanced.
-  Clear, Balanced or Solid in the settings; menus and panels are solid. The
-  glass can also follow the page: light over a bright page, dark over a dark one
-- Reading mode (Ctrl+H): only the pages, with the bars, the side panel and the
-  tabs out of the way. Scrolling, zoom, links, Back and the page keys work as
-  always; Esc brings everything back as it was. It can also fill the screen
-- Text recognition (OCR) with the engine each system has: the one built into
-  Windows, Vision on macOS, Tesseract on Linux. Scanned pages become
-  searchable and selectable
-- Windows, macOS and Linux from the same code: keys written as each system
-  writes them (⌘ and ⌥ on a Mac), the system's fonts, its microphone and
-  camera permissions, files opened from the Finder or Explorer
-- Printing with annotations
-- Single, two-page and book layouts; normal, dark and sepia page colours
-- A view menu: hide the annotations, put a grid, ruled lines or dots over the
-  pages (on screen only), show or hide the PDF's layers, lock the zoom, make
-  a document read only, and touch mode, where a finger moves the pages and the
-  pen draws
-- Word, Excel, PowerPoint, OpenDocument and RTF files open as new PDFs (laid
-  out by LibreOffice or Microsoft Office, when one is installed), and so do
-  text, Markdown and web pages
-- Password-protected documents (encryption is kept when saving)
-- Dark and light themes
-- Menus, settings, help and the guide in fifteen languages, from English to
-  Korean: the system's language, or the one picked in the settings
-- Pen pressure from a Surface pen or a Wacom tablet, with the resting hand
-  ignored while the pen is near and the pen's eraser rubbing out
-- Search inside every PDF opened so far, from the home page, through an index
-  kept on the computer; a result opens its file at its page
-- PDF forms filled in: text fields, check boxes, radio buttons, lists
-- Flashcards from highlights, studied in the app or saved for Anki
-- Study notes sent to an Obsidian vault, with links that open the PDF at the
-  page (`zenith-pdf://open?file=...&page=...`)
-- Read aloud with the system's voices, a sentence at a time, with pause, back,
-  forward, speed and voice
-- Compare two versions of a PDF side by side, word by word, the changes lit
-  on both and listed
-- Updates: a daily look at the latest release on GitHub, a card when there is
-  a new one, and, if chosen, a download checked against the release's SHA-256
-  fingerprints that installs when Zenith PDF closes. After each update a short
-  tour shows what changed
-- One copy at a time: opening a PDF while Zenith PDF runs adds a tab to it
-- The default PDF reader, if you want: offered by the Windows installer and
-  the first time Zenith PDF starts, and in Settings > Files & Saving. Windows
-  confirms it in its own settings; macOS (Launch Services) and Linux
-  (xdg-mime) take it at once
-
-## Keyboard shortcuts
-
-On a Mac, Ctrl is ⌘ and Alt is ⌥, and three keys move because macOS keeps them for itself: reading mode is
-⇧⌘R, full screen ⌃⌘F, and ⌃Tab goes to the next tab.
-
-| Keys | Action |
-| --- | --- |
-| Ctrl+O | Open |
-| Ctrl+S / Ctrl+Shift+S | Save / save as |
-| Ctrl+Z / Ctrl+Y | Undo / redo |
-| V / H | Select tool / pan tool |
-| F6 | Go to the toolbar: arrow keys move, Enter turns a tool on or opens its menu, the Menu key opens any tool's menu |
-| Space (hold), middle button | Pan with any tool |
-| Shift while drawing | Square, circle, 45° lines |
-| Delete, Esc | Delete selection, cancel or deselect |
-| Double-click on text | Select a word |
-| Ctrl+C / Ctrl+X | Copy, cut annotations (Ctrl+C copies selected text too) |
-| Ctrl+V | Paste annotations, copied pages, a picture or text |
-| Ctrl+P | Print |
-| Ctrl+W | Close tab |
-| Ctrl+Tab / Ctrl+Shift+Tab | Next / previous tab |
-| Ctrl+Shift+N, or drag a tab out | New window / the document in a window of its own |
-| Ctrl+F, F3, Shift+F3 | Search, next / previous result |
-| Ctrl+= / Ctrl+- | Zoom in / out |
-| Ctrl+1 / Ctrl+0 / Ctrl+2 | Actual size / fit page / fit width |
-| Ctrl+G | Go to page |
-| Home / End | First / last page |
-| Alt+Left / Alt+Right, mouse side buttons | Back / forward after a link, a bookmark, Ctrl+G, Home or End |
-| F4 | Toggle side panel |
-| F11 | Full screen |
-| Ctrl+H, Esc to leave | Reading mode: only the pages |
-| F1 | Guide |
-| Ctrl+K | Assistant: find any tool, command, setting or shortcut |
-| Enter, double-click / Backspace | Finish a polyline, polygon, perimeter or area / take back a point |
-| Alt while moving or drawing | Place freely, without snapping |
 
 ## How it's built
 
