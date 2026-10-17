@@ -158,7 +158,7 @@ every PDF tool.</li>
 <li><b>Settings</b>: Enter opens Settings on that setting, lit for a moment so it is easy to spot.</li>
 <li><b>Keyboard shortcuts</b> and the chapters of this guide.</li>
 </ul>
-<p>Ask in English, Italian, French, Spanish, German or Portuguese, in a few words or a whole question:
+<p>Ask in any of Zenith PDF's languages, in a few words or a whole question:
 "ruota pagina", "Seite drehen", "pivoter la page", "come si firma un pdf". Typing mistakes are forgiven, and what
 you ran last comes first. With nothing typed, it suggests the writing helpers that fit what is selected.</p>
 <h2>Writing help</h2>

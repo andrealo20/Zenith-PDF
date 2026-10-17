@@ -1,4 +1,4 @@
-"""Zenith PDF in English, Italian, French, Spanish, German or Portuguese.
+"""Zenith PDF in fifteen languages, from English to Korean.
 
 The app is written in English; tr() turns a text into the language in use as it is shown (the Qt calls that
 show text go through it: labels, buttons, tooltips, menus, window titles, painted text). The translations are
@@ -18,7 +18,8 @@ from pathlib import Path
 from typing import NamedTuple
 
 LANGUAGES = {"en": "English", "it": "Italiano", "fr": "Français", "es": "Español", "de": "Deutsch",
-             "pt": "Português"}
+             "pt": "Português", "nl": "Nederlands", "pl": "Polski", "cs": "Čeština", "tr": "Türkçe", "ru": "Русский",
+             "uk": "Українська", "zh": "中文（简体）", "ja": "日本語", "ko": "한국어"}
 LOCALES = Path(__file__).resolve().parent.parent / "locales"
 _FIELD = re.compile(r"\{(\d*)\}")
 

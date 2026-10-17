@@ -30,6 +30,31 @@ class Release:
 
 
 RELEASES = (
+    Release("0.6.0", (
+        Highlight("Text boxes your way", "Helvetica, Times or Courier, bold, italic or underlined, with the lines on "
+                  "the left, centred or on the right. Other PDF viewers show them the same.", "text-t", "tool:text"),
+        Highlight("Stamps", "APPROVED, DRAFT, CONFIDENTIAL and more, or your own words, with who stamped it and when "
+                  "under it.", "circle-wavy-check", "tool:stamp"),
+        Highlight("Proofreading marks", "Select text to put a caret where words go in, to strike it out with what "
+                  "replaces it, or to mark it for redaction.", "pencil-line", "guide:reading"),
+        Highlight("Group, align, flip", "Groups move and copy as one; the Arrange menu lines things up, spaces them "
+                  "evenly and mirrors them. A brush copies one annotation's look to another, and an eyedropper takes "
+                  "any colour from the page.", "paint-brush", "guide:editing"),
+        Highlight("Angles, volumes and hatching", "Measure angles in degrees and volumes from an area and its depth, "
+                  "and fill shapes with hatching or dots.", "z-angle", "tool:angle"),
+        Highlight("The view menu", "Hide the annotations, put a grid or ruled lines over the pages, show or hide the "
+                  "PDF's layers, lock the zoom, read without changing anything, or turn on touch mode.", "eye",
+                  "guide:reading"),
+        Highlight("Office files too", "Word, Excel, PowerPoint, OpenDocument and RTF files open as PDFs, with "
+                  "LibreOffice or Microsoft Office, and so do text, Markdown and web pages.", "file-text",
+                  "guide:start"),
+        Highlight("Fifteen languages", "Russian, Ukrainian, Polish, Czech, Dutch, Turkish, Chinese, Japanese and "
+                  "Korean join the six there were.", "translate", "setting:view"),
+    ), (
+        "Key points, study notes and the assistant read Chinese, Japanese and Korean, which have no spaces between "
+        "words.",
+        "Fit height, in the zoom menu.",
+    )),
     Release("0.5.1", (
         Highlight("Your PDF reader", "Zenith PDF can open your PDF files when you double-click them: the Windows "
                   "installer offers it, the first start asks, and Settings > Files & Saving has the button.",

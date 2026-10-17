@@ -54,7 +54,7 @@ TOPICS: dict[str, Topic] = {
                          "Press the button or F11 again to go back.", "F11"),
     "more": Topic("More", "Settings, keyboard shortcuts, theme, and information about Zenith PDF."),
     "assistant": Topic("Assistant", "Finds any tool, command, setting, shortcut or guide chapter from a few words "
-                       "or a question, in English, Italian, French, Spanish, German or Portuguese. It also checks "
+                       "or a question, in any of Zenith PDF's languages. It also checks "
                        "spelling, picks the key points of a text and turns highlights into study notes.",
                        "Type what you want to do, such as \"rotate page\" or \"come si firma\", and press Enter. It "
                        "works on this computer, without the internet or a language model.", "Ctrl+K"),

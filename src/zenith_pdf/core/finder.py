@@ -1,8 +1,9 @@
 """The assistant's search: finds tools, commands, settings, shortcuts and guide chapters from a few words or a
-question, in English, Italian, French, Spanish, German or Portuguese, with typos forgiven.
+question, in any of the app's languages, with typos forgiven.
 
 A question goes through the lexicon (core/lexicon.py) to the English words the app's
-names are made of. Each word then matches whole words, the start of a word as it is
+names are made of; in another language, each entry is also indexed as the app shows it,
+so a question in Polish or Japanese meets the Polish or Japanese names. Each word then matches whole words, the start of a word as it is
 typed, or a word one or two letters away, in an entry's title, keywords, subtitle and
 description, weighted in that order and by how rare the word is.
 """
@@ -13,6 +14,7 @@ import math
 import unicodedata
 from dataclasses import dataclass
 
+from .i18n import language, tr
 from .lexicon import FILLER, SYNONYMS
 from .writing import ALL_STOPWORDS, CJK, split_cjk
 
@@ -121,12 +123,15 @@ class Finder:
         self.entries: list[Entry] = list(entries)
         # word -> {entry index: the weight of the best field it is in}
         self._index: dict[str, dict[int, float]] = {}
-        self._titles = [normalize(e.title).strip() for e in self.entries]
-        self._title_words = [frozenset(w for w in tokens(e.title) if w not in LITTLE and not w.isdigit())
-                             for e in self.entries]
+        # The English text, and in another language the text as the app shows it too.
+        shown = (lambda text: (text, tr(text))) if language() != "en" else (lambda text: (text,))
+        self._titles = [{normalize(title).strip() for title in shown(e.title)} for e in self.entries]
+        self._title_words = [frozenset(w for title in shown(e.title) for w in tokens(title)
+                                       if w not in LITTLE and not w.isdigit()) for e in self.entries]
         for number, entry in enumerate(self.entries):
             for name, weight in FIELDS:
-                for word in set(tokens(getattr(entry, name))):
+                text = getattr(entry, name)
+                for word in {w for part in (shown(text) if name != "keywords" else (text,)) for w in tokens(part)}:
                     places = self._index.setdefault(word, {})
                     places[number] = max(places.get(number, 0.0), weight)
         self._by_letter: dict[str, list[str]] = {}
@@ -186,7 +191,8 @@ class Finder:
             score = sum(weights[w] * max(rarity[w], 0.5) * value for w, value in matched.items()) / total
             needed = [w for w in words if weights[w] == 1.0] or [w for w in words if weights[w] > OPTIONAL] or words
             coverage = sum(1 for w in needed if w in matched) / len(needed)
-            if len(needed) >= 2 and coverage < 0.5:
+            # Chinese, Japanese and Korean come as overlapping pairs, most of them across word ends: one is enough.
+            if len(needed) >= 2 and coverage < 0.5 and not all(CJK.search(w) for w in needed):
                 continue
             score *= (0.5 + 0.5 * coverage) * KIND_WEIGHT.get(entry.kind, 0.9)
             title_words = self._title_words[number]
@@ -195,10 +201,10 @@ class Finder:
                 score += FOCUS * share  # "rotate page" is more Rotate page than Page manager: reorder, rotate...
                 if share == 1.0:
                     score += WHOLE_TITLE
-            title = self._titles[number]
-            if phrase and title.startswith(phrase):
+            titles = self._titles[number]
+            if phrase and any(title.startswith(phrase) for title in titles):
                 score += 0.4
-            elif phrase and len(phrase) >= 3 and phrase in title:
+            elif phrase and len(phrase) >= 3 and any(phrase in title for title in titles):
                 score += 0.25
             if not entry.enabled:
                 score *= 0.85

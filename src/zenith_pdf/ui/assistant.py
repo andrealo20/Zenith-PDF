@@ -1,5 +1,5 @@
-"""The assistant (Ctrl+K, the sparkle in the top bar): ask in a few words or a whole question, in English,
-Italian, French, Spanish, German or Portuguese, and it finds the tool, command, setting, shortcut or guide
+"""The assistant (Ctrl+K, the sparkle in the top bar): ask in a few words or a whole question, in any of
+the app's languages, and it finds the tool, command, setting, shortcut or guide
 chapter, and runs it with Enter. It also offers the writing helpers that fit what is selected.
 
 It needs no language model and nothing leaves the PC: the search is core/finder.py.

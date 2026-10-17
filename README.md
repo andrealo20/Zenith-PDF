@@ -5,8 +5,8 @@
 # Zenith PDF
 
 **Read, mark up and study PDF documents on Windows, macOS and Linux.**<br>
-Thirty-five markup tools with a menu each, page management, PDF tools, forms, flashcards, reading aloud,<br>
-and an assistant, in English, Italian, French, Spanish, German or Portuguese. Everything runs on your computer.
+Thirty-eight markup tools with a menu each, page management, PDF tools, forms, flashcards, reading aloud,<br>
+and an assistant, in fifteen languages. Everything runs on your computer.
 
 Completely free and open source, with no account, no ads and no paid version.<br>
 In continuous development: new versions come out often.
@@ -23,13 +23,13 @@ In continuous development: new versions come out often.
 
 [![Build](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml/badge.svg)](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml)
 ![Windows, macOS, Linux](https://img.shields.io/badge/runs_on-Windows%20%7C%20macOS%20%7C%20Linux-555?style=flat-square)
-![Version 0.5.1](https://img.shields.io/badge/version-0.5.1-2E8BFF?style=flat-square)
+![Version 0.6.0](https://img.shields.io/badge/version-0.6.0-2E8BFF?style=flat-square)
 ![Free and open source](https://img.shields.io/badge/free-open_source-2EA44F?style=flat-square)
 ![In continuous development](https://img.shields.io/badge/development-active-2EA44F?style=flat-square)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Works offline](https://img.shields.io/badge/works-offline-6E40C9?style=flat-square)
-![Languages: English, Italian, French, Spanish, German, Portuguese](https://img.shields.io/badge/languages-English%20%C2%B7%20Italian%20%C2%B7%20French%20%C2%B7%20Spanish%20%C2%B7%20German%20%C2%B7%20Portuguese-E3A008?style=flat-square)
+![Languages: fifteen](https://img.shields.io/badge/languages-15-E3A008?style=flat-square)
 
 <br>
 
@@ -80,18 +80,18 @@ on to draw again, or lets it go back to Select after one use. The pin keeps the 
 
 <img src="docs/images/tool-menu-light.png" alt="The pen's menu: basic, pro and calligraphy pens, colours, thickness, opacity and smart ink" width="100%">
 
-### Thirty-five tools, your toolbar
+### Thirty-eight tools, your toolbar
 
 Pens, highlighter, eraser, study tape and a laser pointer; lines, arrows, shapes and clouds; text marks, text
-boxes, callouts and redaction; distance, perimeter and area at a drawing's scale; notes, signatures, pictures,
-links, voice notes and LaTeX equations. Pick the ones you use, drag them where you want them, keep copies of
+boxes, callouts, stamps and redaction; distance, perimeter, area, angle and volume at a drawing's scale; notes,
+signatures, pictures, links, voice notes and LaTeX equations. Pick the ones you use, drag them where you want them, keep copies of
 a tool with different styles.
 
 <img src="docs/images/tool-chooser.png" alt="The tool chooser, on the Free-form tools" width="100%">
 
 ### Ask for anything: Ctrl+K (⌘K on a Mac)
 
-Type what you want to do, in English, Italian, French, Spanish, German or Portuguese, and press Enter. The
+Type what you want to do, in any of the app's fifteen languages, and press Enter. The
 assistant finds tools, commands, settings, keyboard shortcuts and chapters of the guide, forgives typos, and
 remembers what you use. It needs no internet and no language model.
 
@@ -118,7 +118,7 @@ bars, the panels and the tabs away, and brings them back as they were.
 
 ### In your language
 
-Menus, settings, help and the whole guide in English, Italian, French, Spanish, German or Portuguese. Zenith
+Menus, settings, help and the whole guide in English, Italian, French, Spanish, German, Portuguese, Dutch, Polish, Czech, Turkish, Russian, Ukrainian, Chinese, Japanese or Korean. Zenith
 PDF speaks the system's language when it knows it; Settings > View & Layout picks another one.
 
 <img src="docs/images/settings-language.png" alt="Settings, View and Layout: the list of languages, open" width="100%">
@@ -213,9 +213,10 @@ every change, and publishes them with each new version.
   highlighter, eraser, tape for studying, laser pointer), shapes (line,
   polyline, arrow, rectangle, ellipse, cloud, polygon), review (highlight,
   underline, squiggle, strikethrough, text cleaner, text box, callout,
-  redaction), measure (distance, perimeter, area, at a drawing scale), insert
-  (note, bookmark, signature, image from camera or file, hyperlink, audio note,
-  equation written in LaTeX, snapshot) and select (select, lasso, pan)
+  redaction), measure (distance, perimeter, area, angle, volume, at a drawing
+  scale), insert (note, stamp, bookmark, signature, image from camera or file,
+  hyperlink, audio note, equation written in LaTeX, snapshot) and select
+  (select, lasso, pan)
 - A toolbar you arrange: add tools from the chooser or by dragging them on,
   reorder by dragging, remove from the tool's menu; extra tools fold into a
   menu on narrow windows
@@ -232,8 +233,17 @@ every change, and publishes them with each new version.
 - Pens: basic, pro (thinner when moving fast) and calligraphy (angled nib);
   ink that turns into a straight line or a rectangle, ellipse or polygon;
   an eraser that takes whole strokes or only the part it passes over
+- Text boxes in Helvetica, Times or Courier, bold, italic or underlined, left,
+  centred or right; stamps (APPROVED, DRAFT, CONFIDENTIAL and more, or your own
+  words) with who stamped them and when
+- Proofreading marks on selected text: insert text at a caret, replace it
+  (struck out, with the new words on a caret), or mark it for redaction
+- Groups, alignment by an edge or the middle, even spacing, flipping; a brush
+  that copies one annotation's look onto the next, and an eyedropper that takes
+  a colour from the page
 - Line styles (solid, dotted, dashed, dash and dot) and ten line endings on
-  lines, arrows and polylines; shapes with no border or no fill; highlight
+  lines, arrows and polylines; shapes with no border or no fill, and fills that
+  are solid, hatched, cross-hatched or dotted; highlight
   mode, which darkens what is under a shape like a highlighter; note icons;
   laser size and fade time; tape that starts covered or peeled
 - Audio notes recorded from the microphone (up to 10 minutes, with a level
@@ -291,9 +301,9 @@ every change, and publishes them with each new version.
   and how to use it
 - An assistant (Ctrl+K, or the sparkle at the top right) that finds any tool,
   command, setting, keyboard shortcut or guide chapter from a few words or a
-  question, in English, Italian, French, Spanish, German or Portuguese, typos
-  forgiven, and runs it with Enter. It works offline, with no language model:
-  a vocabulary of how people name each thing in the six languages, matched by
+  question, in any of the app's languages, typos forgiven, and runs it with
+  Enter. It works offline, with no language model: the names the app shows, and
+  a vocabulary of how people name each thing in six of the languages, matched by
   whole words, beginnings and near misses, weighted by how rare a word is
 - Writing help, also offline: spelling and punctuation for text boxes, callouts
   and notes (with the system's spell checker, for every language it has a
@@ -323,10 +333,17 @@ every change, and publishes them with each new version.
   camera permissions, files opened from the Finder or Explorer
 - Printing with annotations
 - Single, two-page and book layouts; normal, dark and sepia page colours
+- A view menu: hide the annotations, put a grid, ruled lines or dots over the
+  pages (on screen only), show or hide the PDF's layers, lock the zoom, make
+  a document read only, and touch mode, where a finger moves the pages and the
+  pen draws
+- Word, Excel, PowerPoint, OpenDocument and RTF files open as new PDFs (laid
+  out by LibreOffice or Microsoft Office, when one is installed), and so do
+  text, Markdown and web pages
 - Password-protected documents (encryption is kept when saving)
 - Dark and light themes
-- Menus, settings, help and the guide in English, Italian, French, Spanish,
-  German or Portuguese: the system's language, or the one picked in the settings
+- Menus, settings, help and the guide in fifteen languages, from English to
+  Korean: the system's language, or the one picked in the settings
 - Pen pressure from a Surface pen or a Wacom tablet, with the resting hand
   ignored while the pen is near and the pen's eraser rubbing out
 - Search inside every PDF opened so far, from the home page, through an index
@@ -398,13 +415,13 @@ On a Mac, Ctrl is ⌘ and Alt is ⌥, and three keys move because macOS keeps th
 | Spelling | ISpellChecker on Windows, through ctypes; NSSpellChecker on macOS; Hunspell through pyenchant on Linux |
 | Voice notes | waveIn and MCI from winmm on Windows, through ctypes; Qt Multimedia on macOS and Linux |
 | Camera | the Windows Camera app; on macOS and Linux a live view through Qt Multimedia |
-| Assistant | its own search over a vocabulary in six languages: no language model, nothing sent anywhere |
+| Assistant | its own search over the app's names in every language, and a vocabulary in six: no language model, nothing sent anywhere |
 | Languages | its own catalogue: every text of the app keyed by its English, one JSON file per language |
 | Reading aloud | Qt TextToSpeech, with the system's voices |
 | Search in every PDF | SQLite's full-text index (FTS5), kept on the computer |
 | Comparing versions | the words of both versions, lined up with Python's difflib |
 | Updates | GitHub's releases API; each download checked against the release's SHA256SUMS |
-| Tests | pytest on Qt's offscreen platform: 554 tests, run on Windows, macOS and Linux |
+| Tests | pytest on Qt's offscreen platform: 618 tests, run on Windows, macOS and Linux |
 | Downloads | PyInstaller, then an NSIS installer, a .dmg or an AppImage (`tools/build.py`), built by GitHub Actions |
 
 ```
@@ -416,8 +433,8 @@ src/zenith_pdf/
   ui/         main window and its windows, page canvas, tools, their menus
               and the tool chooser, side panels, home, settings, guide,
               assistant, tips, audio recorder
-  locales/    the texts of the app in Italian, French, Spanish, German and
-              Portuguese, and the catalogue of the English ones
+  locales/    the texts of the app in fourteen languages besides English, and
+              the catalogue of the English ones
 tests/        pytest suite; the UI tests run on Qt's offscreen platform
 tools/        build.py makes the download of the system it runs on;
               screenshots.py the pictures of this README; make_icon.py the

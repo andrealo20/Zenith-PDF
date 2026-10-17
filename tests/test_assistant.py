@@ -11,6 +11,7 @@ from zenith_pdf.app import create_app
 from zenith_pdf.core import spelling, writing
 from zenith_pdf.core.annotations import FreeText, Note, TextMarkup
 from zenith_pdf.core.finder import Entry, Finder, distance, expand
+from zenith_pdf.core.i18n import set_language
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui import writing_dialogs
 from zenith_pdf.ui.context_menu import build_context_menu
@@ -95,6 +96,24 @@ def test_questions_in_six_languages_find_the_right_thing(query, wanted):
     found = Finder(ENTRIES).search(query, 5)
     assert found, query
     assert found[0][0].key in wanted, (query, [(e.key, round(s, 2)) for e, s in found])
+
+
+@pytest.mark.parametrize("code, query, wanted", [
+    ("ru", "как поставить подпись", "tool:signature"),
+    ("uk", "сполучення клавіш", "cmd:shortcuts"),
+    ("pl", "kompresuj plik", "pdf:compress"),
+    ("tr", "sesli oku", "cmd:read_aloud"),
+    ("zh", "顺时针旋转", "cmd:rotate"),
+    ("ja", "距離を測る", "tool:distance"),
+    ("ko", "업데이트", "cmd:check_updates"),
+])
+def test_questions_in_the_other_languages_meet_the_names_the_app_shows(code, query, wanted):
+    set_language(code)
+    try:
+        found = Finder(ENTRIES).search(query, 5)
+    finally:
+        set_language("en")
+    assert found and found[0][0].key == wanted, (query, [(e.key, round(s, 2)) for e, s in found])
 
 
 def test_nothing_is_found_for_nothing():
