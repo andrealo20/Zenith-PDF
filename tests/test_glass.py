@@ -337,8 +337,8 @@ def test_glass_over_a_white_page_reads_as_the_style_asks(window, workspace):
         y = round(geometry.center().y() * ratio)
         surface = [luminance(image.pixelColor(round(x * ratio), y))
                    for x in range(geometry.left() + 20, geometry.right() - 20, 3)]
-        t = themes.current
-        worst = max(surface) if name == "dark" else min(surface)
+        t = counter.theme()  # over a white page the dark theme's bar takes the light theme's colours
+        worst = max(surface) if t.name == "dark" else min(surface)
         need = widgets.contrast_targets()[0]
         assert contrast(worst, luminance(QColor(t.text))) >= need, name  # on every pixel, the grain's too
         # Muted text on the glass over the pages takes the full text colour.
@@ -392,10 +392,14 @@ def test_bar_buttons_are_squares_with_cached_icons(window, workspace):
     first = cached.pixmap(QSize(20, 20), 1.0)
     assert cached.pixmap(QSize(20, 20), 1.0).cacheKey() == first.cacheKey()  # drawn once, then reused
     button = workspace.zoom_bar.snap_button
-    before = button.icon().pixmap(QSize(18, 18), 1.0).toImage()
-    window.set_theme("light")
-    after = button.icon().pixmap(QSize(18, 18), 1.0).toImage()
-    window.set_theme("dark")
+    widgets.set_glass_adaptive(False)  # the theme's own colours on every bar, wherever it is
+    try:
+        before = button.icon().pixmap(QSize(18, 18), 1.0).toImage()
+        window.set_theme("light")
+        after = button.icon().pixmap(QSize(18, 18), 1.0).toImage()
+        window.set_theme("dark")
+    finally:
+        widgets.set_glass_adaptive(True)
     assert before != after  # a new theme draws the icons again in its colours
 
 
@@ -589,3 +593,32 @@ def test_doc_builder_asks_in_the_app_style(window, sample_pdf, tmp_path, monkeyp
     assert builder.selection_button.objectName() == "MenuButton"
     assert builder.selection_button.text() == "0 selected"
     window.close_tab(window.workspaces.index(builder))
+
+
+def test_bars_turn_light_over_a_bright_page_and_dark_again_over_the_canvas(window, workspace):
+    """Liquid Glass's way: in the dark theme a bar over a white page takes the light theme's colours, so its
+    tint can stay thin; back over the dark canvas it is dark again. With the setting off it never changes."""
+    view, counter = workspace.view, workspace.page_counter
+    window.set_theme("dark")
+    view.set_zoom(2.5)
+    view.horizontalScrollBar().setValue(view.horizontalScrollBar().maximum() // 2)  # the page fills the width
+    view.verticalScrollBar().setValue(view.verticalScrollBar().value() + 300)
+    idle(window, view)
+    counter.refresh_backdrop()
+    assert luminance(counter._mean) > widgets.TONE_LIGHT_OVER  # white paper behind it
+    assert counter.tone == "light" and counter.theme().name == "light"
+    button = next(b for b in counter.findChildren(IconButton) if b.isVisibleTo(counter))
+    assert button._tone_text() == counter.theme().text  # its icon in the light theme's ink
+    assert counter.styleSheet()  # labels and the page field in the light theme's colours
+    assert counter._chosen_tone(QColor(19, 20, 23)) == ""  # the canvas: the dark theme's own again
+    assert counter._chosen_tone(QColor(150, 150, 150)) == "light"  # in between: it stays as it is
+    widgets.set_glass_adaptive(False)
+    try:
+        assert counter.tone == "" and not counter.styleSheet()
+    finally:
+        widgets.set_glass_adaptive(True)
+    window.set_theme("light")
+    counter.refresh_backdrop()
+    assert counter.tone == ""  # the light theme over a white page: its own colours
+    assert counter._chosen_tone(QColor(5, 5, 8)) == "dark"  # a dark picture behind: the dark theme's
+    window.set_theme("dark")

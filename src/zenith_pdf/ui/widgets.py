@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 
 from ..core.platforms import native_keys
 from ..icons import icon
-from ..theme import Theme, qcolor, themes
+from ..theme import Theme, qcolor, themes, tone_sheet
 
 GLASS_BLEED = 24  # logical px of backdrop sampled beyond the bar: the blur reaches its edges from what is there
 GLASS_RADIUS = 14  # corner radius of tall glass panels, as the tool menu's; bars are capsules
@@ -70,6 +70,11 @@ SATURATION = {"clear": 1.6, "balanced": 1.2}  # colours behind the glass, lifted
 NOISE_ALPHA = 4  # 0-255: the faint grain on the glass, which keeps its smooth gradients from banding
 NOISE_SIZE = 64  # device px of the grain's tile
 FADE_MS = 150  # floating bars and chips come and go this fast
+# A bar in the dark theme turns light where what is behind it is brighter than this (relative luminance), and
+# dark again below the second; in the light theme it turns dark under the third and light above the fourth. The
+# gap between each pair keeps a bar from flickering at the edge of a page.
+TONE_LIGHT_OVER, TONE_DARK_UNDER = 0.45, 0.22
+TONE_DARK_IN_LIGHT, TONE_LIGHT_IN_LIGHT = 0.06, 0.16
 # A popup draws its own rounded shape: Windows leaves the corners clear only for a frameless window, and its
 # drop shadow would be a square round them.
 POPUP_FLAGS = Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint
@@ -83,6 +88,7 @@ class _Glass:
     """
 
     style = "clear"
+    adaptive = True  # the bars take the light or the dark theme's colours, whichever suits what is behind them
 
     @property
     def enabled(self) -> bool:
@@ -99,6 +105,15 @@ def glass_style(value) -> str:
     if value is False or value == "false":
         return "solid"
     return value if value in GLASS_STYLES else "clear"
+
+
+def set_glass_adaptive(on: bool) -> None:
+    """Let the bars change tone with what is behind them, or keep the theme's: at once, on every bar."""
+    glass.adaptive = bool(on)
+    for widget in QApplication.allWidgets():
+        if isinstance(widget, FloatingBar):
+            widget.refresh_backdrop()
+            widget.update()
 
 
 def set_glass(value) -> None:
@@ -427,7 +442,16 @@ class IconButton(QToolButton):
         self._refresh()
 
     def _refresh(self, *_):
-        self.setIcon(cached_icon(self._icon_name, self._color))
+        self.setIcon(cached_icon(self._icon_name, self._color or self._tone_text()))
+
+    def _tone_text(self) -> str | None:
+        """The text colour of the glass bar the button is on, when that bar changed tone; else None (the theme's)."""
+        widget = self.parentWidget()
+        while widget is not None and not widget.isWindow():
+            if isinstance(widget, FloatingBar):
+                return widget.theme().text if widget.tone else None
+            widget = widget.parentWidget()
+        return None
 
     def sizeHint(self) -> QSize:
         hint = super().sizeHint()
@@ -672,12 +696,53 @@ class FloatingBar(QFrame):
         self._alpha = least_alpha(themes.current)
         self._overlay: tuple[tuple, QPixmap] | None = None  # the grain, the light and the edge, for one size
         self._shadow: _BarShadow | None = None
+        self.tone = ""  # "light" or "dark" when the bar took that theme's colours; "" for the theme's own
         self._attach_shadow()
         themes.changed.connect(self._on_theme)
 
     @property
     def solid(self) -> bool:
         return self._solid
+
+    def theme(self) -> Theme:
+        """The theme the bar is painted in: the app's, or the other one's when the bar changed tone."""
+        return themes.tone(self.tone) if self.tone else themes.current
+
+    def _chosen_tone(self, behind: QColor) -> str:
+        """The tone for what is behind the bar, with some give either way so the edge of a page doesn't flicker."""
+        if self._solid or not glass.adaptive or not glass.enabled:
+            return ""
+        level = luminance(behind)
+        own = themes.current.name
+        if own == "dark":
+            if self.tone != "light" and level > TONE_LIGHT_OVER:
+                return "light"
+            if self.tone == "light" and level < TONE_DARK_UNDER:
+                return ""
+        else:
+            if self.tone != "dark" and level < TONE_DARK_IN_LIGHT:
+                return "dark"
+            if self.tone == "dark" and level > TONE_LIGHT_IN_LIGHT:
+                return ""
+        return self.tone
+
+    def set_tone(self, tone: str) -> None:
+        """Paint the bar, its text and its icons in the light or the dark theme's colours ("" for the app's)."""
+        if tone == self.tone:
+            return
+        self.tone = tone
+        self.setProperty("tone", tone)
+        self.setStyleSheet(tone_sheet(self.theme()) if tone else "")
+        for button in self.findChildren(IconButton):
+            button._refresh()
+        self._overlay = None
+        self.tone_changed()
+        self.update()
+
+    def tone_changed(self) -> None:
+        """For bars with more to recolour when the tone changes (the toolbar's tools)."""
+        for child in self.findChildren(QWidget):
+            child.update()
 
     @property
     def tint_alpha(self) -> float:
@@ -690,7 +755,7 @@ class FloatingBar(QFrame):
     def surface(self) -> QColor:
         """The colour coloured icons stand on: the glass over the part of what is behind it hardest to read on
         (the brightest under light text, the darkest under dark text), or the bar itself when it is solid."""
-        t = themes.current
+        t = self.theme()
         if self._solid:
             return QColor(t.raised)
         first, last = self._under
@@ -731,8 +796,13 @@ class FloatingBar(QFrame):
         scale_x, scale_y = blurred.width / area.width(), blurred.height / area.height()
         inner = QRectF((origin.x() - area.x()) * scale_x, (origin.y() - area.y()) * scale_y,
                        self.width() * scale_x, self.height() * scale_y)
-        light_text = luminance(QColor(themes.current.text)) > 0.5
+        light_text = luminance(QColor(self.theme().text)) > 0.5
         self._columns, self._under, self._mean = _behind(blurred, inner, light_text)
+        tone = self._chosen_tone(self._mean)
+        if tone != self.tone:  # the other theme's colours: what is hardest to read on changes with them
+            self.set_tone(tone)
+            light_text = luminance(QColor(self.theme().text)) > 0.5
+            self._columns, self._under, self._mean = _behind(blurred, inner, light_text)
         self._frosted = _qimage(blurred)
         self._tint()
         self.update()
@@ -744,7 +814,7 @@ class FloatingBar(QFrame):
     def _tint(self) -> None:
         """Lay the theme's tint over the blurred backdrop, column by column as strong as reading there needs:
         clearer over the dark parts of a page under light text, or the light parts under dark text."""
-        t = themes.current
+        t = self.theme()
         least = max(least_alpha(t), self.min_tint_alpha / 255)
         frosted = self._frosted
         # Scrolling over a plain page or the canvas often brings the same columns again: keep their tint.
@@ -786,6 +856,7 @@ class FloatingBar(QFrame):
         return bar.isEmpty() or self._backdrop_area.translated(self._shift).contains(spare)
 
     def _on_theme(self, *_) -> None:
+        self.set_tone("")  # the new theme's own colours, until the next sample says otherwise
         if self._frosted is not None:
             self._tint()  # in the new theme's colours; the owner resamples soon after
         self.update()
@@ -848,7 +919,7 @@ class FloatingBar(QFrame):
     # Painting -------------------------------------------------------------------
 
     def paintEvent(self, event) -> None:
-        t = themes.current
+        t = self.theme()
         painter = QPainter(self)
         # Everything is laid out in device pixels, from the device pixels Qt gives the bar's rect: at 125% or
         # 175% the bar can start a fraction of a pixel in, and a 1 px edge drawn in logical pixels would blur.
@@ -899,7 +970,7 @@ class FloatingBar(QFrame):
         """The faint grain, the line of light inside the top edge and the fine edge all round, in device pixels:
         put together once per size and theme. The edge and the light are each a whole number of device
         pixels wide (one at 100% and 125%, two from 150%), and their straight runs fill whole pixels."""
-        t = themes.current
+        t = self.theme()
         width = max(1, int(ratio + 0.5))
         colours = (t.raised, t.border) if self._solid else (t.glass_highlight.rgba(), t.glass_border.rgba())
         key = (size.width(), size.height(), radius, width, grain, self._solid, colours, glass.style)

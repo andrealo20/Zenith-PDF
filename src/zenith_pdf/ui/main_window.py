@@ -47,7 +47,7 @@ from .reading import ReadingMode
 from .settings_page import SettingsWindow
 from .tab_drag import TabDragger
 from .tools import ToolSettings
-from .widgets import IconButton, set_glass
+from .widgets import IconButton, set_glass, set_glass_adaptive
 from .workspace import Workspace
 
 APP_NAME = "Zenith PDF"
@@ -789,6 +789,8 @@ class MainWindow(QMainWindow):
             themes.choose(settings.theme, settings.get("accent"))
         elif key == "glass":
             set_glass(settings.get("glass"))
+        elif key == "glass_adaptive":
+            set_glass_adaptive(settings.get("glass_adaptive"))
         elif key == "reading_full_screen":
             self.reading_mode.fill_screen(settings.get("reading_full_screen"))
         elif key == "help_badges":

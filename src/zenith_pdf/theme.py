@@ -527,6 +527,26 @@ def _for_platform(sheet: str) -> str:
     return re.sub(r"(\d+(?:\.\d+)?)pt\b", lambda m: f"{float(m.group(1)) * 4 / 3:g}pt", sheet)
 
 
+def tone_sheet(t: Theme) -> str:
+    """The rules of a glass bar that took the other theme's colours over what is behind it: a light bar over a
+    bright page in the dark theme, a dark one over a dark picture in the light theme. Set on the bar, they win
+    over the app's own."""
+    return _for_platform(f"""
+    QLabel, QLabel#Muted, QLabel#ToastText {{ color: {t.text}; }}
+    QToolButton {{ color: {t.text}; }}
+    QToolButton:hover {{ background: {t.glass_hover}; }}
+    QToolButton:pressed {{ background: {t.glass_pressed}; }}
+    QToolButton:checked {{ background: {t.glass_checked}; }}
+    QToolButton#BackChip {{
+        background: {t.glass_hover}; border-radius: 14px; padding: 5px 10px 5px 8px; font-weight: 600;
+    }}
+    QToolButton#BackChip:hover {{ background: {t.glass_pressed}; }}
+    QLineEdit#PageField {{ color: {t.text}; border-color: {t.border}; selection-background-color: {t.selection}; }}
+    QLineEdit#PageField:hover {{ border-color: {t.text_muted}; }}
+    #Separator {{ background: {t.border}; }}
+    """)
+
+
 class ThemeManager(QObject):
     changed = Signal(object)
 
@@ -546,6 +566,12 @@ class ThemeManager(QObject):
         app.setStyleSheet(_style_sheet(theme))
         self.current = theme
         self.changed.emit(theme)
+
+    def tone(self, name: str) -> Theme:
+        """The light or the dark theme with the accent in use: what a glass bar takes when it changes tone."""
+        if name == self.current.name:
+            return self.current
+        return with_accent(THEMES.get(name, DARK), self._choice[1])
 
     def choose(self, name: str, accent: str = "blue") -> None:
         """Apply a theme by name: "dark", "light", or "system" to follow the system."""

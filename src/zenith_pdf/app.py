@@ -20,7 +20,7 @@ from .theme import themes
 from .ui.help import badges
 from .ui.instance import Instance, forward, own_command, register_scheme
 from .ui.main_window import MainWindow
-from .ui.widgets import set_glass
+from .ui.widgets import set_glass, set_glass_adaptive
 
 DWMWA_WINDOW_CORNER_PREFERENCE = 33  # Windows 11 and later
 DWMWCP_ROUND = 2  # the 8 px corners Windows 11 gives its own menus; the style sheet rounds menus by as much
@@ -131,6 +131,7 @@ def create_app(argv: list[str], settings: Settings | None = None) -> tuple[QAppl
     themes.choose(settings.theme, settings.get("accent"))
     _default_glass(settings)
     set_glass(settings.get("glass"))
+    set_glass_adaptive(settings.get("glass_adaptive"))
     badges.set_mode(settings.get("help_badges"))
     badges.delay = settings.get("help_delay")
     # Windows takes its sizes from the .ico; macOS and Linux scale the picture.

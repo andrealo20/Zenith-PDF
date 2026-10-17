@@ -23,6 +23,7 @@ DEFAULTS: dict[str, object] = {
     "theme": "dark",  # dark, light or system
     "accent": "blue",  # a key of theme.ACCENTS
     "glass": "clear",  # the floating bars: "clear" or "balanced" frosted glass, or "solid"
+    "glass_adaptive": True,  # the bars turn light over a bright page and dark over dark content
     "reading_full_screen": False,  # reading mode also fills the screen
     "default_zoom": "width",  # width, page or actual
     "default_layout": "single",  # a key of document_view.LAYOUTS

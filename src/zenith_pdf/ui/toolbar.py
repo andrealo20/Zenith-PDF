@@ -100,7 +100,8 @@ class ToolButton(QToolButton):
         return cached
 
     def paintEvent(self, event) -> None:
-        t = themes.current
+        bar = self._glass()
+        t = bar.theme() if bar is not None else themes.current
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         fill = None
@@ -115,7 +116,7 @@ class ToolButton(QToolButton):
             painter.setBrush(token_color(fill))
             painter.drawRoundedRect(QRectF(self.rect()), 10, 10)
         color = self.tint or (t.accent if self.active else t.text)
-        if self.tint and (bar := self._glass()) is not None:
+        if self.tint and bar is not None:
             # On glass the tool's colour is made readable on what shows through, as on the bar it was made for.
             color = readable(QColor(self.tint).getRgbF()[:3], bar.surface().name(), t.text)
         mode = QIcon.Mode.Normal if self.isEnabled() else QIcon.Mode.Disabled
