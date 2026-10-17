@@ -29,12 +29,7 @@ In continuous development: new versions come out often.
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Works offline](https://img.shields.io/badge/works-offline-6E40C9?style=flat-square)
-![English](https://img.shields.io/badge/language-English-E3A008?style=flat-square)
-![Italian](https://img.shields.io/badge/language-Italian-E3A008?style=flat-square)
-![French](https://img.shields.io/badge/language-French-E3A008?style=flat-square)
-![Spanish](https://img.shields.io/badge/language-Spanish-E3A008?style=flat-square)
-![German](https://img.shields.io/badge/language-German-E3A008?style=flat-square)
-![Portuguese](https://img.shields.io/badge/language-Portuguese-E3A008?style=flat-square)
+![Languages: English, Italian, French, Spanish, German, Portuguese](https://img.shields.io/badge/languages-English%20%C2%B7%20Italian%20%C2%B7%20French%20%C2%B7%20Spanish%20%C2%B7%20German%20%C2%B7%20Portuguese-E3A008?style=flat-square)
 
 <br>
 
