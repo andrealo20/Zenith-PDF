@@ -96,3 +96,48 @@ def sample_pdf(tmp_path_factory):
     pdf.save(str(path))
     pdf.close()
     return path
+
+
+@pytest.fixture(scope="session")
+def form_pdf(tmp_path_factory):
+    """One 612 x 792 page with a form: a text field "name" (y 700), a multiline "notes" (y 560 to 640), a check
+    box "agree" (on state /Yes), a radio group "size" with S and L, and a combo box "colour" (Red, Green, Blue).
+    Display y = 792 - PDF y."""
+    import pikepdf
+    from pikepdf import Array, Dictionary, Name, String
+
+    path = tmp_path_factory.mktemp("forms") / "form.pdf"
+    pdf = pikepdf.new()
+    pdf.add_blank_page(page_size=(612, 792))
+    page = pdf.pages[0]
+    font = pdf.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.Helvetica))
+    zapf = pdf.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.ZapfDingbats))
+
+    def stream(text: bytes, w: float, h: float):
+        return pdf.make_stream(text, Type=Name.XObject, Subtype=Name.Form, BBox=[0, 0, w, h],
+                               Resources=Dictionary(Font=Dictionary(ZaDb=zapf)))
+
+    def widget(rect, **more):
+        return pdf.make_indirect(Dictionary(Type=Name.Annot, Subtype=Name.Widget, Rect=rect, P=page.obj, F=4, **more))
+
+    name = widget([100, 690, 300, 710], FT=Name.Tx, T=String("name"), V=String(""), DA=String("/Helv 12 Tf 0 g"))
+    notes = widget([100, 560, 400, 640], FT=Name.Tx, T=String("notes"), Ff=4096, V=String(""),
+                   DA=String("/Helv 10 Tf 0 g"))
+    on = stream(b"q BT /ZaDb 12 Tf 2 3 Td (4) Tj ET Q", 16, 16)
+    off = stream(b"", 16, 16)
+    agree = widget([100, 500, 116, 516], FT=Name.Btn, T=String("agree"), V=Name.Off, AS=Name.Off,
+                   AP=Dictionary(N=Dictionary(Yes=on, Off=off)))
+    size = pdf.make_indirect(Dictionary(FT=Name.Btn, T=String("size"), Ff=49152, V=Name.Off, Kids=Array([])))
+    for state, x in (("S", 100), ("L", 140)):
+        dot = stream(b"q BT /ZaDb 12 Tf 2 3 Td (l) Tj ET Q", 16, 16)
+        kid = widget([x, 450, x + 16, 466], Parent=size, AS=Name.Off,
+                     AP=Dictionary(N=Dictionary({f"/{state}": dot, "/Off": stream(b"", 16, 16)})))
+        size.Kids.append(kid)
+    colour = widget([100, 400, 250, 420], FT=Name.Ch, T=String("colour"), Ff=131072,
+                    Opt=Array([String("Red"), String("Green"), String("Blue")]), V=String("Red"),
+                    DA=String("/Helv 12 Tf 0 g"))
+    page.obj.Annots = Array([name, notes, agree, *size.Kids, colour])
+    pdf.Root.AcroForm = Dictionary(Fields=Array([name, notes, agree, size, colour]), DA=String("/Helv 0 Tf 0 g"),
+                                   DR=Dictionary(Font=Dictionary(Helv=font, ZaDb=zapf)))
+    pdf.save(path)
+    return path

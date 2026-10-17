@@ -53,6 +53,12 @@ class PageActions(QObject):
             self._view.goto_page(min(then_page, self._document.page_count - 1))
         return done
 
+    # Forms --------------------------------------------------------------
+
+    def fill_field(self, name: str, value) -> bool:
+        return self._workspace.edit_structure("Fill in form", lambda a: self._document.fill_fields(a, {name: value}),
+                                              "Can't fill in the form")
+
     # Pages --------------------------------------------------------------
 
     def add_page(self, after: int, kind: str = "blank") -> None:

@@ -296,6 +296,18 @@ signature you need a dedicated app.</li>
 {_keys(r'\sqrt{x}')}, {_keys(r'\sum_{i=1}^n')}, {_keys(r'\int_a^b')}, Greek letters by name such as
 {_keys(r'\alpha')}. The preview shows mistakes as you type.</li>
 </ul>"""),
+        ("forms", "Forms", "check-square-offset", f"""
+<h1>Filling in forms</h1>
+<p>A PDF with a form shows its fields lit in the accent colour. With Select or Pan, click one:</p>
+<ul>
+<li>A text field takes typing where it is. {_keys('Enter')} or a click away keeps the text, {_keys('Esc')}
+leaves it as it was, {_keys('Tab')} goes on to the next field. A field of several lines keeps
+{_keys('Enter')} for a new line: {_keys('Ctrl+Enter')} keeps the text.</li>
+<li>A check box flips, a radio button is chosen (click it again to clear it, where the form allows), a list
+opens its choices.</li>
+</ul>
+<p>Each value goes into the PDF as one step: Undo takes it back. Saved, the form shows filled in in every
+other viewer too.</p>"""),
         ("pages", "Pages", "files", """
 <h1>Pages</h1>
 <p>Right-click a page for page commands: add a blank, lined, grid or dotted page, copy, duplicate, delete or

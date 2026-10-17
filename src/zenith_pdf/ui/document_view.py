@@ -251,7 +251,10 @@ class DocumentView(QGraphicsView):
         self._focused_hit: SearchHit | None = None
         self._items: dict[str, AnnotationItem] = {}
         self._tools = make_tools(self)
+        from .form_layer import FormLayer
         from .snapping import Snapper
+
+        self.forms = FormLayer(self)
 
         self.snapper = Snapper(self)
         self._active: Tool | None = None
@@ -366,6 +369,8 @@ class DocumentView(QGraphicsView):
                 self._tops[index] = y
                 self._row_of[index] = row
             y += height + PAGE_GAP
+        if getattr(self, "forms", None) is not None:
+            self.forms.build()  # the fields light up on the new pages
         self._column = column
         self._content_rect = QRectF(-MARGIN, 0, column + 2 * MARGIN, y - PAGE_GAP + MARGIN)
         self._update_scene_rect()
@@ -825,6 +830,10 @@ class DocumentView(QGraphicsView):
             return
         left = event.button() == Qt.MouseButton.LeftButton
         if left and not self._space_down and self._press_on_editor(event):
+            return
+        if left and not self._space_down and self._tool_key() in ("select", "hand") and \
+                self.forms.press(event.position()):
+            event.accept()  # a form's field: filled in, not selected or panned
             return
         panning = event.button() == Qt.MouseButton.MiddleButton or (
             left and (self._space_down or self._tool_key() == "hand")
@@ -1594,6 +1603,11 @@ class DocumentView(QGraphicsView):
         """Ctrl+C: the selected annotations if any, else the selected text."""
         if not self.copy_annotations():
             self.copy_selection()
+
+    def fill_field(self, name: str, value) -> None:
+        """Fill in a field of the document's form, as one step Undo takes back."""
+        if self.actions is not None:
+            self.actions.fill_field(name, value)
 
     def has_text_selection(self) -> bool:
         return self._text_selection is not None

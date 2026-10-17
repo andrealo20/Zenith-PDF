@@ -27,7 +27,7 @@ import pikepdf
 import pypdfium2 as pdfium
 from PySide6.QtGui import QImage
 
-from . import pages, textclean
+from . import forms, pages, textclean
 from .annotations import Annotation, ImageStamp, Point, Rect, merge_line_rects, new_id
 from .appearance import pdf_rect
 from .geometry import Box, PageGeometry, visible_box
@@ -122,6 +122,7 @@ class Document:
         self._textpages: dict[int, object] = {}
         self._raw_texts: dict[int, str | None] = {}  # page -> its text when it needs cleaning (see _raw_text)
         self.hidden: dict[int, list[int]] = {}  # page -> /Annots positions the canvas draws itself
+        self._fields: list | None = None  # the form's fields, read the first time they are asked for
         with PDFIUM_LOCK:
             self._pdf = pdfium.PdfDocument(data, password=self.password)
             # Forms must be initialised before any page is loaded, or they don't render.
@@ -445,6 +446,20 @@ class Document:
             self.restore(before)
             raise
         self.restore(after)
+
+    def form_fields(self) -> list:
+        """The fields of the document's form that can be filled in (core/forms.py), in page order."""
+        if self._fields is None:
+            try:
+                self._fields = forms.read_fields(self._source) if self._source is not None else []
+            except Exception as error:  # a damaged form: the document still reads, its fields just don't fill
+                log.warning("%s: the form could not be read: %s", self.path, error)
+                self._fields = []
+        return self._fields
+
+    def fill_fields(self, annotations: list[Annotation], values: dict[str, object]) -> None:
+        """Set form fields by name, with their appearances drawn again, as an edit of the document."""
+        self.edit_pages(annotations, lambda pdf: forms.fill(pdf, values))
 
     def extract_pages(self, annotations: list[Annotation], indices: list[int]) -> bytes:
         """A standalone PDF with copies of these pages and their annotations, for a file.
