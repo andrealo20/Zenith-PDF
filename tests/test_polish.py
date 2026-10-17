@@ -603,3 +603,20 @@ def test_the_author_column_shows_whenever_the_name_keeps_its_room(window, sample
     finally:
         home.close()
         home.deleteLater()
+
+
+@pytest.mark.parametrize("scale", [1.0, 1.25, 1.5, 2.0])
+def test_icons_keep_their_size_at_any_display_scaling(qt_app, scale):
+    from PySide6.QtCore import QSize
+    from PySide6.QtGui import QImage
+
+    from zenith_pdf.icons import icon
+
+    for name in ("pen", "z-lasso"):  # a Phosphor icon and one drawn here
+        picture = icon(name).pixmap(QSize(24, 24), scale).toImage().convertToFormat(QImage.Format.Format_ARGB32)
+        inked = [(x, y) for y in range(picture.height()) for x in range(picture.width())
+                 if picture.pixelColor(x, y).alpha() > 40]
+        right = max(x for x, _ in inked)
+        bottom = max(y for _, y in inked)
+        # The drawing reaches past two thirds of the pixmap, as at 100%: not shrunk into its corner.
+        assert right > picture.width() * 0.66 and bottom > picture.height() * 0.66, (name, scale, right, bottom)

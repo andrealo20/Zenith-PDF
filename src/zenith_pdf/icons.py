@@ -435,6 +435,9 @@ class _DepthIcon(QIconEngine):
         if mode == QIcon.Mode.Disabled or min(size.width(), size.height()) < DEPTH_LEAST:
             return flat
         mask = flat.toImage().convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+        # Work in device pixels: a layer that kept the screen's ratio would be drawn at its logical size on the
+        # others, the icon shrunk by the display scaling (half its size at 200%).
+        mask.setDevicePixelRatio(1.0)
         width, height = mask.width(), mask.height()
         colour = QColor(self._colors[1] if state == QIcon.State.On else self._colors[0])
         # The icon's own lightness says what it stands on: a light icon on a dark bar takes a deeper shadow
