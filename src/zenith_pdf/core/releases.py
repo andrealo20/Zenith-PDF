@@ -30,6 +30,14 @@ class Release:
 
 
 RELEASES = (
+    Release("0.5.1", (
+        Highlight("Your PDF reader", "Zenith PDF can open your PDF files when you double-click them: the Windows "
+                  "installer offers it, the first start asks, and Settings > Files & Saving has the button.",
+                  "file-pdf", "setting:files"),
+    ), (
+        "A Zenith PDF button pinned to the taskbar opens the app under itself, not beside it.",
+        "Icons at full size on displays scaled above 100%.",
+    )),
     Release("0.5.0", (
         Highlight("A pen that feels the pressure", "With a pen on a Surface or a Wacom tablet, the line follows how hard "
                   "you press. A hand resting on the screen draws nothing while the pen is near, and the pen's button "

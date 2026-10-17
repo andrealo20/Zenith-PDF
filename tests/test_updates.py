@@ -205,7 +205,7 @@ def test_the_tour_after_an_update_and_never_on_a_new_install(qt_app, settings, m
 
 def test_the_tour_goes_through_each_highlight_and_shows_it(qt_app):
     dialog = WhatsNewDialog(releases.since("0.4.0"))
-    count = len(releases.RELEASES[0].highlights)
+    count = sum(len(release.highlights) for release in releases.since("0.4.0"))  # every version since, together
     assert dialog.pages.count() == count + 1 and dialog.next.text() == "Show me each one"
     dialog.go(1)
     assert dialog.back.isVisibleTo(dialog) and dialog.next.text() == "Next"
