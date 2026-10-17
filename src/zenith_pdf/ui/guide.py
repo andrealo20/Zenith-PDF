@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import __version__
+from ..core.platforms import MAC, SYSTEM_NAME, WINDOWS, mono_font, native_keys, settings_place, ui_font
 from ..icons import icon
 from ..theme import themes
 from .dialogs import SHORTCUTS
@@ -42,10 +43,21 @@ GROUP_INTROS = {
     "Insert": "Notes, bookmarks, pictures, signatures, links, sound and formulas.",
     "Select": "Pick annotations to move, change or delete.",
 }
+if WINDOWS:
+    SPELLER = ("the spell checker built into Windows, for every language Windows has a dictionary for "
+               f"({settings_place('languages')} adds more)")
+    CAMERA = "Image from camera opens the Windows Camera app; the photo you take appears on the page."
+elif MAC:
+    SPELLER = "the spell checker built into macOS, for every language it knows"
+    CAMERA = "Image from camera shows what the camera sees; take the photo and it appears on the page."
+else:
+    SPELLER = ("Hunspell, through Enchant, with the dictionaries your system has (install more, such as "
+               "hunspell-it, with your package manager)")
+    CAMERA = "Image from camera shows what the camera sees; take the photo and it appears on the page."
 
 
 def _keys(text: str) -> str:
-    return f'<span class="key">{html.escape(text)}</span>'
+    return f'<span class="key">{html.escape(native_keys(text))}</span>'
 
 
 def _tool_list(document: QTextDocument, specs) -> str:
@@ -130,15 +142,14 @@ you ran last comes first. With nothing typed, it suggests the writing helpers th
 <h2>Writing help</h2>
 <ul>
 <li><b>Check spelling and punctuation</b>: select a text box, a callout or a note, or right-click it. Zenith PDF
-uses the spell checker built into Windows, for every language Windows has a dictionary for (Windows Settings &gt;
-Time &amp; language &gt; Language &amp; region adds more). Spacing, punctuation and capitals are checked in every
-language. Untick what should stay; the rest changes in one step that Undo takes back.</li>
+uses {html.escape(SPELLER)}. Spacing, punctuation and capitals are checked in every language. Untick what should
+stay; the rest changes in one step that Undo takes back.</li>
 <li><b>Key points</b> of the selected text (right-click it) or of a page: the sentences that carry it, Short,
 Medium or Long. Keep them as a note on the page, or copy them.</li>
 <li><b>Study notes from highlights</b>: every highlight, underline, squiggle and strikethrough with the text under
 it and its comment, by page or by colour, ready to save as Markdown.</li>
 </ul>
-<p>All of this works on this PC, without the internet. Translating, explaining and rewriting text would need a
+<p>All of this works on this computer, without the internet. Translating, explaining and rewriting text would need a
 language model, which Zenith PDF does not use.</p>
 <h2>Tips for new tools</h2>
 <p>The first time you pick a tool, a small card under it gives two or three ways to use it well. It goes as soon as
@@ -263,7 +274,7 @@ tool's menu chooses whether a click on the page asks, starts recording or asks f
 to play it in a small player beside it.</li>
 <li><b>Paste</b> a copied picture with {_keys('Ctrl+V')}: it lands where the pointer is. Drag image files onto a
 page, or use Image from file. Corners keep the proportions; {_keys('Shift')} stretches.</li>
-<li><b>Camera</b>: Image from camera opens the Windows Camera app; the photo you take appears on the page.</li>
+<li><b>Camera</b>: {html.escape(CAMERA)}</li>
 <li><b>Signatures</b>: type your name in a handwriting style, draw it, or take it from a photo of your
 signature. They are kept for every document. This is a picture of a signature; for a certificate-based digital
 signature you need a dedicated app.</li>
@@ -417,12 +428,13 @@ class GuideWindow(QDialog):
 
     def _style(self) -> str:
         t = themes.current
-        return (f"body {{ color: {t.text}; font-family: 'Segoe UI'; font-size: 10.5pt; line-height: 135%; }}"
-                f"h1 {{ font-size: 20pt; font-weight: 600; margin-bottom: 12px; }}"
-                f"h2 {{ font-size: 13.5pt; font-weight: 600; margin-top: 22px; }}"
-                f"h3 {{ font-size: 11.5pt; font-weight: 600; margin-top: 18px; color: {t.accent_ink}; }}"
+        # Pixels, not points: a Mac counts 72 points to the inch and the text would come out smaller there.
+        return (f"body {{ color: {t.text}; font-family: '{ui_font()}'; font-size: 14px; line-height: 135%; }}"
+                f"h1 {{ font-size: 27px; font-weight: 600; margin-bottom: 12px; }}"
+                f"h2 {{ font-size: 18px; font-weight: 600; margin-top: 22px; }}"
+                f"h3 {{ font-size: 15px; font-weight: 600; margin-top: 18px; color: {t.accent_ink}; }}"
                 f".muted {{ color: {t.text_muted}; }}"
-                f".key {{ background-color: {t.raised}; color: {t.text}; font-family: 'Consolas'; }}"
+                f".key {{ background-color: {t.raised}; color: {t.text}; font-family: '{mono_font()}'; }}"
                 f"td {{ vertical-align: top; }}"
                 f"li {{ margin-bottom: 4px; }}")
 
@@ -493,5 +505,5 @@ class GuideWindow(QDialog):
     def _copy_details(self) -> None:
         from .settings_page import version_details
 
-        QApplication.clipboard().setText(version_details() + f"\nWindows: {platform.version()}")
+        QApplication.clipboard().setText(version_details() + f"\n{SYSTEM_NAME}: {platform.version()}")
         say_copied(self.copy)

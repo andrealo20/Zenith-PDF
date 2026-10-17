@@ -12,6 +12,7 @@ from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QMenu, QProxyStyle, QStyleFactory, QWidget
 
 from . import __version__
+from .core.platforms import MAC, native_keys
 from .core.render import RenderPool
 from .icons import icon
 from .settings import Settings
@@ -86,6 +87,30 @@ class ZenithStyle(QProxyStyle):
         return result
 
 
+class MacEvents(QObject):
+    """What a Mac app gets from the system, through one filter on the app (every event passes it):
+
+    - a file opened from the Finder arrives as an event, not on the command line;
+    - tooltips and menus write keys as the Mac does (⌘K, ⇧⌘S), wherever their text is set.
+    """
+
+    def eventFilter(self, watched, event) -> bool:
+        kind = event.type()
+        if kind == QEvent.Type.ToolTipChange and isinstance(watched, QWidget):
+            tip = watched.toolTip()
+            if tip and (native := native_keys(tip)) != tip:
+                watched.setToolTip(native)  # sends the event again, now with nothing to change
+        elif kind in (QEvent.Type.ActionAdded, QEvent.Type.ActionChanged) and isinstance(watched, QMenu):
+            action = event.action()
+            text = action.text()
+            if text and (native := native_keys(text)) != text:
+                action.setText(native)
+        elif kind == QEvent.Type.FileOpen and event.file() and MainWindow.open_windows:
+            MainWindow.open_windows[-1].open_files([event.file()])
+            return True
+        return False
+
+
 def create_app(argv: list[str], settings: Settings | None = None) -> tuple[QApplication, MainWindow]:
     if sys.platform == "win32":
         # Group the taskbar button under our own id rather than python.exe's.
@@ -105,8 +130,11 @@ def create_app(argv: list[str], settings: Settings | None = None) -> tuple[QAppl
     set_glass(settings.get("glass"))
     badges.set_mode(settings.get("help_badges"))
     badges.delay = settings.get("help_delay")
-    app_icon = Path(__file__).parent / "assets" / "zenith.ico"
+    # Windows takes its sizes from the .ico; macOS and Linux scale the picture.
+    app_icon = Path(__file__).parent / "assets" / ("zenith.ico" if sys.platform == "win32" else "zenith.png")
     app.setWindowIcon(QIcon(str(app_icon)) if app_icon.exists() else icon("file-pdf", themes.current.accent))
+    if MAC and app.findChild(MacEvents) is None:
+        app.installEventFilter(MacEvents(app))
 
     # ZENITH_RENDER_PROCESSES=0 renders in-process only (tests, debugging); else the setting.
     processes = os.environ.get("ZENITH_RENDER_PROCESSES")

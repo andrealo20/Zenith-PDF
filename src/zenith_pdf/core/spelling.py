@@ -1,22 +1,29 @@
-"""Spelling, through the spell checker built into Windows (ISpellCheckerFactory, Windows 8 and later).
+"""Spelling, through the spell checker of the system.
 
-Windows checks every language it has a dictionary for: those of the languages
-added in Settings > Time & language > Language & region. Nothing is installed
-or sent anywhere. The COM interfaces are called through their vtables with
-ctypes, so no extra package is needed. Call from the GUI thread.
+- Windows 8 and later: ISpellCheckerFactory, for every language added in
+  Settings > Time & language > Language & region. The COM interfaces are called
+  through their vtables with ctypes, so no extra package is needed.
+- macOS: NSSpellChecker, through pyobjc, for the languages macOS has.
+- Linux: Hunspell dictionaries through Enchant (pyenchant), one package per
+  language, such as hunspell-it.
+
+Nothing is installed or sent anywhere. Call from the GUI thread.
 """
 
 from __future__ import annotations
 
 import ctypes
+import re
 import sys
-from ctypes import HRESULT, POINTER, byref, c_int, c_ulong, c_void_p, c_wchar_p
+from ctypes import POINTER, byref, c_int, c_ulong, c_void_p, c_wchar_p
 from dataclasses import dataclass
 
 NAMES = {"en": "English", "it": "Italian", "fr": "French", "es": "Spanish", "de": "German", "pt": "Portuguese"}
 PREFERRED = {"en": "en-US", "it": "it-IT", "fr": "fr-FR", "es": "es-ES", "de": "de-DE", "pt": "pt-PT"}
 SUGGESTIONS = 5  # alternatives offered for a word
 ACTIONS = {1: "suggest", 2: "replace", 3: "delete"}  # CORRECTIVE_ACTION; 0 (none) never comes as an error
+WORD = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")  # letters, with apostrophes inside: l'anno, don't
+DOUBLED = re.compile(r"\b([^\W\d_]+)[ \t]+(\1)\b", re.IGNORECASE)  # "the the"
 
 _CLSID_FACTORY = "{7AB36653-1796-484B-BDFA-E74F1DB7C1DC}"
 _IID_FACTORY = "{8E018A9D-2415-4677-BF08-794EA61F94BB}"
@@ -24,7 +31,7 @@ _IID_FACTORY = "{8E018A9D-2415-4677-BF08-794EA61F94BB}"
 
 @dataclass(frozen=True)
 class Issue:
-    """A word Windows flags. `start` and `length` count Python characters in the text checked."""
+    """A word the checker flags. `start` and `length` count Python characters in the text checked."""
 
     start: int
     length: int
@@ -40,7 +47,7 @@ class _Guid(ctypes.Structure):
 def _call(obj: c_void_p, index: int, *args, types=()):
     """Call method `index` of the COM interface `obj` (0-2 are IUnknown's)."""
     vtable = ctypes.cast(obj, POINTER(POINTER(c_void_p))).contents
-    function = ctypes.WINFUNCTYPE(HRESULT, c_void_p, *types)(vtable[index])
+    function = ctypes.WINFUNCTYPE(ctypes.HRESULT, c_void_p, *types)(vtable[index])
     return function(obj, *args)
 
 
@@ -177,25 +184,177 @@ class _Windows:
             _release(errors)
         return found
 
+    def issues(self, tag: str, text: str, limit: int) -> list[Issue]:
+        checker = self.checker(tag)
+        if checker is None:
+            return []
+        position = _to_python(text)
+        issues = []
+        for start, length, action, replacement in self.check(tag, text, limit):
+            first, last = position(start), position(start + length)
+            word = text[first:last]
+            kind = ACTIONS.get(action, "suggest")
+            if kind == "replace":
+                suggestions = (replacement,) if replacement else ()
+            elif kind == "suggest":
+                suggestions = self.suggest(checker, word, SUGGESTIONS)
+            else:
+                suggestions = ()
+            issues.append(Issue(first, last - first, word, kind, suggestions))
+        return issues
+
+
+class _Mac:
+    """NSSpellChecker, the checker every Mac app shares."""
+
+    def __init__(self):
+        self.checker = None
+        self.failed = False
+        self.native: dict[str, str] = {}  # "en-GB": "en_GB", as macOS names it
+
+    def ready(self) -> bool:
+        if self.checker is not None:
+            return True
+        if self.failed or sys.platform != "darwin":
+            return False
+        try:
+            from AppKit import NSSpellChecker
+        except ImportError:
+            self.failed = True
+            return False
+        self.checker = NSSpellChecker.sharedSpellChecker()
+        return self.checker is not None
+
+    def languages(self) -> list[str]:
+        if not self.ready():
+            return []
+        self.native = {str(name).replace("_", "-"): str(name) for name in self.checker.availableLanguages()}
+        return list(self.native)
+
+    def supported(self, tag: str) -> bool:
+        if not self.native:
+            self.languages()
+        return tag in self.native
+
+    def issues(self, tag: str, text: str, limit: int) -> list[Issue]:
+        if not self.ready():
+            return []
+        language = self.native.get(tag, tag.replace("-", "_"))
+        position = _to_python(text)
+        units = len(text.encode("utf-16-le")) // 2  # macOS counts UTF-16 units, as Windows does
+        issues, start = [], 0
+        while start < units and len(issues) < limit:
+            found = self.checker.checkSpellingOfString_startingAt_language_wrap_inSpellDocumentWithTag_wordCount_(
+                text, start, language, False, 0, None)
+            found = found[0] if isinstance(found, tuple) else found
+            if found.length == 0 or found.location >= units:
+                break
+            first, last = position(found.location), position(found.location + found.length)
+            guesses = self.checker.guessesForWordRange_inString_language_inSpellDocumentWithTag_(
+                found, text, language, 0) or []
+            issues.append(Issue(first, last - first, text[first:last], "suggest",
+                                tuple(str(guess) for guess in list(guesses)[:SUGGESTIONS])))
+            start = found.location + found.length
+        return _with_doubled(text, issues)
+
+
+class _Enchant:
+    """Hunspell dictionaries through Enchant, as most Linux apps check spelling."""
+
+    def __init__(self):
+        self.broker = None
+        self.failed = False
+        self.dictionaries: dict[str, object] = {}
+
+    def ready(self) -> bool:
+        if self.broker is not None:
+            return True
+        if self.failed:
+            return False
+        try:
+            import enchant
+
+            self.broker = enchant.Broker()
+        except Exception:  # pyenchant missing, or the Enchant library it loads
+            self.failed = True
+            return False
+        return True
+
+    def languages(self) -> list[str]:
+        if not self.ready():
+            return []
+        return sorted({str(tag).replace("_", "-") for tag in self.broker.list_languages()})
+
+    def supported(self, tag: str) -> bool:
+        if not self.ready():
+            return False
+        try:
+            return bool(self.broker.dict_exists(tag.replace("-", "_")))
+        except Exception:
+            return False
+
+    def _dictionary(self, tag: str):
+        if tag not in self.dictionaries:
+            self.dictionaries[tag] = self.broker.request_dict(tag.replace("-", "_"))
+        return self.dictionaries[tag]
+
+    def issues(self, tag: str, text: str, limit: int) -> list[Issue]:
+        if not self.ready():
+            return []
+        try:
+            dictionary = self._dictionary(tag)
+        except Exception:
+            return []
+        issues = []
+        for match in WORD.finditer(text):
+            word = match.group()
+            if len(word) < 2 or word.isupper() or _known(dictionary, word):
+                continue  # single letters and acronyms (PDF, OCR) are left alone
+            issues.append(Issue(match.start(), len(word), word, "suggest",
+                                tuple(dictionary.suggest(word)[:SUGGESTIONS])))
+            if len(issues) >= limit:
+                break
+        return _with_doubled(text, issues)
+
+
+def _known(dictionary, word: str) -> bool:
+    """In the dictionary, or an elision whose word is: l'anno, dell'acqua, qu'il."""
+    if dictionary.check(word):
+        return True
+    for mark in ("'", "’"):
+        if mark in word:
+            rest = word.rsplit(mark, 1)[1]
+            return len(rest) > 1 and dictionary.check(rest)
+    return False
+
+
+def _with_doubled(text: str, issues: list[Issue]) -> list[Issue]:
+    """`issues`, plus each word written twice in a row: Windows flags those itself, the others don't."""
+    doubled = [Issue(m.start(2), len(m.group(2)), m.group(2), "delete") for m in DOUBLED.finditer(text)]
+    spelled = [i for i in issues if not any(d.start < i.start + i.length and i.start < d.start + d.length
+                                            for d in doubled)]
+    return sorted(spelled + doubled, key=lambda issue: issue.start)
+
 
 _windows = _Windows()
+_backend = _windows if sys.platform == "win32" else _Mac() if sys.platform == "darwin" else _Enchant()
 
 
 def languages() -> list[str]:
-    """The language tags Windows can check here, such as "en-GB" or "it-IT"."""
-    return _windows.languages()
+    """The language tags the system can check here, such as "en-GB" or "it-IT"."""
+    return _backend.languages()
 
 
 def tag_for(language: str) -> str | None:
-    """The tag to check a language ("it", or a tag like "pt-BR") with, among those Windows has; None if none."""
+    """The tag to check a language ("it", or a tag like "pt-BR") with, among those the system has; None if none."""
     language = language.strip()
     if not language:
         return None
-    if "-" in language and _windows.supported(language):
+    if "-" in language and _backend.supported(language):
         return language
     base = language.split("-")[0].lower()
     preferred = PREFERRED.get(base)
-    if preferred and _windows.supported(preferred):
+    if preferred and _backend.supported(preferred):
         return preferred
     return next((tag for tag in languages() if tag.lower().split("-")[0] == base), None)
 
@@ -218,23 +377,9 @@ def _to_python(text: str):
 
 
 def check(text: str, language: str, limit: int = 200) -> list[Issue]:
-    """The words of `text` Windows flags in `language` ("it", "en", or a full tag), with what to do about each.
-    Empty when Windows has no dictionary for the language."""
+    """The words of `text` the system flags in `language` ("it", "en", or a full tag), with what to do about
+    each. Empty when the system has no dictionary for the language."""
     tag = tag_for(language)
     if tag is None or not text.strip():
         return []
-    checker = _windows.checker(tag)
-    position = _to_python(text)
-    issues = []
-    for start, length, action, replacement in _windows.check(tag, text, limit):
-        first, last = position(start), position(start + length)
-        word = text[first:last]
-        kind = ACTIONS.get(action, "suggest")
-        if kind == "replace":
-            suggestions = (replacement,) if replacement else ()
-        elif kind == "suggest":
-            suggestions = _windows.suggest(checker, word, SUGGESTIONS)
-        else:
-            suggestions = ()
-        issues.append(Issue(first, last - first, word, kind, suggestions))
-    return issues
+    return _backend.issues(tag, text, limit)

@@ -57,6 +57,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.document import before_exit
+from ..core.platforms import native_keys
 from ..icons import icon
 from ..settings import Settings
 from ..theme import qcolor, themes
@@ -821,7 +822,7 @@ class HomePage(QWidget):
             self.empty.setText("Nothing here yet.")
         else:
             self.empty.setText("Files you open will appear here. Open one, or drop PDFs on the window.")
-        self.tip.setText(random.choice(TIPS))
+        self.tip.setText(native_keys(random.choice(TIPS)))
 
     def _on_loaded(self, path: str, info: dict, image: QImage) -> None:
         if info:

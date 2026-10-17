@@ -1,5 +1,8 @@
 """Audio notes: record from the microphone and play back, through Windows' winmm with ctypes.
 
+On macOS and Linux the same Recorder and players run on Qt Multimedia instead
+(core/qt_audio.py, picked by _microphone and default_player).
+
 Recording uses waveIn, polled from a worker thread: MCI gives no input level on
 this kind of device, needs every format field in one command and cannot save
 to a path of 128 characters or more. Playback uses MCI, which plays WAV and,
@@ -103,9 +106,15 @@ def _check(code: int) -> None:
 
 
 def input_device_count() -> int:
-    """How many microphones (waveIn devices) Windows offers; 0 off Windows."""
+    """How many microphones the system offers: waveIn devices on Windows, Qt Multimedia's elsewhere."""
     winmm = _winmm()
-    return int(winmm.waveInGetNumDevs()) if winmm is not None else 0
+    if winmm is not None:
+        return int(winmm.waveInGetNumDevs())
+    try:
+        from .qt_audio import input_device_count as qt_count
+    except ImportError:  # Qt Multimedia is not installed
+        return 0
+    return qt_count()
 
 
 # WAV --------------------------------------------------------------------------------
@@ -232,6 +241,30 @@ class _WaveIn:
         return chunks
 
 
+def _microphone():
+    """The microphone backend of this system: waveIn on Windows, Qt Multimedia on macOS and Linux."""
+    if sys.platform == "win32":
+        return _WaveIn()
+    try:
+        from .qt_audio import QtInput
+    except ImportError:
+        return _NoMicrophone()
+    return QtInput()
+
+
+class _NoMicrophone:
+    """Where Qt Multimedia is missing: recording says why, and attaching a file still works."""
+
+    def open(self, rate: int, channels: int, bits: int) -> None:
+        raise AudioError("Recording needs Qt Multimedia (the PySide6-Addons package), which is not installed.")
+
+    def read(self) -> list[bytes]:
+        return []
+
+    def close(self) -> list[bytes]:
+        return []
+
+
 class Recorder:
     """Records PCM in a worker thread; start() after stop() carries on the same recording.
 
@@ -241,7 +274,7 @@ class Recorder:
 
     def __init__(self, rate: int = RATE, channels: int = CHANNELS, bits: int = BITS, backend=None):
         self.rate, self.channels, self.bits = rate, channels, bits
-        self._backend = backend if backend is not None else _WaveIn()
+        self._backend = backend if backend is not None else _microphone()
         self._block = channels * bits // 8
         self._max_bytes = MAX_SECONDS * rate * self._block
         self._chunks: list[bytes] = []
@@ -509,6 +542,17 @@ class Player:
             self.file.unlink(missing_ok=True)
         except OSError:  # still held by the player; the temporary folder is cleaned by Windows
             pass
+
+
+def default_player(data: bytes, name: str = "audio.wav"):
+    """A player for this system: MCI on Windows, Qt Multimedia on macOS and Linux."""
+    if sys.platform == "win32":
+        return Player(data, name)
+    try:
+        from .qt_audio import QtPlayer
+    except ImportError:
+        raise AudioError("Playing sound needs Qt Multimedia, which is not installed.") from None
+    return QtPlayer(data, name)
 
 
 def _seconds(answer: str) -> float:

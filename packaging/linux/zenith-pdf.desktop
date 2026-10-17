@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Zenith PDF
+Comment=Read, mark up and study PDF documents
+Exec=zenith-pdf %F
+Icon=zenith-pdf
+Terminal=false
+Categories=Office;Viewer;
+MimeType=application/pdf;
+StartupWMClass=Zenith-PDF

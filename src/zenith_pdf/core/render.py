@@ -30,7 +30,7 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
 
 from .document import Document, DocumentClosed, before_exit
-from .render_worker import worker_main
+from .render_worker import attach, worker_main
 
 log = logging.getLogger(__name__)
 
@@ -335,7 +335,7 @@ class RenderPool(QObject):
         if memory is None or memory.name != name:
             if memory is not None:
                 memory.close()
-            memory = self._outputs[index] = shared_memory.SharedMemory(name=name)
+            memory = self._outputs[index] = attach(name)  # the worker made it, and removes it
         return memory.buf
 
     def _handle(self, message) -> None:

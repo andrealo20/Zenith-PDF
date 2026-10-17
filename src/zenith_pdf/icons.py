@@ -16,6 +16,7 @@ from PySide6.QtGui import QColor, QFont, QIcon, QIconEngine, QPainter, QPainterP
 
 from .core.annotations import DASHES, ENDINGS, dash_array, line_ending, round_dash_caps
 from .core.inking import calligraphy_widths, stroke_polygons
+from .core.platforms import math_font, ui_font
 from .theme import themes
 
 
@@ -74,8 +75,8 @@ def _signature(p: QPainter) -> None:
 
 def _glyph(text: str, italic: bool = False, size: float = 15):
     def draw(p: QPainter) -> None:
-        font = QFont("Cambria Math")
-        font.setPointSizeF(size)
+        font = QFont(math_font())
+        font.setPixelSize(round(size * 4 / 3))  # pixels, not points: as large on every system
         font.setItalic(italic)
         p.setFont(font)
         p.drawText(QRectF(0, 0, 24, 24), Qt.AlignmentFlag.AlignCenter, text)
@@ -218,7 +219,7 @@ def _text_highlight(p: QPainter) -> None:
     p.setBrush(band)
     p.drawRoundedRect(QRectF(2, 12, 20, 8), 1.5, 1.5)
     p.restore()
-    font = QFont("Segoe UI")
+    font = QFont(ui_font())
     font.setPixelSize(12)
     font.setWeight(QFont.Weight.DemiBold)
     p.setFont(font)

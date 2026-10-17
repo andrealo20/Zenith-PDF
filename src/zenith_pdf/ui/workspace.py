@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from ..core.annotations import Redaction, TextMarkup, union
 from ..core.document import Document
+from ..core.platforms import native_keys
 from ..core.render import RenderPool
 from ..core.store import AnnotationStore
 from ..settings import Settings
@@ -959,7 +960,7 @@ class Workspace(QWidget):
         return messages.confirm_once(self, self.settings, question, title, text, action, danger)
 
     def notify(self, text: str) -> None:
-        self.toast.show_message(text)
+        self.toast.show_message(native_keys(text))
         self.canvas.resizeEvent(None)
 
     # Page manager -------------------------------------------------------

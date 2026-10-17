@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -9,6 +10,8 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
+
+from .core.platforms import MAC, SYSTEM_NAME, ui_font
 
 
 @dataclass(frozen=True)
@@ -76,7 +79,7 @@ DARK = Theme(
     search_current=QColor(255, 140, 0, 150),
     glass_base=QColor(28, 29, 34),
     glass_alpha=0.72,
-    glass_clear_alpha=0.46,
+    glass_clear_alpha=0.38,
     glass_highlight=QColor(255, 255, 255, 20),
     glass_border=QColor(255, 255, 255, 26),
     glass_text_muted="#bfc0c8",
@@ -116,7 +119,7 @@ LIGHT = Theme(
     search_current=QColor(255, 140, 0, 160),
     glass_base=QColor(246, 247, 250),
     glass_alpha=0.70,
-    glass_clear_alpha=0.42,
+    glass_clear_alpha=0.34,
     glass_highlight=QColor(255, 255, 255, 230),
     glass_border=QColor(0, 0, 0, 23),
     glass_text_muted="#4a4b52",
@@ -135,7 +138,7 @@ LIGHT = Theme(
 )
 
 THEMES = {theme.name: theme for theme in (DARK, LIGHT)}
-THEME_NAMES = {"dark": "Dark", "light": "Light", "system": "Same as Windows"}
+THEME_NAMES = {"dark": "Dark", "light": "Light", "system": f"Same as {SYSTEM_NAME}"}
 
 # Accent colours: (label, on the dark theme, on the light theme). Light needs darker shades for contrast.
 ACCENTS = {
@@ -244,8 +247,8 @@ def _style_sheet(t: Theme) -> str:
     dash = _arrow("minus-bold", t.accent_text)
     red = QColor(t.danger)
     danger_soft = f"rgba({red.red()}, {red.green()}, {red.blue()}, 34)"  # under a destructive button's pointer
-    return f"""
-    * {{ font-family: "Segoe UI Variable Text", "Segoe UI"; font-size: 10pt; }}
+    return _for_platform(f"""
+    * {{ font-family: "{ui_font()}"; font-size: 10pt; }}
     QWidget {{ color: {t.text}; }}
     QWidget:disabled {{ color: {t.text_muted}; }}
     QMainWindow, #Central, #TopBar, #Home {{ background: {t.window}; }}
@@ -510,7 +513,15 @@ def _style_sheet(t: Theme) -> str:
     QTextEdit#SpellingPreview, QTextBrowser#SummaryText {{
         background: {t.field}; border: 1px solid {t.border}; border-radius: 8px; padding: 6px 8px;
     }}
-    """
+    """)
+
+
+def _for_platform(sheet: str) -> str:
+    """The style sheet as this system needs it. macOS counts 72 points to the inch where Windows and Linux count
+    96, so text sizes there are scaled by 4/3: a 10 pt label is as large on every system."""
+    if not MAC:
+        return sheet
+    return re.sub(r"(\d+(?:\.\d+)?)pt\b", lambda m: f"{float(m.group(1)) * 4 / 3:g}pt", sheet)
 
 
 class ThemeManager(QObject):
@@ -534,7 +545,7 @@ class ThemeManager(QObject):
         self.changed.emit(theme)
 
     def choose(self, name: str, accent: str = "blue") -> None:
-        """Apply a theme by name: "dark", "light", or "system" to follow Windows."""
+        """Apply a theme by name: "dark", "light", or "system" to follow the system."""
         self._choice = (name, accent)
         hints = QApplication.instance().styleHints()
         if name == "system":

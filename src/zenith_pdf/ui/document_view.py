@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import base64
 import bisect
+import subprocess
+import sys
 import tempfile
+import time
 from dataclasses import fields, replace
 from pathlib import Path
 
@@ -102,12 +105,29 @@ RISKY_SUFFIXES = (
     ".application", ".appref-ms", ".appx", ".appxbundle", ".msix", ".settingcontent-ms", ".library-ms", ".search-ms",
     ".diagcab", ".iso", ".img", ".vhd", ".vhdx", ".xll", ".docm", ".dotm", ".xlsm", ".xltm", ".xlam", ".pptm", ".potm",
     ".ppam",
+    # macOS and Linux
+    ".app", ".command", ".tool", ".pkg", ".mpkg", ".dmg", ".workflow", ".scpt", ".applescript", ".terminal",
+    ".sh", ".bash", ".zsh", ".csh", ".ksh", ".fish", ".run", ".bin", ".appimage", ".desktop", ".deb", ".rpm",
+    ".py", ".pyw", ".pl", ".rb", ".php",
 )
 # Documents and media: these open without a question. Any other kind asks first, plainly.
 SAFE_SUFFIXES = (".pdf", ".txt", ".rtf", ".csv", ".md", ".log", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif",
                  ".tiff", ".webp", ".heic", ".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".mp4",
                  ".m4v", ".mov", ".avi", ".mkv", ".wmv", ".webm", ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp")
 DEVICE_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{n}" for n in range(10)), *(f"LPT{n}" for n in range(10))}
+
+
+def mark_downloaded(path: Path) -> None:
+    """Mark a file as coming from elsewhere, as a download is: Windows and macOS then check a program before it
+    runs, and Office opens a document in Protected View. Linux has no such mark."""
+    try:
+        if sys.platform == "win32":
+            Path(f"{path}:Zone.Identifier").write_text("[ZoneTransfer]\r\nZoneId=3\r\n")
+        elif sys.platform == "darwin":
+            flag = f"0081;{int(time.time()):x};Zenith PDF;"
+            subprocess.run(["xattr", "-w", "com.apple.quarantine", flag, str(path)], capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        pass  # a drive without that (FAT): the question before opening still stands
 
 
 def attachment_file_name(file_name: str) -> str:
@@ -1302,11 +1322,13 @@ class DocumentView(QGraphicsView):
         if key == "image":
             self.insert_image_file()
         elif key == "camera":
-            from .insert_dialogs import CameraDialog
+            from .insert_dialogs import camera_dialog
 
-            dialog = CameraDialog(self)
+            dialog = camera_dialog(self)
             if dialog.exec() == QDialog.DialogCode.Accepted and dialog.photo:
                 self.place_image_files([dialog.photo], self._current, None, "camera")
+                if getattr(dialog, "temporary", False):  # the picture is in the PDF now
+                    Path(dialog.photo).unlink(missing_ok=True)
             dialog.deleteLater()
         elif key == "bookmark" and self.actions is not None:
             self.actions.add_bookmark(self._current)
@@ -1454,12 +1476,7 @@ class DocumentView(QGraphicsView):
             messages.warn(self, "Can't open the attachment", f"{name} could not be copied out of the PDF.",
                           detail=error.strerror or str(error))
             return
-        try:
-            # Marked as coming from elsewhere, as a download is: Windows then checks a program before it runs, and
-            # Office opens a document in Protected View.
-            Path(f"{target}:Zone.Identifier").write_text("[ZoneTransfer]\r\nZoneId=3\r\n")
-        except OSError:
-            pass  # a drive without that (FAT): the question above still stands
+        mark_downloaded(target)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     def save_attachment(self, attachment: Attachment) -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import os
+import tempfile
 import time
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from PySide6.QtGui import (
     QPixmap,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QDoubleSpinBox,
@@ -40,6 +42,7 @@ from PySide6.QtWidgets import (
 
 from ..core import images, mathtext
 from ..core.annotations import REAL_UNITS, UNITS
+from ..core.platforms import WINDOWS, math_font, mono_font, settings_place, ui_font
 from ..icons import icon
 from ..theme import themes
 from .page_actions import IMAGE_FILES
@@ -49,7 +52,11 @@ DIALOG_WIDTH = 440  # the narrowest any dialog opens
 PAPER_TEXT = "#6b6c75"  # hints on the white previews, in both themes
 PAPER_DANGER = "#d93a2f"  # the light theme's danger red: the previews are always white
 SCRIPT_FONTS = ("Segoe Script", "Ink Free", "Lucida Handwriting", "Brush Script MT", "Mistral", "Freestyle Script",
-                "Edwardian Script ITC", "Vladimir Script", "Segoe Print", "Bradley Hand ITC", "Gabriola")
+                "Edwardian Script ITC", "Vladimir Script", "Segoe Print", "Bradley Hand ITC", "Gabriola",
+                # macOS
+                "Snell Roundhand", "Apple Chancery", "Bradley Hand", "Noteworthy", "Savoye LET", "Zapfino",
+                # Linux
+                "URW Chancery L", "Z003", "TeX Gyre Chorus", "Comic Neue")
 INK_COLOURS = {"Black": (0.05, 0.05, 0.08), "Blue": (0.07, 0.2, 0.55), "Dark grey": (0.25, 0.25, 0.3)}
 SCALES = (("Life size", (1, "cm", 1, "cm")), ("1:50", (1, "cm", 50, "cm")), ("1:100", (1, "cm", 1, "m")),
           ("1:500", (1, "cm", 5, "m")), ("1:1000", (1, "cm", 10, "m")), ("1:25 000 map", (1, "cm", 250, "m")))
@@ -301,7 +308,7 @@ class EquationDialog(QDialog):
         self._color = color
         self.source = QPlainTextEdit(source)
         self.source.setPlaceholderText(r"e.g. x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}")
-        self.source.setStyleSheet('font-family: "Cascadia Mono", Consolas, monospace; font-size: 11pt;')
+        self.source.setStyleSheet(f'font-family: "{mono_font()}"; font-size: 15px;')
         self.source.setTabChangesFocus(True)
         self.source.setFixedHeight(84)
         self.source.installEventFilter(self)
@@ -316,8 +323,7 @@ class EquationDialog(QDialog):
         self.problem = ""  # why the source can't be drawn, shown in the preview's place
         snippets = QWidget()
         # Symbols read better in the maths font, and short labels never clip; the name is in the tooltip.
-        snippets.setStyleSheet('QPushButton { font-family: "Cambria Math", "Segoe UI"; font-size: 12pt; '
-                               'padding: 3px 4px; }')
+        snippets.setStyleSheet(f'QPushButton {{ font-family: "{math_font()}"; font-size: 16px; padding: 3px 4px; }}')
         grid = QGridLayout(snippets)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setSpacing(4)
@@ -511,7 +517,7 @@ class SignatureDialog(QDialog):
         layout = _layout(self, "New signature", "It is kept on this computer, ready for any document.")
         self.setMinimumWidth(520)
         self._picture: QImage | None = None
-        fonts = [f for f in SCRIPT_FONTS if f in QFontDatabase.families()] or ["Segoe UI"]
+        fonts = [f for f in SCRIPT_FONTS if f in QFontDatabase.families()] or [ui_font()]
         self.ensurePolished()  # measure with the style sheet's font
         width = max(self.fontMetrics().horizontalAdvance(text) for text in ("Name", "Style", "Ink", "Save as")) + 4
         self.mode = Segments(["Type", "Draw", "Picture"])
@@ -758,3 +764,145 @@ def _finished_writing(path: Path) -> bool:
         return size > 0 and path.stat().st_size == size
     except OSError:
         return False
+
+
+def camera_dialog(parent=None) -> QDialog:
+    """The photo dialog for this system: the Camera app on Windows, a live view of the camera elsewhere."""
+    return CameraDialog(parent) if WINDOWS else LiveCameraDialog(parent)
+
+
+class LiveCameraDialog(QDialog):
+    """Take a photo with the computer's camera (macOS and Linux), from a live view in the dialog.
+
+    The photo is saved as a JPEG in the temporary folder; `photo` names it and
+    `temporary` says it can go once it is on the page.
+    """
+
+    temporary = True
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.photo = ""
+        self._camera = self._capture = self._session = None
+        layout = _layout(self, "Image from camera", "Frame the shot and take the photo: it goes on the page.")
+        try:
+            from PySide6.QtMultimediaWidgets import QVideoWidget
+        except ImportError:
+            self._view = None
+        else:
+            self._view = QVideoWidget(self)
+            self._view.setMinimumSize(480, 300)
+            layout.addWidget(self._view, 1)
+        self._status = muted_label()
+        self._status.setWordWrap(True)
+        self._status.hide()
+        layout.addWidget(self._status)
+        self._take = QPushButton("Take photo")
+        self._take.setIcon(icon("camera"))
+        self._take.setDefault(True)
+        self._take.setEnabled(False)
+        self._take.clicked.connect(self._shoot)
+        file_button = QPushButton("Choose a photo file…")
+        file_button.setAutoDefault(False)
+        file_button.setIcon(icon("image"))
+        file_button.clicked.connect(self._choose)
+        cancel = QPushButton("Cancel")
+        cancel.setAutoDefault(False)
+        cancel.clicked.connect(self.reject)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(self._take)
+        row.addWidget(file_button)
+        row.addStretch()
+        row.addWidget(cancel)
+        layout.addSpacing(8)
+        layout.addLayout(row)
+        if self._view is None:
+            self._say("The camera needs Qt Multimedia (the PySide6-Addons package), which is not installed. "
+                      "Choose a photo file instead.")
+        else:
+            QTimer.singleShot(0, self._ask_permission)
+
+    def _say(self, text: str) -> None:
+        self._status.setText(text)
+        self._status.setVisible(bool(text))
+
+    def _ask_permission(self) -> None:
+        """macOS asks the user once before an app may use the camera; Linux grants it at once."""
+        try:
+            from PySide6.QtCore import QCameraPermission
+        except ImportError:  # a Qt before 6.5
+            self._start()
+            return
+        app = QApplication.instance()
+        permission = QCameraPermission()
+        status = app.checkPermission(permission)
+        if status == Qt.PermissionStatus.Undetermined:
+            self._say("Waiting for permission to use the camera…")
+            app.requestPermission(permission, self, lambda _answer: self._answered())
+        elif status == Qt.PermissionStatus.Denied:
+            self._say(f"Zenith PDF may not use the camera. Allow it in {settings_place('camera')}, or choose a "
+                      "photo file.")
+        else:
+            self._start()
+
+    def _answered(self) -> None:
+        from PySide6.QtCore import QCameraPermission
+
+        if QApplication.instance().checkPermission(QCameraPermission()) == Qt.PermissionStatus.Granted:
+            self._start()
+        else:
+            self._say(f"Zenith PDF may not use the camera. Allow it in {settings_place('camera')}, or choose a "
+                      "photo file.")
+
+    def _start(self) -> None:
+        from PySide6.QtMultimedia import QCamera, QImageCapture, QMediaCaptureSession, QMediaDevices
+
+        device = QMediaDevices.defaultVideoInput()
+        if device.isNull():
+            self._say("No camera was found. Choose a photo file instead.")
+            return
+        self._camera = QCamera(device, self)
+        self._session = QMediaCaptureSession(self)
+        self._session.setCamera(self._camera)
+        self._capture = QImageCapture(self)
+        self._session.setImageCapture(self._capture)
+        self._session.setVideoOutput(self._view)
+        self._camera.errorOccurred.connect(lambda _error, text: self._say(f"The camera could not start. {text}"))
+        self._capture.readyForCaptureChanged.connect(self._take.setEnabled)
+        self._capture.imageCaptured.connect(self._captured)
+        self._capture.errorOccurred.connect(self._failed)
+        self._say("")
+        self._camera.start()
+
+    def _shoot(self) -> None:
+        if self._capture is not None and self._capture.isReadyForCapture():
+            self._take.setEnabled(False)
+            self._capture.capture()
+
+    def _failed(self, _id: int, _error, text: str) -> None:
+        self._say(f"The photo could not be taken. {text}")
+        self._take.setEnabled(self._capture is not None and self._capture.isReadyForCapture())
+
+    def _captured(self, _id: int, image: QImage) -> None:
+        handle, name = tempfile.mkstemp(prefix="zenith-photo-", suffix=".jpg")
+        os.close(handle)
+        if image.isNull() or not image.save(name, "JPEG", 92):
+            Path(name).unlink(missing_ok=True)
+            self._failed(_id, None, "It could not be saved.")
+            return
+        self.photo = name
+        self.accept()
+
+    def _choose(self) -> None:
+        pictures = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.PicturesLocation)
+        path, _ = QFileDialog.getOpenFileName(self, "Photo", pictures or str(Path.home()), IMAGE_FILES)
+        if path:
+            self.photo = path
+            self.temporary = False
+            self.accept()
+
+    def done(self, result: int) -> None:
+        if self._camera is not None:
+            self._camera.stop()
+        super().done(result)

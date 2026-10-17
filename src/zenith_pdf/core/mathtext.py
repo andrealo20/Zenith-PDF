@@ -18,8 +18,10 @@ from dataclasses import dataclass, field
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPainter, QPainterPath, QPen
 
-MATH_FONT = "Cambria Math"
-TEXT_FONT = "Cambria"
+from .platforms import math_font, serif_font
+
+MATH_FONT = "math"  # the system's math font: Cambria Math on Windows, STIX Two Math on a Mac (core/platforms.py)
+TEXT_FONT = "text"  # and the serif that goes with it, for letters and words
 SCRIPT = 0.7  # a script's size, relative to its base
 OVERSIZE = 4  # fonts are laid out at 4x and drawn at a quarter: Qt measures whole pixels
 AXIS = 0.25  # height of the fraction bar and of + and -, in ems above the baseline
@@ -318,7 +320,7 @@ class _Layout:
         self.size = size
 
     def font(self, size: float, family: str = MATH_FONT, italic: bool = False, bold: bool = False) -> QFont:
-        font = QFont(family)
+        font = QFont({MATH_FONT: math_font(), TEXT_FONT: serif_font()}.get(family, family))
         font.setPixelSize(max(1, round(size * OVERSIZE)))
         font.setItalic(italic)
         font.setBold(bold)

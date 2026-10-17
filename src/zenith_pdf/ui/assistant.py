@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from ..core.annotations import FreeText, Note, TextMarkup
 from ..core.finder import Entry, Finder
+from ..core.platforms import native_keys
 from ..theme import THEME_NAMES, themes
 from .dialogs import SHORTCUTS
 from .help import TOPICS
@@ -47,7 +48,7 @@ NO_DOCUMENT = "Open a document first."
 READ_ONLY = "This document can only be viewed."
 HINT = "↑ ↓ to choose, Enter to run, Esc to close."
 MODEL_NOTE = ("Translating, explaining and rewriting text need a language model. Zenith PDF works without one, "
-              "on this PC only, so these are not available.")
+              "on this computer only, so these are not available.")
 
 
 @dataclass
@@ -336,7 +337,7 @@ class ResultRow(QWidget):
         glyph = QLabel()
         glyph.setFixedSize(22, 22)
         glyph.setPixmap(icon_pixmap(entry.icon or "circle", 20, entry.color or None))
-        title = QLabel(entry.title)
+        title = QLabel(native_keys(entry.title))
         title.setObjectName("AssistantTitle")
         # A short reason it can't run shows in place of where it lives; a long one waits in the footer.
         short = not entry.enabled and entry.note and entry.kind != "info"
@@ -353,7 +354,7 @@ class ResultRow(QWidget):
         row.addWidget(glyph)
         row.addLayout(text, 1)
         if entry.keys:
-            chip = QLabel(entry.keys)
+            chip = QLabel(native_keys(entry.keys))
             chip.setObjectName("KeyChip")
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             row.addWidget(chip, 0, Qt.AlignmentFlag.AlignVCenter)

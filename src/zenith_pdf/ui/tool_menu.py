@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from ..core import inking, textlayout
+from ..core.platforms import WINDOWS, math_font, native_keys, ui_font
 from ..core.annotations import (
     NOTE_SIZE,
     UNITS,
@@ -78,6 +79,7 @@ from .tools import (
 )
 from .widgets import (
     PICK_KEYS,
+    POPUP_FLAGS,
     IconButton,
     Segmented,
     Switch,
@@ -396,7 +398,6 @@ def _shadow_image(size: QSize, ratio: float, color: QColor, margins: tuple = SHA
     return image
 
 
-POPUP_FLAGS = Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint
 PINNED_FLAGS = Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint
 
 
@@ -1616,7 +1617,7 @@ def _wave(x0: float, x1: float, middle: float, height: float, count: int = 40) -
 
 
 def _sample_font() -> QFont:
-    font = QFont("Segoe UI")
+    font = QFont(ui_font())
     font.setPixelSize(16)
     return font
 
@@ -1771,7 +1772,7 @@ class ToolPreview(QWidget):
                 painter.drawPath(path)
             return
         if base == "equation":
-            font = QFont("Cambria Math")
+            font = QFont(math_font())
             font.setPixelSize(max(8, round(min(s.font_size, 44.0) * 1.15)))
             font.setItalic(True)
             painter.setFont(font)
@@ -2279,7 +2280,8 @@ class StyleEditor(QWidget):
 
     def _build_wheel(self, base: str) -> QWidget:
         return self._choice("wheel", "Mouse wheel", [("scroll", "Scrolls"), ("zoom", "Zooms")],
-                            {"scroll": "Ctrl and the wheel zoom.", "zoom": "Ctrl and the wheel scroll."},
+                            {"scroll": native_keys("Ctrl and the wheel zoom."),
+                             "zoom": native_keys("Ctrl and the wheel scroll.")},
                             prefs_key="wheel")
 
     def _build_scroll_speed(self, base: str) -> QWidget:
@@ -2659,7 +2661,7 @@ class ToolMenu(_Menu):
         self.editor.set_options(OPTIONS.get(base, ()), self.settings.style(key), measure=self.settings.measure,
                                 base=base, prefs=self.prefs, author=self.settings.author)
         self.bookmark_button.setVisible(base == "bookmark" and self.toolbar is not None)
-        self.hint.setText(HINTS.get(base, ""))
+        self.hint.setText(native_keys(HINTS.get(base, "")))
         self.hint.setVisible(base in HINTS)
         was_visible = self.isVisible()
         self.reposition(animate=was_visible and changed_key)
@@ -2896,7 +2898,8 @@ HINTS = {
     "polygon": "Click for each corner; double-click or Enter closes the shape.",
     "perimeter": "Click for each point; double-click or Enter finishes.",
     "area": "Click for each corner; double-click or Enter closes the shape.",
-    "camera": "Click the tool to take a photo with the Camera app.",
+    "camera": "Click the tool to take a photo with the Camera app." if WINDOWS else
+              "Click the tool to take a photo with the computer's camera.",
     "image": "Click the tool to choose a picture file. Ctrl+V pastes a copied one.",
     "lasso": "Draw a loop round annotations. Afterwards Select takes over, with them selected.",
 }

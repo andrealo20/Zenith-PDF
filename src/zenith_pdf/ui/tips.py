@@ -10,6 +10,7 @@ from __future__ import annotations
 from PySide6.QtCore import QEvent, QObject, QPoint, QRect, Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from ..core.platforms import WINDOWS, native_keys
 from ..theme import themes
 from .tool_catalog import BY_KEY, base_of
 from .widgets import FloatingBar, IconButton, icon_pixmap
@@ -83,7 +84,8 @@ TOOL_TIPS: dict[str, tuple[str, ...]] = {
                  "Right-click a bookmark in the panel to rename or delete it."),
     "signature": ("The signatures you make are kept for every document.",
                   "It places a picture of your signature, not a digital certificate."),
-    "camera": ("The photo comes from the Windows Camera app and lands on the page.",
+    "camera": ("The photo comes from the Windows Camera app and lands on the page." if WINDOWS else
+               "The camera window shows what the camera sees: take the photo and it lands on the page.",
                "Corners resize it keeping its proportions; hold Shift to stretch it."),
     "image": ("Ctrl+V pastes a copied picture, and you can drag picture files onto the page.",
               "Corners resize it keeping its proportions; hold Shift to stretch it."),
@@ -159,7 +161,7 @@ class TipCard(FloatingBar):
                 item.widget().deleteLater()
         self.lines = []
         for text in lines:
-            row = QLabel(f"•  {text}")
+            row = QLabel(f"•  {native_keys(text)}")
             row.setObjectName("TipText")
             row.setWordWrap(True)
             row.setTextFormat(Qt.TextFormat.PlainText)

@@ -1,5 +1,5 @@
 """The writing helpers on the page: spelling and punctuation for text boxes, callouts and notes; the key points
-of selected text or a page; study notes from a document's highlights. All of it runs on this PC, without a
+of selected text or a page; study notes from a document's highlights. All of it runs on this computer, without a
 language model: see core/writing.py and core/spelling.py.
 """
 
@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from ..core import spelling, textlayout, writing
 from ..core.annotations import NOTE_SIZE, FreeText, Note, TextMarkup
+from ..core.platforms import LINUX, SYSTEM_NAME, settings_place
 from ..theme import themes
 from . import messages
 from .commands import ChangeAnnotations
@@ -46,7 +47,7 @@ SENTENCES = {"short": 2, "medium": 4, "long": 7}
 
 
 def user_language() -> str:
-    """The language Windows shows its menus in, if it is one the helpers know; English otherwise."""
+    """The language the system shows its menus in, if it is one the helpers know; English otherwise."""
     code = QLocale.system().name().split("_")[0].lower()
     return code if code in writing.LANGUAGES else "en"
 
@@ -55,7 +56,7 @@ def user_language() -> str:
 
 
 class Change:
-    """One proposed change to the text: a word Windows flags, or a spacing or punctuation fix."""
+    """One proposed change to the text: a word the spell checker flags, or a spacing or punctuation fix."""
 
     def __init__(self, start: int, end: int, options: tuple[str, ...], reason: str, spelling_issue: bool):
         self.start, self.end = start, end
@@ -66,7 +67,7 @@ class Change:
 
 
 def proposed_changes(text: str, language: str) -> list[Change]:
-    """Spelling (when Windows has the language) and tidy fixes, in text order, never two on the same characters."""
+    """Spelling (when the system has the language) and tidy fixes, in text order, never two on the same characters."""
     changes: list[Change] = []
     for issue in spelling.check(text, language, limit=MAX_ISSUES):
         start, end = issue.start, issue.start + issue.length
@@ -217,9 +218,12 @@ class SpellingDialog(messages.MessageDialog):
         else:
             text = f"{len(self.changes)} to look at in {name}. Untick what should stay as it is."
         if not spelling_on:
-            text += (f" Windows has no {name} dictionary on this PC, so only spacing, punctuation and capitals "
-                     f"are checked. Add {name} in Windows Settings > Time & language > Language & region to check "
-                     "its spelling too.")
+            text += f" {SYSTEM_NAME} has no {name} dictionary here, so only spacing, punctuation and capitals are checked."
+            if LINUX:
+                text += (f" Install the {name} Hunspell dictionary (hunspell-{self.code}, or a similar package) "
+                         "to check its spelling too.")
+            else:
+                text += f" Add {name} in {settings_place('languages')} to check its spelling too."
         self.intro.setText(text)
         button = self.button("apply")
         if button is not None:
@@ -287,7 +291,7 @@ class SummaryDialog(messages.MessageDialog):
         self.text = text
         self.language = writing.detect_language(text, user_language()) or "en"
         intro = muted_label(f"The sentences of {where} that carry most of it, picked by how often their words "
-                            "come up. Worked out on this PC.")
+                            "come up. Worked out on this computer.")
         intro.setWordWrap(True)
         self.add_field(intro)
         self.length = Segmented(LENGTHS)

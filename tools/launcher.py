@@ -1,4 +1,4 @@
-"""Entry point of the Windows executable that tools/build_exe.py builds."""
+"""Entry point of the program that tools/build.py builds, on every system."""
 
 import multiprocessing
 

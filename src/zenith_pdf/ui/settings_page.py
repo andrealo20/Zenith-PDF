@@ -34,6 +34,7 @@ from shiboken6 import isValid
 
 from .. import __version__
 from ..core import ocr
+from ..core.platforms import SYSTEM_NAME, native_keys
 from ..icons import icon, readable
 from ..settings import DEFAULTS, Settings
 from ..theme import ACCENTS, THEME_NAMES, themes
@@ -49,7 +50,7 @@ ASSETS = Path(__file__).resolve().parent.parent / "assets"
 GLASS_CHOICES = (("clear", "Clear"), ("balanced", "Balanced"), ("solid", "Solid"))
 GLASS_TIPS = {"clear": "The pages show through, blurred, with a light tint.",
               "balanced": "A stronger tint: the pages show through less.",
-              "solid": "Opaque bars, as when Windows' transparency effects are off."}
+              "solid": "Opaque bars, for when see-through bars are hard to read."}
 LOGO = ASSETS / "zenith.svg"  # drawn at every size, so it stays sharp on any screen
 CONTROL_WIDTH = 280  # combos and fields on the right of a setting
 FLASH_MS = 1600  # how long a setting the assistant opened stays lit
@@ -640,7 +641,7 @@ class SettingsWindow(QDialog):
 
     def _build_view(self) -> None:
         s = self._section("view")
-        s.add(Row("Theme", "Dark, light, or the same as Windows.", self._combo("theme", THEME_NAMES),
+        s.add(Row("Theme", f"Dark, light, or the same as {SYSTEM_NAME}.", self._combo("theme", THEME_NAMES),
                   "dark mode light mode colours appearance"))
         s.add(Row("Accent colour", "Used for selections, the active tool and buttons.", AccentPicker(self._settings),
                   "colour color highlight"))
@@ -825,9 +826,9 @@ class SettingsWindow(QDialog):
 
     def _build_ocr(self) -> None:
         s = self._section("ocr")
-        languages = {"": "Windows display language"} | dict(ocr.languages())
-        s.add(Row("Language", "The language of the scanned text. Windows can add more languages in "
-                  "Settings > Time & language > Language.", self._combo("ocr_language", languages),
+        languages = {"": ocr.default_name()} | dict(ocr.languages())
+        s.add(Row("Language", f"The language of the scanned text. {ocr.language_hint()}",
+                  self._combo("ocr_language", languages),
                   "ocr scan recognise"))
         s.add(Row("Resolution", "Higher finds smaller print, but takes longer.",
                   self._combo("ocr_dpi", {150: "150 dpi, faster", 200: "200 dpi", 300: "300 dpi, small print"}),
@@ -837,7 +838,7 @@ class SettingsWindow(QDialog):
         s = self._section("shortcuts")
         for group, entries in SHORTCUTS:
             for keys, action in entries:
-                chip = QLabel(keys)
+                chip = QLabel(native_keys(keys))
                 chip.setObjectName("KeyChip")
                 s.add(Row(action, "", chip, f"{group} keyboard shortcut {keys}"))
 
@@ -859,10 +860,10 @@ class SettingsWindow(QDialog):
                   "tips hints reset again"))
         assistant = QPushButton("Open the assistant")
         assistant.clicked.connect(self._open_assistant)
-        s.add(Row("Assistant", "Ctrl+K, or the sparkle at the top right, finds any tool, command, setting, shortcut "
+        s.add(Row("Assistant", f"{native_keys('Ctrl+K')}, or the sparkle at the top right, finds any tool, command, setting, shortcut "
                   "or guide chapter from a few words or a question, in English, Italian, French, Spanish, German or "
                   "Portuguese. It also checks spelling, picks the key points of a text and turns highlights into "
-                  "study notes, all on this PC.", assistant,
+                  "study notes, all on this computer.", assistant,
                   "assistant ai search command palette find ask spelling summary study notes"))
         guide = QPushButton("Open the guide")
         guide.clicked.connect(self._open_guide)
@@ -917,7 +918,7 @@ class SettingsWindow(QDialog):
         text.addStretch()
         text.addWidget(name)
         text.addWidget(muted_label(f"Version {__version__}"))
-        text.addWidget(muted_label("A PDF reader and markup app for Windows."))
+        text.addWidget(muted_label("A PDF reader and markup app for Windows, macOS and Linux."))
         text.addStretch()
         layout.addWidget(self.logo)
         layout.addLayout(text, 1)

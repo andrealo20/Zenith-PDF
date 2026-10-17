@@ -12,6 +12,7 @@ from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QCursor, QDesktopServices, QGuiApplication, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QAbstractButton,
+    QApplication,
     QDialog,
     QFileDialog,
     QGridLayout,
@@ -25,7 +26,8 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.annotations import AUDIO_SUFFIXES
-from ..core.audio import MAX_SECONDS, AudioError, Player, Recorder, input_device_count, temp_folder
+from ..core.audio import MAX_SECONDS, AudioError, Recorder, default_player as Player, input_device_count, temp_folder
+from ..core.platforms import MAC, WINDOWS, settings_place
 from ..icons import icon
 from ..theme import themes
 from . import messages
@@ -42,8 +44,16 @@ RECORDED = "Listen to it, record it again, or add it to the page."
 # Short enough for two lines with their link: the status keeps room for two, so the dialog never jumps.
 NO_SOUND = "No sound is coming in. Check the microphone, and that desktop apps may use it."
 NO_DEVICE = "No microphone was found. Plug one in, or attach a sound file instead."
-PRIVACY_SETTINGS = ("Microphone privacy settings", "ms-settings:privacy-microphone")
-SOUND_SETTINGS = ("Sound settings", "ms-settings:sound")
+# The system's own pages for the microphone, where it has them: links nowhere would be dead.
+if WINDOWS:
+    PRIVACY_SETTINGS = ("Microphone privacy settings", "ms-settings:privacy-microphone")
+    SOUND_SETTINGS = ("Sound settings", "ms-settings:sound")
+elif MAC:
+    PRIVACY_SETTINGS = ("Microphone privacy settings",
+                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+    SOUND_SETTINGS = ("Sound settings", "x-apple.systempreferences:com.apple.preference.sound")
+else:
+    PRIVACY_SETTINGS = SOUND_SETTINGS = None
 STATUS_LINES = 2  # the status line keeps room for this many lines
 
 
@@ -367,6 +377,8 @@ class RecordDialog(QDialog):
     def record(self) -> None:
         if self.state != "ready" or not self._can_record:
             return
+        if self._real_device and not WINDOWS and not self._microphone_allowed():
+            return
         try:
             self.recorder.start()
         except AudioError as error:
@@ -375,6 +387,33 @@ class RecordDialog(QDialog):
         self._name = note_name()
         self._say(RECORDING)
         self._set_state("recording")
+
+    def _microphone_allowed(self) -> bool:
+        """macOS asks the user once before an app may use the microphone. Asks, and records on a yes."""
+        try:
+            from PySide6.QtCore import QMicrophonePermission
+        except ImportError:  # a Qt before 6.5
+            return True
+        app = QApplication.instance()
+        status = app.checkPermission(QMicrophonePermission())
+        if status == Qt.PermissionStatus.Granted:
+            return True
+        if status == Qt.PermissionStatus.Undetermined:
+            app.requestPermission(QMicrophonePermission(), self, lambda _answer: self._permission_answered())
+        else:
+            self._refused()
+        return False
+
+    def _permission_answered(self) -> None:
+        from PySide6.QtCore import QMicrophonePermission
+
+        if QApplication.instance().checkPermission(QMicrophonePermission()) == Qt.PermissionStatus.Granted:
+            self.record()
+        else:
+            self._refused()
+
+    def _refused(self) -> None:
+        self._unavailable(f"Zenith PDF may not use the microphone. Allow it in {settings_place('microphone')}.")
 
     def stop(self) -> None:
         if self.state == "recording":
@@ -732,7 +771,7 @@ class AudioPopover(FloatingBar):
 
 
 def _open_elsewhere(name: str, data: bytes) -> None:
-    """A sound the built-in player can't handle opens in the app Windows uses for it."""
+    """A sound the built-in player can't handle opens in the system's app for it."""
     folder = temp_folder() / hashlib.blake2b(data, digest_size=8).hexdigest()
     folder.mkdir(exist_ok=True)
     target = folder / (Path(name).name or "audio note")

@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from ..core.document import Document, PdfiumError
+from ..core.platforms import key as platform_key
 from ..core.render import RenderPool
 from ..icons import icon
 from ..settings import Settings
@@ -293,7 +294,7 @@ class MainWindow(QMainWindow):
         ]
         for keys, slot in bindings:
             action = QAction(self)
-            action.setShortcut(QKeySequence(keys))
+            action.setShortcut(QKeySequence(platform_key(keys)))
             action.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
             action.triggered.connect(slot)
             self.addAction(action)

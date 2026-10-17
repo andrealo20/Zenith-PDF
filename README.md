@@ -4,22 +4,30 @@
 
 # Zenith PDF
 
-**Read, mark up and study PDF documents on Windows.**<br>
+**Read, mark up and study PDF documents on Windows, macOS and Linux.**<br>
 Thirty-five markup tools with a menu each, page management, PDF tools, text recognition, voice notes,<br>
-and an assistant that understands six languages. Everything runs on your PC.
+and an assistant that understands six languages. Everything runs on your computer.
 
-<a href="https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF.exe"><img src="https://img.shields.io/badge/Download_for_Windows-Zenith--PDF.exe-2E8BFF?style=for-the-badge" alt="Download Zenith-PDF.exe for Windows" height="38"></a>
+Completely free and open source, with no account, no ads and no paid version.<br>
+In continuous development: new versions come out often.
+
+<a href="https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-Setup.exe"><img src="https://img.shields.io/badge/Windows-Download_the_installer-0078D4?style=for-the-badge" alt="Download the Windows installer" height="38"></a>
 &nbsp;
-<a href="https://github.com/andrealo20/Zenith-PDF/releases"><img src="https://img.shields.io/badge/All_releases-555?style=for-the-badge" alt="All releases" height="38"></a>
+<a href="https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-macOS.dmg"><img src="https://img.shields.io/badge/macOS-Download_the_.dmg-1D1D1F?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" height="38"></a>
+&nbsp;
+<a href="https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-Linux-x86_64.AppImage"><img src="https://img.shields.io/badge/Linux-Download_the_AppImage-E95420?style=for-the-badge&logo=linux&logoColor=white" alt="Download the Linux AppImage" height="38"></a>
 
-<sub>One file, nothing to install: download it and double-click. Windows 10 and 11, 64-bit.</sub>
+<sub>Windows 10 and 11, 64-bit &nbsp;·&nbsp; macOS on Apple silicon &nbsp;·&nbsp; Linux x86-64 &nbsp;·&nbsp; <a href="https://github.com/andrealo20/Zenith-PDF/releases">all releases</a></sub>
 
 <br>
 
-![Windows 10 and 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square)
-![Version 0.3.0](https://img.shields.io/badge/version-0.3.0-2E8BFF?style=flat-square)
+[![Build](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml/badge.svg)](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml)
+![Windows, macOS, Linux](https://img.shields.io/badge/runs_on-Windows%20%7C%20macOS%20%7C%20Linux-555?style=flat-square)
+![Version 0.4.0](https://img.shields.io/badge/version-0.4.0-2E8BFF?style=flat-square)
+![Free and open source](https://img.shields.io/badge/free-open_source-2EA44F?style=flat-square)
+![In continuous development](https://img.shields.io/badge/development-active-2EA44F?style=flat-square)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-480%20passing-2EA44F?style=flat-square&logo=pytest&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-487%20passing-2EA44F?style=flat-square&logo=pytest&logoColor=white)
 ![Works offline](https://img.shields.io/badge/works-offline-6E40C9?style=flat-square)
 
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
@@ -28,9 +36,11 @@ and an assistant that understands six languages. Everything runs on your PC.
 ![qpdf through pikepdf](https://img.shields.io/badge/qpdf-pikepdf-B0413E?style=flat-square)
 ![Pillow](https://img.shields.io/badge/images-Pillow-F5C400?style=flat-square)
 ![Phosphor icons](https://img.shields.io/badge/icons-Phosphor%20%2B%20QtAwesome-333?style=flat-square)
-![Windows OCR](https://img.shields.io/badge/OCR-Windows.Media.Ocr-0078D4?style=flat-square)
+![OCR](https://img.shields.io/badge/OCR-Windows.Media.Ocr%20%7C%20Vision%20%7C%20Tesseract-0078D4?style=flat-square)
 ![pytest](https://img.shields.io/badge/tested_with-pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white)
 ![PyInstaller](https://img.shields.io/badge/packaged_with-PyInstaller-4B8BBE?style=flat-square)
+![NSIS](https://img.shields.io/badge/installer-NSIS-8A2BE2?style=flat-square)
+![GitHub Actions](https://img.shields.io/badge/built_by-GitHub_Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 
 <br>
 
@@ -42,7 +52,7 @@ and an assistant that understands six languages. Everything runs on your PC.
 
 ### Light or dark
 
-Pick a theme, or let Zenith PDF follow Windows, and an accent colour of your own. The floating bars are
+Pick a theme, or let Zenith PDF follow the system, and an accent colour of your own. The floating bars are
 frosted glass: the pages show through, blurred, and the text on them stays easy to read.
 
 <img src="docs/images/editor-light.png" alt="The same lecture in the light theme" width="100%">
@@ -90,7 +100,7 @@ a tool with different styles.
 
 <img src="docs/images/tool-chooser.png" alt="The tool chooser, on the Free-form tools" width="100%">
 
-### Ask for anything: Ctrl+K
+### Ask for anything: Ctrl+K (⌘K on a Mac)
 
 Type what you want to do, in English, Italian, French, Spanish, German or Portuguese, and press Enter. The
 assistant finds tools, commands, settings, keyboard shortcuts and chapters of the guide, forgives typos, and
@@ -102,7 +112,7 @@ remembers what you use. It needs no internet and no language model.
 
 Every highlight and underline, with the text under it and your comments, becomes study notes by page or by
 colour, ready to save as Markdown. Text boxes and notes get a spelling and punctuation check, with the
-spell checker built into Windows. Tape hides answers until you peel it back.
+system's own spell checker. Tape hides answers until you peel it back.
 
 <img src="docs/images/study-notes.png" alt="Study notes gathered from the highlights of a lecture" width="100%">
 
@@ -117,23 +127,48 @@ bars, the panels and the tabs away, and brings them back as they were.
 
 <img src="docs/images/reading-mode.png" alt="Reading mode, with tape over the answers and a voice note" width="100%">
 
-## Download and run
+## Download and install
 
-**The quick way.** Download [Zenith-PDF.exe](https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF.exe)
-and double-click it. It is a single file with everything inside, so it starts in a few seconds while it
-unpacks itself. Windows may say it protects your PC because the file is not signed: choose
-**More info**, then **Run anyway**.
+Zenith PDF is free to download, use, share and change, on every system: the whole source is here, under the
+GPL. It is in continuous development, and each version lists its changes on the
+[releases page](https://github.com/andrealo20/Zenith-PDF/releases).
 
-**From source**, with Python 3.11 or later:
+**Windows.** Download [Zenith-PDF-Setup.exe](https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-Setup.exe) and run
+it. The installer asks where to put Zenith PDF and whether you want a desktop shortcut, then adds it to the
+Start menu and to Open with for PDF files. It uninstalls from Settings > Apps, like any other app. While the
+installer is not signed yet, SmartScreen may say it protected your PC: choose More info, then Run anyway.
+
+**macOS.** Open [Zenith-PDF-macOS.dmg](https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-macOS.dmg) and drag
+Zenith PDF onto Applications. The app is not notarized by Apple yet, so the first time macOS won't open it:
+go to System Settings > Privacy & Security and choose Open Anyway. It is built for Apple silicon (M1 and
+later). Text recognition uses Vision and spelling the Mac's own spell checker.
+
+**Linux.** Download [Zenith-PDF-Linux-x86_64.AppImage](https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-Linux-x86_64.AppImage),
+make it executable and start it:
+
+```
+chmod +x Zenith-PDF-Linux-x86_64.AppImage
+./Zenith-PDF-Linux-x86_64.AppImage
+```
+
+AppImages need FUSE 2 (`sudo apt install libfuse2`, or `libfuse2t64` on Ubuntu 24.04). Text recognition uses
+Tesseract and spelling the Hunspell dictionaries, when they are installed: for Italian on Ubuntu or Debian,
+`sudo apt install tesseract-ocr tesseract-ocr-ita hunspell-it`.
+
+**From source**, on any of the three, with Python 3.11 or later:
 
 ```
 python -m venv .venv
-.venv\Scripts\pip install -e .[dev]
-.venv\Scripts\python -m zenith_pdf [file.pdf ...]
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m zenith_pdf [file.pdf ...]
 ```
 
-To build the executable yourself: `.venv\Scripts\pip install pyinstaller`, then
-`.venv\Scripts\python tools/build_exe.py`. It lands in `dist\Zenith-PDF.exe`.
+(On Windows the folder is `.venv\Scripts` instead of `.venv/bin`.)
+
+**Building the downloads.** `pip install -e ".[build]"`, then `python tools/build.py` makes the download of
+the system it runs on, in `dist/release`: the installer on Windows (it needs [NSIS](https://nsis.sourceforge.io)),
+the .dmg on macOS, the AppImage on Linux (it needs appimagetool). GitHub Actions builds and tests all three on
+every change, and publishes them with each new version.
 
 ## Everything it does
 
@@ -226,7 +261,7 @@ To build the executable yourself: `.venv\Scripts\pip install pyinstaller`, then
 - A guide to the whole editor (F1), written from the same data as the in-app
   help, plus what's new and the keyboard shortcuts
 - Settings with categories, search, and changes that
-  apply at once (theme or follow Windows, accent colour, glass, opening
+  apply at once (theme or follow the system, accent colour, glass, opening
   zoom and layout, every tool's menu and lock, tool styles that are
   remembered, mouse wheel and scrolling speed, autosave, reopening the last
   documents, memory, OCR language)
@@ -239,8 +274,9 @@ To build the executable yourself: `.venv\Scripts\pip install pyinstaller`, then
   a vocabulary of how people name each thing in the six languages, matched by
   whole words, beginnings and near misses, weighted by how rare a word is
 - Writing help, also offline: spelling and punctuation for text boxes, callouts
-  and notes (with the spell checker built into Windows, for every language it
-  has a dictionary for), the key sentences of selected text or a page, kept as
+  and notes (with the system's spell checker, for every language it has a
+  dictionary for: Windows' own, NSSpellChecker on macOS, Hunspell through
+  Enchant on Linux), the key sentences of selected text or a page, kept as
   a note, and study notes gathered from every highlight and underline, by page
   or by colour, saved as Markdown
 - Tips the first time each tool is used: a small card under it with two or
@@ -256,14 +292,21 @@ To build the executable yourself: `.venv\Scripts\pip install pyinstaller`, then
 - Reading mode (Ctrl+H): only the pages, with the bars, the side panel and the
   tabs out of the way. Scrolling, zoom, links, Back and the page keys work as
   always; Esc brings everything back as it was. It can also fill the screen
-- Text recognition (OCR) with the engine built into Windows: scanned pages
-  become searchable and selectable
+- Text recognition (OCR) with the engine each system has: the one built into
+  Windows, Vision on macOS, Tesseract on Linux. Scanned pages become
+  searchable and selectable
+- Windows, macOS and Linux from the same code: keys written as each system
+  writes them (⌘ and ⌥ on a Mac), the system's fonts, its microphone and
+  camera permissions, files opened from the Finder or Explorer
 - Printing with annotations
 - Single, two-page and book layouts; normal, dark and sepia page colours
 - Password-protected documents (encryption is kept when saving)
 - Dark and light themes
 
 ## Keyboard shortcuts
+
+On a Mac, Ctrl is ⌘ and Alt is ⌥, and three keys move because macOS keeps them for itself: reading mode is
+⇧⌘R, full screen ⌃⌘F, and ⌃Tab goes to the next tab.
 
 | Keys | Action |
 | --- | --- |
@@ -305,12 +348,13 @@ To build the executable yourself: `.venv\Scripts\pip install pyinstaller`, then
 | Writing the PDF | qpdf through pikepdf: standard annotations with appearance streams, encryption kept |
 | Pictures and compression | Pillow |
 | Icons | Phosphor through QtAwesome, plus a few drawn by hand |
-| Text recognition | the OCR engine built into Windows (Windows.Media.Ocr, through the winrt packages) |
-| Spelling | the spell checker built into Windows (ISpellChecker), called through ctypes |
-| Voice notes | waveIn and MCI from winmm, called through ctypes: no extra package |
+| Text recognition | Windows.Media.Ocr through the winrt packages; Vision through pyobjc on macOS; Tesseract on Linux |
+| Spelling | ISpellChecker on Windows, through ctypes; NSSpellChecker on macOS; Hunspell through pyenchant on Linux |
+| Voice notes | waveIn and MCI from winmm on Windows, through ctypes; Qt Multimedia on macOS and Linux |
+| Camera | the Windows Camera app; on macOS and Linux a live view through Qt Multimedia |
 | Assistant | its own search over a vocabulary in six languages: no language model, nothing sent anywhere |
-| Tests | pytest on Qt's offscreen platform: 480 tests |
-| Executable | PyInstaller, one file (`tools/build_exe.py`) |
+| Tests | pytest on Qt's offscreen platform: 487 tests, run on Windows, macOS and Linux |
+| Downloads | PyInstaller, then an NSIS installer, a .dmg or an AppImage (`tools/build.py`), built by GitHub Actions |
 
 ```
 src/zenith_pdf/
@@ -322,9 +366,12 @@ src/zenith_pdf/
               and the tool chooser, side panels, home, settings, guide,
               assistant, tips, audio recorder
 tests/        pytest suite; the UI tests run on Qt's offscreen platform
-tools/        build_exe.py makes the one-file executable; screenshots.py the
-              pictures of this README; make_icon.py the icon; bench_zoom.py
-              times zooming; snapshot.py renders the window to a PNG
+tools/        build.py makes the download of the system it runs on;
+              screenshots.py the pictures of this README; make_icon.py the
+              icon; bench_zoom.py times zooming; snapshot.py renders the
+              window to a PNG
+packaging/    the Windows installer script and the Linux desktop entry
+.github/      the workflow that tests and builds on the three systems
 docs/images/  the pictures of this README
 ```
 
@@ -369,9 +416,9 @@ Qt can't blur what lies behind a widget, so each floating bar samples it
 (`ui/widgets.py`, `FloatingBar`).
 
 - The pages under the bar and 24 px round it are grabbed, reduced to one texel
-  every 6 logical px, blurred with a gaussian (sigma 9 px, as three box passes)
+  every 3 logical px, blurred with a gaussian (sigma 5 px, as three box passes)
   and given back some of the colour a tint takes away. The painter stretches
-  the texels smoothly: no blocks, no letters showing through.
+  the texels smoothly: shapes and colours show through, words don't.
 - A scroll moves the picture with the pages at once, so it never lags a frame;
   a fresh sample follows at most once a frame, and at once after a jump past
   the area sampled. A zoom or newly rendered tiles under a bar resample it too.

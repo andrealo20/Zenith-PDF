@@ -138,7 +138,7 @@ def build_context_menu(view: DocumentView, page: int, pos, annotation: Annotatio
     pages.addSeparator()
     _action(pages, "arrows-out-line-horizontal", "Extend margin", lambda: actions.extend_margin(page), editable)
     _action(pages, "drop-half", "Watermark…", lambda: actions.watermark(page), editable)
-    if actions is not None and actions.ocr_available():  # shown only where Windows can recognise text
+    if actions is not None and actions.ocr_available():  # shown only where the system can recognise text
         _action(pages, "magnifying-glass-plus", "Run OCR (text recognition)", lambda: actions.run_ocr(page), editable)
 
     insert = menu.addMenu(icon("plus-circle"), "Insert")

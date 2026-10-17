@@ -11,6 +11,7 @@ import gc
 import math
 import multiprocessing
 import queue
+import sys
 import traceback
 from collections import OrderedDict
 from multiprocessing import shared_memory
@@ -20,6 +21,24 @@ import pypdfium2.raw as pdfium_c
 
 PAGE_CACHE = 6  # parsed pages kept per document: tiles of one page reuse the parse
 PARENT_CHECK_SECONDS = 2.0
+
+
+def attach(name: str) -> shared_memory.SharedMemory:
+    """Open a block of shared memory another process made, without taking it over.
+
+    On macOS and Linux, Python's resource tracker would otherwise remove the block
+    when this process ends, while its maker still uses it. Windows frees a block
+    when its last user closes it, so there is nothing to undo there.
+    """
+    try:
+        return shared_memory.SharedMemory(name=name, track=False)  # Python 3.13 and later
+    except TypeError:
+        memory = shared_memory.SharedMemory(name=name)
+        if sys.platform != "win32":
+            from multiprocessing import resource_tracker
+
+            resource_tracker.unregister(memory._name, "shared_memory")
+        return memory
 
 
 def full_size(page_size: tuple[float, float], scale: float) -> tuple[int, int]:
@@ -71,7 +90,7 @@ class _OpenDocument:
     """A document inside a worker, read straight from the shared memory block."""
 
     def __init__(self, shm_name: str, size: int, password, hidden):
-        self.shm = shared_memory.SharedMemory(name=shm_name)
+        self.shm = attach(shm_name)
         self.buffer = (ctypes.c_ubyte * size).from_buffer(self.shm.buf)
         self.pdf = pdfium.PdfDocument(self.buffer, password=password)
         self.pdf.init_forms()

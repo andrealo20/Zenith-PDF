@@ -1,9 +1,12 @@
 import ctypes
 import os
 import shutil
+import sys
 import tempfile
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+if sys.platform == "win32":  # the offscreen platform finds no fonts of its own there
+    os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ.get("WINDIR", "C:/Windows"), "Fonts"))
 os.environ.setdefault("ZENITH_RENDER_PROCESSES", "0")  # test_render.py covers the processes
 # The home page's thumbnails go to a folder of the run's own, never the user's cache.
 CACHE = tempfile.mkdtemp(prefix="zenith-tests-cache-")

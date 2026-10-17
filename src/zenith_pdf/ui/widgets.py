@@ -41,14 +41,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.platforms import native_keys
 from ..icons import icon
 from ..theme import Theme, qcolor, themes
 
 GLASS_BLEED = 24  # logical px of backdrop sampled beyond the bar: the blur reaches its edges from what is there
 GLASS_RADIUS = 14  # corner radius of tall glass panels, as the tool menu's; bars are capsules
 CAPSULE_MAX = 48  # px: a floating bar this tall or less is a capsule, its ends half circles
-BLUR_STEP = 6  # logical px per texel of the blurred backdrop, which the painter stretches smoothly
-BLUR_SIGMA = 9.0  # logical px: a gaussian this wide keeps shapes and colours, and never a letter
+BLUR_STEP = 3  # logical px per texel of the blurred backdrop, which the painter stretches smoothly
+BLUR_SIGMA = 5.0  # logical px: shapes and colours show through, words do not
 STATS_STEP = 18  # logical px per sample when judging how strong the tint must be
 SHADOW_BLUR = 14  # logical px the shadow fades over, all round the bar
 SHADOW_OFFSET = 6  # the shadow falls this far below the bar
@@ -65,6 +66,9 @@ SATURATION = {"clear": 1.45, "balanced": 1.2}  # colours behind the glass, lifte
 NOISE_ALPHA = 4  # 0-255: the faint grain on the glass, which keeps its smooth gradients from banding
 NOISE_SIZE = 64  # device px of the grain's tile
 FADE_MS = 150  # floating bars and chips come and go this fast
+# A popup draws its own rounded shape: Windows leaves the corners clear only for a frameless window, and its
+# drop shadow would be a square round them.
+POPUP_FLAGS = Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint
 
 
 class _Glass:
@@ -632,7 +636,7 @@ class FloatingBar(QFrame):
     """
 
     def __init__(self, parent: QWidget | None = None, popup: bool = False, solid: bool | None = None):
-        super().__init__(parent, Qt.WindowType.Popup if popup else Qt.WindowType.Widget)
+        super().__init__(parent, POPUP_FLAGS if popup else Qt.WindowType.Widget)
         self.setObjectName("FloatingBar")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._popup = popup
@@ -1278,7 +1282,7 @@ def separator(vertical: bool = True) -> QFrame:
 
 
 def muted_label(text: str = "") -> QLabel:
-    label = QLabel(text)
+    label = QLabel(native_keys(text))
     label.setObjectName("Muted")
     return label
 

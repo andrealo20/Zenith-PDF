@@ -16,6 +16,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QMenu, QVBoxLayout, QWidget
 from shiboken6 import isValid
 
+from ..core.platforms import SYSTEM_NAME, WINDOWS, native_keys
 from ..theme import themes
 from .widgets import FloatingBar
 
@@ -55,7 +56,7 @@ TOPICS: dict[str, Topic] = {
                        "or a question, in English, Italian, French, Spanish, German or Portuguese. It also checks "
                        "spelling, picks the key points of a text and turns highlights into study notes.",
                        "Type what you want to do, such as \"rotate page\" or \"come si firma\", and press Enter. It "
-                       "works on this PC, without the internet or a language model.", "Ctrl+K"),
+                       "works on this computer, without the internet or a language model.", "Ctrl+K"),
     # Annotation toolbar
     "tool_select": Topic("Select", "Selects annotations and text.",
                          "Click an annotation to select it; drag over empty space to select several. Drag a selection "
@@ -132,7 +133,9 @@ TOPICS: dict[str, Topic] = {
                             "kept for every document, and the tool's menu lists them. This is a picture of a signature, "
                             "not a certificate."),
     "tool_camera": Topic("Image from camera", "Takes a photo with the Windows Camera app and puts it on the page.",
-                         "Click, take the photo in the Camera app, and it appears on the page."),
+                         "Click, take the photo in the Camera app, and it appears on the page.") if WINDOWS else
+    Topic("Image from camera", "Takes a photo with the computer's camera and puts it on the page.",
+          "Click, frame the shot in the camera window and take it: it appears on the page."),
     "tool_image": Topic("Image from file", "Places a picture file on the page.",
                         "Choose the file. Ctrl+V pastes a copied picture and you can drag files in too. Corners "
                         "resize it keeping its proportions; hold Shift to stretch it."),
@@ -347,7 +350,7 @@ MENU_TIPS = {
     "Keyboard shortcuts": "The keys for every command.",
     "About Zenith PDF": "Version and the open source parts Zenith PDF is built on.",
     "Play audio note": "Play the recording right here, in a small player by the note.",
-    "Open attachment": "Open the attached file with the app Windows uses for it.",
+    "Open attachment": f"Open the attached file with the app {SYSTEM_NAME} uses for it.",
     "Save attachment as…": "Save a copy of the attached file or recording.",
     "Peel tape": "Uncover what the tape hides.",
     "Put tape back": "Cover the text with the tape again.",
@@ -358,7 +361,7 @@ MENU_TIPS = {
     "Delete a signature": "Forget one of the saved signatures.",
     "Open…": "Open a PDF file.",
     "Close tab": "Close this document; you are asked about unsaved changes.",
-    "Theme": "Dark, light, or as Windows is set.",
+    "Theme": f"Dark, light, or as {SYSTEM_NAME} is set.",
     "Reading mode": "Only the pages: the bars, the side panel and the tabs go away. Esc brings them back.",
     "Assistant…": "Find any tool, command, setting or shortcut by asking, in your language.",
     "New window": "Another Zenith PDF window, with the same tools and styles. Drag a tab out of the strip to move "
@@ -616,14 +619,14 @@ class HelpCard(QWidget):
         self.pinned = pinned
         topic = owner.topic
         detail = owner.target.property("help_detail") or ""
-        self.detail.setText(detail)
+        self.detail.setText(native_keys(detail))
         self.detail.setVisible(bool(detail))
-        self.title.setText(topic.title)
-        self.what.setText(topic.what)
-        self.how.setText(topic.how)
+        self.title.setText(native_keys(topic.title))
+        self.what.setText(native_keys(topic.what))
+        self.how.setText(native_keys(topic.how))
         self.how.setVisible(bool(topic.how))
         self.how_title.setVisible(bool(topic.how))
-        self.keys.setText(topic.keys)
+        self.keys.setText(native_keys(topic.keys))
         self.keys.setVisible(bool(topic.keys))
         for label in (self.what, self.how):
             label.setFixedWidth(CARD_WIDTH - 32)

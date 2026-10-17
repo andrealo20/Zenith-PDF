@@ -327,7 +327,8 @@ def test_no_sound_and_no_device_messages(qt_app):
     dialog.record_button.click()
     wait_for(lambda: dialog.message == audio_dialog.NO_SOUND)
     assert dialog.status_icon.isVisibleTo(dialog)
-    assert audio_dialog.PRIVACY_SETTINGS[1] in dialog.status.text()  # a link to the Windows page
+    if audio_dialog.PRIVACY_SETTINGS is not None:  # Linux has no such page to link to
+        assert audio_dialog.PRIVACY_SETTINGS[1] in dialog.status.text()  # a link to the system's page
     dialog.reject()
     broken = RecordDialog(recorder=Recorder(backend=FakeMic(fail="No driver.")))
     broken.record_button.click()

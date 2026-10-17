@@ -71,7 +71,7 @@ DEFAULTS: dict[str, object] = {
     "render_processes": "auto",
     "tile_cache_mb": 384,
     # Text recognition
-    "ocr_language": "",  # "" means the Windows display language
+    "ocr_language": "",  # "" means the system's languages
     "ocr_dpi": 200,
     # Stored data
     "markup_library": [],

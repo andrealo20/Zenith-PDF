@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zenith-pdf"
-version = "0.3.0"
-description = "A PDF viewer and markup app for Windows"
+version = "0.4.0"
+description = "A PDF reader and markup app for Windows, macOS and Linux"
 readme = "README.md"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
@@ -23,10 +23,19 @@ dependencies = [
     "winrt-Windows.Storage.Streams>=3; sys_platform == 'win32'",
     "winrt-Windows.Globalization>=3; sys_platform == 'win32'",
     "winrt-Windows.Foundation.Collections>=3; sys_platform == 'win32'",
+    # Audio notes and the camera on macOS and Linux
+    "PySide6-Addons>=6.8; sys_platform != 'win32'",
+    # Text recognition (Vision) and spelling (NSSpellChecker) on macOS
+    "pyobjc-framework-Vision>=10; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz>=10; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=10; sys_platform == 'darwin'",
+    # Spelling with the Hunspell dictionaries on Linux
+    "pyenchant>=3.2; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+build = ["pyinstaller>=6.10"]
 
 [project.gui-scripts]
 zenith-pdf = "zenith_pdf.app:main"

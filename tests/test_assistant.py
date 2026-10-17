@@ -20,7 +20,7 @@ from zenith_pdf.ui.tips import FIRST_TIP, TOOL_TIPS
 from zenith_pdf.ui.tool_catalog import CATALOG
 
 HAS_ENGLISH = spelling.available("en")
-needs_english = pytest.mark.skipif(not HAS_ENGLISH, reason="Windows has no English dictionary here")
+needs_english = pytest.mark.skipif(not HAS_ENGLISH, reason="the system has no English dictionary here")
 
 
 def settle(ms=30):
@@ -148,7 +148,7 @@ def test_study_notes_by_page_and_by_colour():
 
 
 @needs_english
-def test_windows_spelling_flags_typos_and_doubled_words():
+def test_spelling_flags_typos_and_doubled_words():
     issues = spelling.check("Teh cat sat on the the mat.", "en")
     words = {i.word: i for i in issues}
     assert words["Teh"].suggestions[0] == "The"
