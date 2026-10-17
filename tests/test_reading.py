@@ -4,7 +4,7 @@ import shutil
 import sys
 
 import pytest
-from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, Qt, QVariantAnimation
 from PySide6.QtGui import QCursor, QKeySequence, QMouseEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -15,7 +15,7 @@ from zenith_pdf.core.platforms import key
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui import reading
 from zenith_pdf.ui.document_view import HOLD_MS
-from zenith_pdf.ui.widgets import FADE_MS
+from zenith_pdf.ui.widgets import FADE_MS, Fade
 
 
 def settle(ms=30):
@@ -24,7 +24,13 @@ def settle(ms=30):
 
 
 def faded():
+    """Until the bars have faded in or out: their time, and on a busy machine as long as they still run."""
     settle(FADE_MS + 120)
+    for _ in range(40):
+        fades = [fade for widget in QApplication.allWidgets() for fade in widget.findChildren(Fade)]
+        if not any(fade._animation.state() == QVariantAnimation.State.Running for fade in fades):
+            return
+        settle(50)
 
 
 @pytest.fixture(scope="module")
@@ -238,7 +244,7 @@ def test_the_exit_chip_shows_at_the_top_edge_and_hides_again(window, workspace, 
     settle()
     assert not chip.isVisible()
     move_to(2)  # the top edge
-    faded()
+    settle(FADE_MS + 120)  # shown, before its short time is up
     assert chip.isVisible() and chip.geometry().top() < 40
     assert abs(chip.geometry().center().x() - canvas.width() // 2) <= 1
     move_to(300)  # away from it, then still
