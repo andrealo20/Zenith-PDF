@@ -157,8 +157,14 @@ class LibraryIndex:
                 "ORDER BY bm25(pages) LIMIT ?", (MATCH_START, MATCH_END, SNIPPET_WORDS, match, limit)).fetchall()
         except sqlite3.Error:
             return []
-        return [Hit(Path(path), int(page), " ".join(snippet.split())) for path, page, snippet in rows
-                if Path(path).exists()]
+        gone = [(path,) for path in {row[0] for row in rows} if not Path(path).exists()]
+        if gone:  # moved or deleted since: off the index, or they would keep the places of files still there
+            db = self._connect()
+            with db:
+                db.executemany("DELETE FROM pages WHERE path = ?", gone)
+                db.executemany("DELETE FROM files WHERE path = ?", gone)
+            return self.search(text, limit)
+        return [Hit(Path(path), int(page), " ".join(snippet.split())) for path, page, snippet in rows]
 
     def files(self) -> int:
         return self._connect().execute("SELECT COUNT(*) FROM files WHERE pages > 0").fetchone()[0]

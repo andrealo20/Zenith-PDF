@@ -26,6 +26,15 @@ def test_a_link_names_the_file_and_the_page(tmp_path):
     assert instance.parse_target("--reverse") is None
 
 
+
+def test_a_link_opens_only_a_pdf_on_this_computer():
+    # A link can come from any web page: a network path would hand Windows' sign-in to that server.
+    assert instance.parse_target(r"zenith-pdf://open?file=%5C%5Cserver%5Cshare%5Ca.pdf") is None
+    assert instance.parse_target("zenith-pdf://open?file=//server/share/a.pdf") is None
+    assert instance.parse_target("zenith-pdf://open?file=C%3A%5Cnotes%5Creport.docx") is None
+    assert instance.parse_target("zenith-pdf://open?file=C%3A%5Cnotes%5Creport.pdf") == (Path("C:/notes/report.pdf"), None)
+
+
 def test_a_second_start_hands_its_files_to_the_first(qt_app):
     name = f"zenith-pdf-test-{os.getpid()}"
     assert not instance.forward(["a.pdf"], name)  # nothing is running under this name yet

@@ -152,6 +152,7 @@ RISKY_SUFFIXES = (
 SAFE_SUFFIXES = (".pdf", ".txt", ".rtf", ".csv", ".md", ".log", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif",
                  ".tiff", ".webp", ".heic", ".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".mp4",
                  ".m4v", ".mov", ".avi", ".mkv", ".wmv", ".webm", ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp")
+WEB_SCHEMES = ("http", "https", "mailto")  # what a link in a document may open
 DEVICE_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{n}" for n in range(10)), *(f"LPT{n}" for n in range(10))}
 
 
@@ -1540,6 +1541,10 @@ class DocumentView(QGraphicsView):
                 self.jump(page, self.document.display_y(page, point))
             return
         address = str(value)
+        if QUrl(address).scheme().lower() not in WEB_SCHEMES:  # file:, smb:, a program: never from a document
+            messages.warn(self, "Can't open the link", "This link leads to a file or a network place, not to a web "
+                          "page, and Zenith PDF doesn't open those from a document.", detail=address)
+            return
         if messages.confirm_once(self, self.settings, "open_links", "Open link", f"Open this address?\n\n{address}",
                                  action="Open", icon="link"):
             QDesktopServices.openUrl(QUrl(address))

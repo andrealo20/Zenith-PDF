@@ -37,7 +37,9 @@ def parse_target(text: str) -> tuple[Path, int | None] | None:
     if text.lower().startswith(f"{SCHEME}:"):
         query = parse_qs(urlparse(text).query)
         file = (query.get("file") or [""])[0]
-        if not file:
+        # A link can come from any web page: a PDF on this computer only. A network path would hand
+        # Windows' sign-in to whoever runs that server.
+        if not file or file.startswith(("\\\\", "//")) or not file.lower().endswith(".pdf"):
             return None
         page = (query.get("page") or [""])[0]
         return Path(file), int(page) if page.isdigit() and int(page) > 0 else None

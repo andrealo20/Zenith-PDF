@@ -6,10 +6,8 @@ import time
 import pypdfium2 as pdfium
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
 
-from conftest import _add_text
+from conftest import _add_text, wait_for
 from zenith_pdf.core.library_index import MATCH_END, MATCH_START, LibraryIndex, query_terms
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui.library_search import Indexer, InsideResults
@@ -37,13 +35,14 @@ def library(tmp_path):
     return lecture, lab
 
 
-def wait_for(condition, ms=5000):
-    for _ in range(ms // 10):
-        QApplication.processEvents()
-        if condition():
-            return True
-        QTest.qWait(10)
-    return condition()
+def test_files_moved_away_leave_the_index_and_their_places_in_the_results(tmp_path):
+    first = make_pdf(tmp_path / "first.pdf", [["Solar cells, solar panels, solar farms."]])
+    second = make_pdf(tmp_path / "second.pdf", [["Solar panels on the roof."]])
+    index = LibraryIndex(tmp_path / "cache" / "index.sqlite3")
+    index.add(first)
+    index.add(second)
+    first.rename(tmp_path / "moved.pdf")  # its rows still name the old path, and rank first
+    assert [h.path for h in index.search("solar", limit=1)] == [second] and index.files() == 1
 
 
 def test_the_index_finds_every_word_on_one_page(tmp_path, library):

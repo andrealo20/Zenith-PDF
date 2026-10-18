@@ -10,6 +10,7 @@ from PySide6.QtGui import QContextMenuEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.core.annotations import FreeText, Ink, Note, Shape
 from zenith_pdf.core.document import SearchHit
@@ -17,11 +18,6 @@ from zenith_pdf.settings import Settings
 from zenith_pdf.theme import themes
 from zenith_pdf.ui import clipboard, messages
 from zenith_pdf.ui.document_view import ZOOM_GLIDE_MS
-
-
-def settle(ms=60):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 def on_viewport(view, page, x, y):
@@ -68,7 +64,7 @@ def workspace(window, eight_pages, tmp_path):
     window.resize(1300, 900)
     window.open_file(path)
     workspace = window.current_workspace()
-    settle()
+    settle(60)
     yield workspace
     if workspace in window.workspaces:
         window.close_tab(window.workspaces.index(workspace), confirm=False)
@@ -78,7 +74,7 @@ def test_a_resize_in_fit_width_keeps_the_line_being_read(window, workspace):
     view = workspace.view
     assert view._fit == "width"
     view.go_to(4, 474)
-    settle()
+    settle(60)
     before = view.spot()
     window.resize(1100, 900)
     settle(150)
@@ -92,7 +88,7 @@ def test_the_left_page_of_a_spread_at_the_top_of_the_window_is_rendered(workspac
     view.set_layout("double")
     view.set_zoom(3.0)
     view.jump(4, 400)  # into the middle of the spread 5-6: the top of the window is inside the row
-    settle()
+    settle(60)
     visible = view.mapToScene(view.viewport().rect()).boundingRect()
     on_screen = [page.index for page in view._pages if page.sceneBoundingRect().intersects(visible)]
     assert 4 in on_screen
@@ -138,7 +134,7 @@ def test_search_hits_survive_a_layout_change(workspace):
 def test_a_zoom_glide_renders_only_where_it_lands(workspace, monkeypatch):
     view = workspace.view
     view.set_zoom(1.0)
-    settle()
+    settle(60)
     renderer = view._renderer
     asked_mid_glide = []
     request_many = renderer.request_many
@@ -206,7 +202,7 @@ def test_a_callout_keeps_its_fill_and_line_while_typed_in(workspace):
                    font_size=14, border_width=1.0, border_color=(0.8, 0, 0), callout=((100, 300),))
     view.add_annotations([box], "Callout")
     view.edit_text_box(workspace.store.get(box.id), is_new=False)
-    settle()
+    settle(60)
     assert view.is_editing_text()
     fill = colours_in(view, 0, 300, 175, 90, 12)  # below the text, inside the box
     assert sum(1 for r, g, b in fill if r > 200 and g > 200 and b < 80) > 0.8 * len(fill)
@@ -301,3 +297,18 @@ def test_recolouring_a_callout_recolours_the_frame_drawn_in_its_colour(workspace
     view.apply_style(color=red)
     assert store.get(callout.id).border_color == red
     assert store.get(framed.id).border_color == (0.0, 0.0, 1.0)  # a frame of its own colour stays
+
+
+def test_a_link_in_a_document_opens_web_pages_only(workspace, monkeypatch):
+    from PySide6.QtGui import QDesktopServices
+
+    view = workspace.view
+    opened, warned = [], []
+    monkeypatch.setattr(QDesktopServices, "openUrl", lambda url: opened.append(url.toString()))
+    monkeypatch.setattr(messages, "warn", lambda *a, **k: warned.append(k.get("detail")))
+    monkeypatch.setattr(messages, "confirm_once", lambda *a, **k: True)
+    for address in ("file:///C:/Users/Public/invoice.exe", r"\\server\share", "smb://server/share", "ms-msdt:x"):
+        view.follow_link("uri", address)
+    assert not opened and len(warned) == 4
+    view.follow_link("uri", "https://example.org/paper")
+    assert opened == ["https://example.org/paper"]
