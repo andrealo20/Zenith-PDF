@@ -464,7 +464,7 @@ class MainWindow(QMainWindow):
         if not getattr(workspace, "busy", False):
             return True
         name = workspace.document.path.name
-        progress = QProgressDialog(f"Finishing the work on {name}…", "Don't close", 0, 0, self)
+        progress = QProgressDialog(tr(f"Finishing the work on {name}…"), tr("Don't close"), 0, 0, self)
         progress.setWindowTitle(tr("Please wait"))
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
@@ -482,6 +482,7 @@ class MainWindow(QMainWindow):
         return waited
 
     def close_tab(self, index: int, confirm: bool = True) -> None:
+        on_home = self.stack.currentWidget() is self.home  # a tab closed from Home leaves Home showing
         if confirm and not self._confirm_close(self.workspaces[index]):
             return
         if not confirm and not self._wait_until_idle(self.workspaces[index]):
@@ -498,7 +499,7 @@ class MainWindow(QMainWindow):
         else:
             workspace.close_document()
         workspace.deleteLater()
-        if self.workspaces:
+        if self.workspaces and not on_home:
             self._show_tab(self.tabs.currentIndex())
         else:
             self.show_home()
@@ -507,7 +508,7 @@ class MainWindow(QMainWindow):
 
     def open_dialog(self, folder: str | None = None) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Open", folder or self._settings.last_directory,
+            self, tr("Open"), folder or self._settings.last_directory,
             f"{tr('Documents')} ({convert.FILTER});;{tr('PDF documents')} (*.pdf);;{tr('All files')} (*)"
         )
         if paths:
@@ -524,17 +525,18 @@ class MainWindow(QMainWindow):
         """A tool picked from the home page's list. One that works on a document asks for the PDF first, opens
         it, then goes to work on it, as a tool picked with the document open would."""
         tool = next(t for t in pdf_tools.TOOLS if t.key == key)
+        window = self
         if tool.needs_document:
             path, _ = QFileDialog.getOpenFileName(self, tr(tool.title), self._settings.last_directory,
                                                   tr("PDF documents (*.pdf);;All files (*)"))
             if not path:
                 return
             self._settings.last_directory = str(Path(path).parent)
-            self.open_file(path)
-            workspace = self.current_workspace()
+            workspace = self.open_file(path)
             if workspace is None or workspace.document.path != Path(path).resolve():
                 return  # it didn't open, and opening said why
-        tool.run(self)
+            window = workspace.window()  # the file may be open in another window: the tool works there
+        tool.run(window)
 
     def open_files(self, paths) -> None:
         for path in paths:
@@ -547,33 +549,47 @@ class MainWindow(QMainWindow):
             if parsed is None:
                 continue
             path, page = parsed
-            self.open_file(path)
-            workspace = self.current_workspace()
+            workspace = self.open_file(path)
             if page is not None and workspace is not None and workspace.document.path == Path(path).resolve():
                 # After the file's own last position, which applies once the view has its size.
                 QTimer.singleShot(0, lambda view=workspace.view, index=page - 1: view.jump(index))
 
-    def open_file(self, path) -> None:
+    def open_file(self, path) -> Workspace | None:
+        """Open `path` in a tab, or show the tab of any window that has it open already. The tab, or None."""
         path = Path(path).resolve()
         converted = path.suffix.lower() != ".pdf" and convert.can_convert(path)
         target = path.with_suffix(".pdf") if converted else path  # a converted file is a new PDF beside it
-        for index, workspace in enumerate(self.workspaces):
-            if isinstance(workspace, Workspace) and workspace.document.path == target and                     (not converted or workspace.document.unsaved):
-                self.tabs.setCurrentIndex(index)
-                self._show_tab(index)
-                return
+        # One tab per file in the whole app: two copies of it would each save over what the other saved.
+        for window in [self] + [w for w in MainWindow.open_windows if w is not self]:
+            for index, workspace in enumerate(window.workspaces):
+                if (isinstance(workspace, Workspace) and workspace.document.path == target
+                        and (not converted or workspace.document.unsaved)):
+                    if window is not self:
+                        if window.isMinimized():
+                            window.showNormal()
+                        window.raise_()
+                        window.activateWindow()
+                    window.tabs.setCurrentIndex(index)
+                    window._show_tab(index)
+                    return workspace
         if converted:
-            self.open_converted(path)
-            return
+            return self.open_converted(path)
         document = self._load(path)
-        if document is not None:
+        if document is None:
+            return None
+        try:
             workspace = self.open_document(document)
-            self._settings.add_recent(path)
-            if MainWindow.indexer is not None:
-                MainWindow.indexer.add([path])
-            state = self._settings.file_state(path)
-            if state:
-                workspace.apply_view_state(state)
+        except Exception as error:  # a page that can't be shown: say so, rather than fail half way through
+            document.close()
+            self._cannot_open(path, error)
+            return None
+        self._settings.add_recent(path)
+        if MainWindow.indexer is not None:
+            MainWindow.indexer.add([path])
+        state = self._settings.file_state(path)
+        if state:
+            workspace.apply_view_state(state)
+        return workspace
 
     def open_converted(self, path: Path) -> Workspace | None:
         """A text, web or office file, made a PDF and opened as a new document: saving asks where the PDF goes,
@@ -804,7 +820,7 @@ class MainWindow(QMainWindow):
         delete_template(self._settings, position)
 
     def pin_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Pin a folder", self._settings.last_directory)
+        folder = QFileDialog.getExistingDirectory(self, tr("Pin a folder"), self._settings.last_directory)
         if folder and folder not in self._settings.pinned_folders:
             self._settings.pinned_folders = self._settings.pinned_folders + [folder]
 
@@ -860,7 +876,8 @@ class MainWindow(QMainWindow):
             return False
         target = None
         if save_as or document.unsaved:  # a new document has nowhere to go yet
-            target, _ = QFileDialog.getSaveFileName(self, "Save as", str(document.path), "PDF documents (*.pdf)")
+            target, _ = QFileDialog.getSaveFileName(self, tr("Save as"), str(document.path),
+                                                    tr("PDF documents (*.pdf)"))
             if not target:
                 return False
         try:
@@ -1155,14 +1172,18 @@ class MainWindow(QMainWindow):
 
         workspace = self.current_workspace()
         start = str(workspace.document.path.parent) if workspace is not None else self._settings.get("last_directory")
-        older, _ = QFileDialog.getOpenFileName(self, "Compare with which version?", start, "PDF documents (*.pdf)")
+        older, _ = QFileDialog.getOpenFileName(self, tr("Compare with which version?"), start,
+                                               tr("PDF documents (*.pdf)"))
         if not older:
             return
         if workspace is None:
-            newer, _ = QFileDialog.getOpenFileName(self, "And the newer version?", start, "PDF documents (*.pdf)")
+            newer, _ = QFileDialog.getOpenFileName(self, tr("And the newer version?"), start,
+                                                   tr("PDF documents (*.pdf)"))
             if not newer:
                 return
-            document = Document(Path(newer))
+            document = self._load(Path(newer))  # asks for a password, or says why it can't open
+            if document is None:
+                return
         else:
             current = workspace.document
             document = Document(current.path, password=current.password, data=current.data)  # as it is now
@@ -1180,8 +1201,7 @@ class MainWindow(QMainWindow):
 
     def open_at_page(self, path, page: int, query: str = "") -> None:
         """Open `path` at `page` (from 0), with the words of a search inside all documents lit on it."""
-        self.open_file(path)
-        workspace = self.current_workspace()
+        workspace = self.open_file(path)
         if workspace is None or workspace.document.path != Path(path).resolve():
             return
 
@@ -1294,8 +1314,9 @@ class MainWindow(QMainWindow):
             return
         first, last = printer.fromPage(), printer.toPage()
         pages = range((first or 1) - 1, (last or workspace.document.page_count))
-        scale = min(printer.resolution(), PRINT_DPI) / 72
-        progress = QProgressDialog("Printing…", "Cancel", 0, len(pages), self)
+        dpi = min(printer.resolution(), PRINT_DPI)
+        scale = dpi / 72
+        progress = QProgressDialog(tr("Printing…"), tr("Cancel"), 0, len(pages), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         painter = QPainter()
         if not painter.begin(printer):
@@ -1303,21 +1324,32 @@ class MainWindow(QMainWindow):
             progress.deleteLater()
             messages.warn(self, "Can't print", "The printer could not be started.")
             return
-        for count, index in enumerate(pages):
-            if progress.wasCanceled():
-                break
-            progress.setValue(count)
-            if count:
-                printer.newPage()
-            image = workspace.view.page_image(index, scale)
-            area = painter.viewport()
-            fitted = image.size().scaled(area.size(), Qt.AspectRatioMode.KeepAspectRatio)
-            x = area.x() + (area.width() - fitted.width()) // 2
-            y = area.y() + (area.height() - fitted.height()) // 2
-            painter.drawImage(QRect(x, y, fitted.width(), fitted.height()), image)
-        painter.end()
-        progress.close()
-        progress.deleteLater()
+        failure = None
+        try:
+            for count, index in enumerate(pages):
+                if progress.wasCanceled():
+                    break
+                progress.setValue(count)
+                if count:
+                    printer.newPage()
+                area = painter.viewport()
+                width, height = workspace.document.page_size(index)
+                # At most PRINT_DPI on the paper: a poster page rendered at its own size would not fit in memory.
+                paper = min(area.width() / width, area.height() / height) * dpi / printer.resolution()
+                image = workspace.view.page_image(index, min(scale, paper))
+                fitted = image.size().scaled(area.size(), Qt.AspectRatioMode.KeepAspectRatio)
+                x = area.x() + (area.width() - fitted.width()) // 2
+                y = area.y() + (area.height() - fitted.height()) // 2
+                painter.drawImage(QRect(x, y, fitted.width(), fitted.height()), image)
+        except Exception as error:  # reported once the printer is let go
+            failure = error
+        finally:
+            painter.end()  # a painter left open on the printer aborts the whole app, unsaved tabs and all
+            progress.close()
+            progress.deleteLater()
+        if failure is not None:
+            messages.warn(self, "Can't print", f"{workspace.document.path.name} could not be printed.",
+                          detail=str(failure))
 
     def closeEvent(self, event) -> None:
         for workspace in list(self.workspaces):
