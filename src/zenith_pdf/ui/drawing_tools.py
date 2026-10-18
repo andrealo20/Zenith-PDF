@@ -723,8 +723,12 @@ class MeasureLineTool(Tool):
 # Review -----------------------------------------------------------------------------
 
 
-def _minus(quad, cut) -> list:
-    """What is left of a line of markup once the span `cut` (on the same line) is cleaned off it."""
+def _minus(quad, cut, turned: bool = False) -> list:
+    """What is left of a line of markup once the span `cut` (on the same line) is cleaned off it. A `turned`
+    line runs down the page, and is cut along y."""
+    if turned:  # x and y swapped, cut as a line across, and swapped back
+        swapped = _minus((quad[1], quad[0], quad[3], quad[2]), (cut[1], cut[0], cut[3], cut[2]))
+        return [(y, x, h, w) for x, y, w, h in swapped]
     x, y, w, h = quad
     cx, cy, cw, ch = cut
     overlap = min(y + h, cy + ch) - max(y, cy)
@@ -753,7 +757,7 @@ class CleanerTool(TextSpanTool):
                 continue
             quads = list(markup.quads)
             for cut in cuts:
-                quads = [piece for quad in quads for piece in _minus(quad, cut)]
+                quads = [piece for quad in quads for piece in _minus(quad, cut, markup.rotation % 2 == 1)]
             if tuple(quads) == markup.quads:
                 continue
             if quads:

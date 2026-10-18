@@ -653,18 +653,24 @@ class _Canvas(QWidget):
         self.schedule_glass([bar])
 
     def place_selection(self, area) -> None:
-        """Float the selection bar above the selection, or below it if there's no room."""
+        """Float the selection bar above the selection, or below it if there's no room: beside the page counter and
+        the other bars rather than over them."""
         if area is None or self.manager is not None or self.reading:
             self.selection.hide()
             return
         hint = self.selection.sizeHint()
-        x = min(max(area.center().x() - hint.width() // 2, GAP), self.width() - hint.width() - GAP)
-        y = area.top() - hint.height() - 12
-        if y < self._band:
-            y = area.bottom() + 12
-        if y + hint.height() > self.height() - GAP:
-            y = self._band
-        self.selection.setGeometry(x, y, hint.width(), hint.height())
+        centred = area.center().x() - hint.width() // 2
+        spot = None
+        for y in (area.top() - hint.height() - 12, area.bottom() + 12):
+            if self._band <= y <= self.height() - GAP - hint.height():
+                x = self._clear_x(centred, y, hint)
+                if x is not None:
+                    spot = QPoint(x, y)
+                    break
+        if spot is None:
+            x = self._clear_x(centred, self._band, hint)
+            spot = QPoint(x if x is not None else self._clamped_x(centred, hint), self._band)
+        self.selection.setGeometry(QRect(spot, hint))
         self.selection.show()
         self.selection.raise_()
         self.schedule_glass([self.selection])

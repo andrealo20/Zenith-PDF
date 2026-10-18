@@ -13,6 +13,7 @@ installs depends on how this copy was installed (install_kind):
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import shutil
@@ -81,7 +82,7 @@ def latest(opener=None, platform: str = sys.platform) -> Update:
     try:
         with _get(LATEST, opener) as response:
             release = json.loads(response.read().decode("utf-8"))
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, http.client.HTTPException) as error:  # a reply cut short is an HTTPException
         raise UpdateError(f"GitHub could not be asked for the latest version: {error}") from None
     assets = {asset.get("name", ""): asset for asset in release.get("assets", [])}
     name = asset_name(platform)
@@ -91,7 +92,7 @@ def latest(opener=None, platform: str = sys.platform) -> Update:
         try:
             with _get(assets[SUMS]["browser_download_url"], opener, "application/octet-stream") as response:
                 sha256 = parse_sums(response.read().decode("utf-8", "replace")).get(name, "")
-        except OSError:
+        except (OSError, http.client.HTTPException):
             sha256 = ""
     return Update(version=str(release.get("tag_name", "")).lstrip("vV"), notes=release.get("body") or "",
                   page=release.get("html_url") or RELEASES_PAGE, name=name if asset else "",
@@ -125,7 +126,10 @@ def download(update: Update, folder: Path, progress=None, cancelled=None, opener
     comes; `cancelled()` returning True stops it. Raises UpdateError when it fails or doesn't match."""
     if not update.url or not update.sha256:
         raise UpdateError("This release has no checked file for this system.")
-    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError as error:  # a file in the folder's place
+        raise UpdateError(f"The new version could not be downloaded: {error}") from None
     target = folder / update.name
     partial = target.with_name(target.name + ".part")
     digest = hashlib.sha256()
@@ -141,7 +145,7 @@ def download(update: Update, folder: Path, progress=None, cancelled=None, opener
                 done += len(chunk)
                 if progress is not None:
                     progress(done, total)
-    except OSError as error:
+    except (OSError, http.client.HTTPException) as error:
         partial.unlink(missing_ok=True)
         raise UpdateError(f"The new version could not be downloaded: {error}") from None
     except UpdateError:
@@ -150,7 +154,11 @@ def download(update: Update, folder: Path, progress=None, cancelled=None, opener
     if digest.hexdigest() != update.sha256:
         partial.unlink(missing_ok=True)
         raise UpdateError("The downloaded file is not the one the release lists, so it was thrown away.")
-    os.replace(partial, target)
+    try:
+        os.replace(partial, target)
+    except OSError as error:  # the last update's file still open
+        partial.unlink(missing_ok=True)
+        raise UpdateError(f"The new version could not be downloaded: {error}") from None
     return target
 
 

@@ -77,7 +77,7 @@ class Updater(QObject):
     def _check(self, manual: bool) -> None:
         try:
             update = self._fetch()
-        except UpdateError as error:
+        except Exception as error:  # any error, or busy stays on and no check runs again until a restart
             self.busy = False
             if manual:
                 self.failed.emit(str(error))
@@ -107,9 +107,10 @@ class Updater(QObject):
         try:
             path = self._fetch_file(self.update, updates.downloads_folder(), progress=self.progress.emit,
                                     cancelled=lambda: self._stop)
-        except UpdateError as error:
+        except Exception as error:
             self.busy = False
-            self.failed.emit(str(error))
+            if not self._stop:  # stopped from the card, which is closed already
+                self.failed.emit(str(error))
             return
         self.busy = False
         self.file = path
@@ -200,11 +201,11 @@ class UpdateCard(FloatingBar):
         self.text.setVisible(bool(text))
         self.bar.setVisible(progress)
         while self.buttons.count():
-            item = self.buttons.takeAt(0)
-            if item.widget() is not None:
-                item.widget().hide()
-                item.widget().setParent(None)
-                item.widget().deleteLater()
+            widget = self.buttons.takeAt(0).widget()  # held: once unparented, a temporary wrapper would delete it
+            if widget is not None:
+                widget.hide()
+                widget.setParent(None)
+                widget.deleteLater()
         self.buttons.addStretch()
         for label, slot, primary in buttons:
             button = QPushButton(tr(label))

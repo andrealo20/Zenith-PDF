@@ -140,14 +140,13 @@ def mirrored(a: Annotation, axis: str, centre: float) -> Annotation:
         picture = images.decoded(a.data)
         if picture.isNull():
             return replace(a, rect=rect(a.rect))
-        # Flipping a turned picture flips it along its own side that lies that way, and turns it back.
-        own = axis if a.rotation % 2 == 0 else ("v" if axis == "h" else "h")
+        # Flipping a turned picture flips it along the same axis and turns it back the other way.
         if hasattr(picture, "flipped"):  # Qt 6.9 on
             from PySide6.QtCore import Qt
 
-            picture = picture.flipped(Qt.Orientation.Horizontal if own == "h" else Qt.Orientation.Vertical)
+            picture = picture.flipped(Qt.Orientation.Horizontal if axis == "h" else Qt.Orientation.Vertical)
         else:
-            picture = picture.mirrored(own == "h", own == "v")
+            picture = picture.mirrored(axis == "h", axis == "v")
         return replace(a, rect=rect(a.rect), data=images.encode(picture), rotation=(4 - a.rotation) % 4)
     if isinstance(a, Redaction):
         return replace(a, rects=tuple(rect(r) for r in a.rects))

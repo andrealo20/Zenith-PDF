@@ -2710,7 +2710,7 @@ class ToolMenu(_Menu):
         self._anchor: QWidget | None = None
         self._editing = False
 
-        top = QHBoxLayout()
+        self._title_row = top = QHBoxLayout()
         top.setSpacing(4)
         top.setContentsMargins(0, 0, 0, 0)
         self.glyph = QLabel()
@@ -2825,7 +2825,6 @@ class ToolMenu(_Menu):
         tinted = "color" in OPTIONS.get(base, ())
         color = readable(style.color, t.raised, t.text) if tinted else t.text
         self.glyph.setPixmap(icon(spec.icon, color).pixmap(QSize(20, 20), self.devicePixelRatioF()))
-        self.title.setText(tr(instance_title(key)))
         self.bookmark_button.setIcon(icon("bookmark-simple", t.accent_text))
         on_toolbar = self.toolbar is not None and key in self.toolbar.keys()
         self.lock_button.setVisible(base in LOCKABLE)
@@ -2843,10 +2842,18 @@ class ToolMenu(_Menu):
         self.pin_button.set_icon_name("push-pin-fill" if self.pinned else "push-pin")
         self.pin_button.setToolTip(tr("Unpin: close the menu when you click elsewhere" if self.pinned else
                                    "Pin the menu open while you draw"))
+        name = tr(instance_title(key))
+        buttons = [b for b in (self.lock_button, self.remove_button, self.more_button, self.pin_button)
+                   if not b.isHidden()]
+        room = BODY_WIDTH - TITLE_INDENT - sum(b.width() + self._title_row.spacing() for b in buttons)
+        self.title.ensurePolished()  # measure with the style sheet's font, not the default one
+        shown = QFontMetricsF(self.title.font()).elidedText(name, Qt.TextElideMode.ElideRight, room)
+        self.title.setText(shown)
+        self.title.setToolTip(name if shown != name else "")
         self.subject_row.setVisible(base not in NO_SUBJECT)
         subject = self.settings.subject(key)
-        shown = QFontMetricsF(self.subject_caption.font()).elidedText(
-            f"Tool subject: {subject}", Qt.TextElideMode.ElideRight, BODY_WIDTH - 60)
+        shown = QFontMetricsF(self.subject_caption.font()).elidedText(  # the subject as stored, untranslated
+            tr("Tool subject: {}").format(subject), Qt.TextElideMode.ElideRight, BODY_WIDTH - 60)
         self.subject_caption.setText(shown)
         self.subject_caption.setToolTip(subject if shown.endswith("…") else "")
 
