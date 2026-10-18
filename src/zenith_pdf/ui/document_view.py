@@ -522,7 +522,15 @@ class DocumentView(QGraphicsView):
     def set_layout(self, mode: str) -> None:
         if mode != self.layout_mode:
             self.layout_mode = mode
+            # The pages are the same, so the search hits still hold: they come back over the new layout.
+            hits, focused = list(self._hit_items), self._focused_hit
             self.reload()
+            for hit in hits:
+                self.add_search_hit(hit)
+            if focused is not None:
+                for item in self._hit_items.get(focused, []):
+                    item.setBrush(QBrush(themes.current.search_current))
+                self._focused_hit = focused
 
     def set_page_tint(self, tint: str) -> None:
         self.page_tint = tint
@@ -663,6 +671,10 @@ class DocumentView(QGraphicsView):
         self.goto_page(page)
 
     def resizeEvent(self, event) -> None:
+        # Fit width keeps the line being read: a panel opening or the window narrowing is not a jump.
+        # Not at the first sizes, while a document that just opened still starts at its top.
+        shown = event.oldSize().width() > 0 and event.oldSize().height() > 0
+        spot = self.spot() if self._fit == "width" and self._held is None and shown else None
         super().resizeEvent(event)
         if self._fit == "width":
             self.fit_width()
@@ -670,6 +682,8 @@ class DocumentView(QGraphicsView):
             self.fit_page()
         elif self._fit == "height":
             self.fit_height()
+        if spot is not None:
+            self._show_spot(spot)
         if self._held is not None:
             self._apply_hold()
         self._schedule_renders(0)
@@ -765,17 +779,20 @@ class DocumentView(QGraphicsView):
 
     def goto_page(self, index: int) -> None:
         index = min(max(index, 0), len(self._pages) - 1)
-        top = self._tops[index] - (MARGIN if index == 0 else PAGE_GAP / 2) - self.top_inset / self._view_scale()
+        first_row = index in self._row_of.get(0, [0])  # the two pages of the first spread land at the same height
+        top = self._tops[index] - (MARGIN if first_row else PAGE_GAP / 2) - self.top_inset / self._view_scale()
         current_top = self.mapToScene(QPoint(0, 0)).y()
         bar = self.verticalScrollBar()
         bar.setValue(bar.value() + round((top - current_top) * self._view_scale()))
         self._set_current(index)
 
     def next_page(self) -> None:
-        self.goto_page(self._current + 1)
+        # By rows: in a two-page layout the other page of the spread is already on screen.
+        self.goto_page(self._row_of.get(self._current, [self._current])[-1] + 1)
 
     def previous_page(self) -> None:
-        self.goto_page(self._current - 1)
+        before = self._row_of.get(self._current, [self._current])[0] - 1
+        self.goto_page(self._row_of.get(before, [before])[0])
 
     def spot(self) -> Spot:
         """Where the reader is: the page and the height on it at the top of the reading area, under the toolbar."""
@@ -876,6 +893,7 @@ class DocumentView(QGraphicsView):
 
     def _apply_tool(self, key: str) -> None:
         name = base_of(key)
+        self.stop_format_painter()  # another tool puts the brush down: its first press must not go to the painter
         self._leave_link()
         if self._active is not None:
             self._active.cancel()
@@ -907,6 +925,7 @@ class DocumentView(QGraphicsView):
         self._leave_link()
         if on:
             self.finish_text_edit()  # typed text is kept, not left half done
+            self.stop_format_painter()
             if self._active is not None:
                 self._active.cancel()
                 self._active = self._active_page = None
@@ -1299,6 +1318,10 @@ class DocumentView(QGraphicsView):
             tool, self._active, self._active_page = self._active, None, None
             tool.cancel()
         view_pos = QPointF(event.pos())
+        if self._over_editor(view_pos)[1]:
+            super().contextMenuEvent(event)  # the text being typed has its own menu: cut, copy, paste
+            return
+        self.finish_text_edit()  # a right click away from the box ends the typing, as a left click does
         item = self._annotation_item_at(view_pos)
         if item is not None and not item.isSelected():
             self.scene().clearSelection()
@@ -1321,7 +1344,7 @@ class DocumentView(QGraphicsView):
 
     def cut_annotations(self) -> None:
         """Copy the selection, then take away what isn't locked: a locked annotation stays, as with Delete."""
-        if self.copy_annotations():
+        if self.copy_annotations() and not self.document.read_only:  # only reading: Cut copies, as Ctrl+C
             removable = [a for a in self.selected_annotations() if not a.locked]
             if removable:
                 self.undo_stack.push(RemoveAnnotations(self.store, removable, "Cut"))
@@ -1397,7 +1420,8 @@ class DocumentView(QGraphicsView):
     def insert_image_file(self, page: int | None = None, at: tuple[float, float] | None = None) -> None:
         from .page_actions import IMAGE_FILES
 
-        paths, _ = QFileDialog.getOpenFileNames(self, "Insert image", str(self.document.path.parent), IMAGE_FILES)
+        paths, _ = QFileDialog.getOpenFileNames(self, tr("Insert image"), str(self.document.path.parent),
+                                                tr(IMAGE_FILES))
         if paths:
             if page is None:
                 page, at = self._current, None
@@ -1726,7 +1750,7 @@ class DocumentView(QGraphicsView):
     def save_attachment(self, attachment: Attachment) -> None:
         """Save the file an attachment or audio note carries, where the user says."""
         start = self.document.path.parent / attachment_file_name(attachment.file_name)
-        target, _ = QFileDialog.getSaveFileName(self, "Save attachment as", str(start))
+        target, _ = QFileDialog.getSaveFileName(self, tr("Save attachment as"), str(start))
         if not target:
             return
         try:
@@ -1804,10 +1828,13 @@ class DocumentView(QGraphicsView):
     def new_text_box(self, page: int, at: tuple[float, float] | None) -> None:
         style = self.tool_settings.style_for("text")
         x, y = at or (72.0, 72.0)
-        width = max(min(200.0, self._pages[page].rect.width() - x), 40.0)
+        page_width, page_height = self._pages[page].rect.width(), self._pages[page].rect.height()
+        width = max(min(200.0, page_width - x), 40.0)
+        height = textlayout.fitted_height("", style.font_size, width, style.face())
+        x, y = max(min(x, page_width - width), 0.0), max(min(y, page_height - height), 0.0)  # as the Text tool does
         box = FreeText(
             page=page,
-            rect=(x, y, width, textlayout.fitted_height("", style.font_size, width, style.face())),
+            rect=(x, y, width, height),
             font_size=style.font_size,
             color=style.color,
             fill=style.fill,
@@ -1821,7 +1848,10 @@ class DocumentView(QGraphicsView):
         if text is not None and text.strip():
             style = self.tool_settings.style_for("note")
             x, y = at or (36.0, 36.0)
-            note = Note(page=page, position=(x - NOTE_SIZE / 2, y - NOTE_SIZE / 2), contents=text, color=style.color,
+            rect = self._pages[page].rect  # centred on the click, and on the page whole, as the Note tool puts it
+            position = (min(max(x - NOTE_SIZE / 2, 0.0), max(rect.width() - NOTE_SIZE, 0.0)),
+                        min(max(y - NOTE_SIZE / 2, 0.0), max(rect.height() - NOTE_SIZE, 0.0)))
+            note = Note(page=page, position=position, contents=text, color=style.color,
                         icon=style.note_icon, **self.common("note"))
             self.add_annotations([note], note.label)
 
@@ -2022,6 +2052,8 @@ class DocumentView(QGraphicsView):
             self.select(made)
 
     def delete_selected(self) -> None:
+        if self.document.read_only:  # Select works when only reading, so the Delete key reaches here
+            return
         deletable = [a for a in self.selected_annotations() if not a.locked]
         if deletable:
             self.undo_stack.push(RemoveAnnotations(self.store, deletable, "Delete"))
@@ -2192,6 +2224,10 @@ class DocumentView(QGraphicsView):
                 # A colour picked for a mixed selection is a border colour: a fill-only shape would not show it.
                 valid["border"] = True
             updated = replace(annotation, **valid)
+            if isinstance(annotation, FreeText) and "color" in valid and "border_color" not in changes and \
+                    annotation.border_width > 0 and annotation.border_color == annotation.color:
+                # A frame in the text's colour, as the callout tool draws it, follows it: nothing else recolours it.
+                updated = replace(updated, border_color=valid["color"])
             if isinstance(annotation, Ink) and annotation.widths and "width" in valid and annotation.width > 0:
                 factor = valid["width"] / annotation.width  # a pen with widths of its own keeps its shape, scaled
                 widths = tuple(tuple(w * factor for w in stroke) for stroke in annotation.widths)
@@ -2337,6 +2373,8 @@ class DocumentView(QGraphicsView):
         needed = textlayout.fitted_height(text, box.font_size, upright_w, box.face())
         # A turned box grows away from its first line, which stays where it was typed.
         updated = replace(box.with_height(needed if is_new else max(upright_h, needed)), contents=text)
+        # Grown past the page's edge, the box comes back onto it; a callout's tip stays on what it points at.
+        updated = replace(self._clamped(replace(updated, callout=()), updated.page), callout=updated.callout)
         if is_new:
             if text.strip():
                 self.add_annotations([updated], updated.label)
@@ -2353,6 +2391,7 @@ class DocumentView(QGraphicsView):
             remove_item(editor.frame)
             remove_item(editor)
             remove_item(editor.holder)
+            remove_item(editor.backdrop)
 
     def edit_note(self, note: Note | Caret) -> None:
         """The text of a note, or of a caret: the text to put in."""
@@ -2420,9 +2459,12 @@ class DocumentView(QGraphicsView):
         self._render_timer.start(delay_ms)
 
     def _pages_in(self, rect: QRectF):
-        first = max(0, bisect.bisect_right(self._tops, rect.top()) - 1)
-        for page in self._pages[first:]:
-            if page.y() > rect.bottom():
+        if not self._pages:
+            return
+        # The pages of a spread share one top: start from the left one, and stop on row tops, not page tops.
+        index = max(0, bisect.bisect_right(self._tops, rect.top()) - 1)
+        for page in self._pages[self._row_of[index][0]:]:
+            if self._tops[page.index] > rect.bottom():
                 break
             yield page
 
@@ -2480,8 +2522,8 @@ class DocumentView(QGraphicsView):
         3  bases of nearby pages
         4  tiles for the next zoom level up and down, so a wheel notch is instant
         """
-        if not self._pages:
-            return
+        if not self._pages or self.glide.state() == QVariantAnimation.State.Running:
+            return  # a glide's in-between zooms are never shown again: glide.finished renders where it lands
         visible = self.mapToScene(self.viewport().rect()).boundingRect()
         width, height = visible.width(), visible.height()
         ratio = self.viewport().devicePixelRatioF()
@@ -2585,6 +2627,7 @@ class DocumentView(QGraphicsView):
 
     def release(self) -> None:
         """Stop receiving renders, and let the tools and the text editor go; call before the document is closed."""
+        self.glide.stop()  # a zoom still gliding would ask for renders of the closed document again
         if self._editor is not None:  # closing without saving: what was typed goes with the document
             self._spent_editors.append(self._editor[0])
             self._editor = None

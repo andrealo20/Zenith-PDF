@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
 import shiboken6
 from PySide6.QtCore import QRectF, Qt
@@ -12,9 +13,31 @@ from PySide6.QtWidgets import QGraphicsItem, QGraphicsRectItem, QGraphicsTextIte
 from ..core import textlayout
 from ..core.annotations import TEXT_ASCENT, TEXT_PADDING, FreeText, quarter_turn
 from ..theme import themes
-from .annotation_items import qcolor
+from .annotation_items import paint_annotation, qcolor
 
 Z_EDITOR = 5
+
+
+class Backdrop(QGraphicsItem):
+    """The box being typed in without its text: its fill, frame and callout line, as they will be saved."""
+
+    def __init__(self, page: QGraphicsItem):
+        super().__init__(page)
+        self.box: FreeText | None = None
+
+    def set_box(self, box: FreeText) -> None:
+        self.prepareGeometryChange()
+        self.box = box
+
+    def boundingRect(self) -> QRectF:
+        if self.box is None:
+            return QRectF()
+        x, y, w, h = self.box.bounds()
+        return QRectF(x - 2, y - 2, w + 4, h + 4)
+
+    def paint(self, painter, option, widget=None) -> None:
+        if self.box is not None:
+            paint_annotation(painter, self.box)
 
 
 class TextBoxEditor(QGraphicsTextItem):
@@ -26,6 +49,9 @@ class TextBoxEditor(QGraphicsTextItem):
     """
 
     def __init__(self, box: FreeText, page: QGraphicsItem, on_finish: Callable[[str], None]):
+        # The box's own item hides while it is typed in: its fill (light text may need it), frame and callout stay.
+        self.backdrop = Backdrop(page)
+        self.backdrop.setZValue(Z_EDITOR)
         self.holder = QGraphicsRectItem(page)
         self.holder.setPen(QPen(Qt.PenStyle.NoPen))
         self.holder.setTransform(QTransform(*quarter_turn(box.rect, box.rotation)))
@@ -69,6 +95,7 @@ class TextBoxEditor(QGraphicsTextItem):
         w, h = self.box.upright_size()
         needed = textlayout.fitted_height(self.toPlainText(), self.box.font_size, w, self.box.face())
         self.frame.setRect(QRectF(0, 0, w, max(h, needed)))
+        self.backdrop.set_box(replace(self.box, contents="").with_height(max(h, needed)))
 
     def keyPressEvent(self, event) -> None:
         enter = event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
@@ -79,7 +106,8 @@ class TextBoxEditor(QGraphicsTextItem):
 
     def focusOutEvent(self, event) -> None:
         super().focusOutEvent(event)
-        self.finish()
+        if event.reason() != Qt.FocusReason.PopupFocusReason:  # its own context menu: still typing
+            self.finish()
 
     def finish(self) -> None:
         if not self._finished:
@@ -88,6 +116,6 @@ class TextBoxEditor(QGraphicsTextItem):
 
     def dispose(self) -> None:
         # A page reload may have cleared the scene, and deleted both, before this runs.
-        for item in (self.frame, self, self.holder):
+        for item in (self.frame, self, self.holder, self.backdrop):
             if shiboken6.isValid(item) and item.scene() is not None:
                 item.scene().removeItem(item)
