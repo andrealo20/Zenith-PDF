@@ -1320,6 +1320,8 @@ class DocumentView(QGraphicsView):
         view_pos = QPointF(event.pos())
         if self._over_editor(view_pos)[1]:
             super().contextMenuEvent(event)  # the text being typed has its own menu: cut, copy, paste
+            if self._editor is not None and alive(self._editor[0]):
+                self._editor[0].setFocus()  # back to the typing: some systems leave the focus elsewhere
             return
         self.finish_text_edit()  # a right click away from the box ends the typing, as a left click does
         item = self._annotation_item_at(view_pos)

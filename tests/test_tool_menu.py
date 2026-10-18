@@ -30,6 +30,11 @@ from zenith_pdf.ui.toolbar import ToolButton
 from zenith_pdf.ui.tools import DEFAULT_STYLES, OPTIONS
 
 
+def full_title(menu) -> str:
+    """The tool's name in the menu's header: elided where it doesn't fit, whole in the tooltip then."""
+    return menu.title.toolTip() or menu.title.text()
+
+
 def settle(ms=40):
     QTest.qWait(ms)
     QApplication.processEvents()
@@ -127,7 +132,7 @@ def test_a_click_turns_a_tool_on_and_another_opens_its_menu(workspace):
     settle(150)
     menu = toolbar.tool_menu
     assert menu.isVisible() and menu.key == "rectangle" and button.isChecked() and tools.tool == "rectangle"
-    assert menu.title.text() == "Rectangle"
+    assert full_title(menu) == "Rectangle"
     toolbar.toggle_menu("rectangle")  # the same again closes it
     assert not menu.isVisible()
 
@@ -170,7 +175,7 @@ def test_every_tool_has_a_menu_that_stays_open_inside_the_window(window, workspa
         menu = open_menu(workspace, spec.key)
         settle(60)  # nothing it builds may open a window of its own and close it
         assert menu.isVisible(), spec.key
-        assert menu.key == spec.key and menu.title.text() == spec.title
+        assert menu.key == spec.key and full_title(menu) == spec.title
         panel = menu.panel.geometry().translated(menu.pos())
         assert panel.left() >= bounds.left() + EDGE - 1 and panel.right() <= bounds.right() - EDGE + 1, spec.key
         assert panel.bottom() <= bounds.bottom() - FLOOR + 1, spec.key
@@ -235,7 +240,7 @@ def test_lock_subject_duplicate_and_remove(workspace):
     settle()
     keys = toolbar.keys()
     assert keys[keys.index("highlight") + 1] == "highlight#2" and tools.tool == "highlight#2"
-    assert menu.isVisible() and menu.key == "highlight#2" and menu.title.text() == "Text highlight 2"
+    assert menu.isVisible() and menu.key == "highlight#2" and full_title(menu) == "Text highlight 2"
     assert tools.subject("highlight#2") == "Important"  # the copy keeps the subject
     menu.editor.blocks["color"].findChild(tool_menu.ColourRow).activate(1)  # the second highlighter colour
     copy = toolbar._buttons["highlight#2"]
@@ -275,7 +280,7 @@ def test_a_pinned_menu_stays_while_drawing_and_follows_the_tool(window, workspac
     assert menu.isVisible() and [a for a in workspace.store.all() if isinstance(a, Ink)]
     tools.set_tool("rectangle")
     settle(200)
-    assert menu.isVisible() and menu.key == "rectangle" and menu.title.text() == "Rectangle"
+    assert menu.isVisible() and menu.key == "rectangle" and full_title(menu) == "Rectangle"
     menu.pin_button.click()
     assert not menu.pinned and window.settings.get("tool_menu_pinned") is False
 
@@ -451,7 +456,7 @@ def test_the_selection_style_menu_changes_dash_and_endings(workspace):
     bar.open_style()
     settle()
     menu = bar.style_menu
-    assert menu.isVisible() and menu.title.text() == "Line"
+    assert menu.isVisible() and full_title(menu) == "Line"
     assert {"dash", "endings", "color", "width"} <= set(menu.editor.blocks)
     menu.editor.blocks["dash"].choose("dotted")
     menu.editor.endings_switch.choose("head_start")
@@ -466,7 +471,7 @@ def test_the_selection_style_menu_changes_dash_and_endings(workspace):
     settle()
     bar.open_style()
     settle()
-    assert menu.isVisible() and menu.title.text() == "2 annotations"
+    assert menu.isVisible() and full_title(menu) == "2 annotations"
     assert "endings" not in menu.editor.blocks and "fill" not in menu.editor.blocks
     menu.close_menu()
     assert selection_options([shape]) == ("color", "fill", "width", "opacity", "pattern", "dash", "highlight")
