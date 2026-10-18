@@ -109,7 +109,7 @@ class FormDialog(messages.MessageDialog):
 
     def add_row(self, label: str, field):
         """A labelled row (a widget or a layout); an empty label lines the field up with the others."""
-        self.form.addRow(label, field)
+        self.form.addRow(tr(label), field)
         return field
 
 
@@ -735,7 +735,7 @@ class NewDocumentDialog(FormDialog):
             title, intro, action = ("New document", "Pick the paper. To start the same way another time, keep it "
                                     "as a template.", "Create")
         super().__init__(parent, title, intro, action, NEW_DOCUMENT_WIDTH)
-        self.name_field = QLineEdit(template.get("name", "Untitled"))
+        self.name_field = QLineEdit(template.get("name", tr("Untitled")))
 
         self.cards = QButtonGroup(self)
         cards = QHBoxLayout()
@@ -752,8 +752,8 @@ class NewDocumentDialog(FormDialog):
 
         self.paper = QComboBox()
         for name in PAPER_SIZES:
-            self.paper.addItem(tr(name))
-        self.paper.setCurrentText(template.get("paper", "A4"))
+            self.paper.addItem(tr(name), name)  # kept by its key: page_size knows "Letter", not "Lettre US"
+        self.paper.setCurrentIndex(max(self.paper.findData(template.get("paper", "A4")), 0))
         self.orientation = Segments(["Portrait", "Landscape"])
         self.orientation.set_current(1 if template.get("orientation") == "landscape" else 0)
         self.orientation.changed.connect(self._turn_cards)
@@ -785,8 +785,8 @@ class NewDocumentDialog(FormDialog):
 
     def spec(self) -> dict:
         return {
-            "name": self.name_field.text().strip() or "Untitled",
-            "paper": self.paper.currentText(),
+            "name": self.name_field.text().strip() or tr("Untitled"),
+            "paper": self.paper.currentData(),
             "orientation": "landscape" if self.orientation.current() == 1 else "portrait",
             "kind": self.kind(),
             "pages": self.count.value(),

@@ -522,7 +522,7 @@ class RecordDialog(QDialog):
 def choose_audio_file(parent, start_dir: str) -> tuple[str, bytes] | None:
     """Ask for a sound file; (file name, bytes), or None if cancelled or unreadable."""
     patterns = " ".join(f"*{suffix}" for suffix in AUDIO_SUFFIXES)
-    path, _ = QFileDialog.getOpenFileName(parent, "Attach an audio file", start_dir,
+    path, _ = QFileDialog.getOpenFileName(parent, tr("Attach an audio file"), start_dir,
                                           f"Audio files ({patterns});;All files (*)")
     if not path:
         return None

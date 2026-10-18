@@ -633,7 +633,8 @@ class SignatureDialog(QDialog):
         self._refresh_ok()
 
     def _choose_picture(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Signature picture", str(Path.home() / "Pictures"), IMAGE_FILES)
+        path, _ = QFileDialog.getOpenFileName(self, tr("Signature picture"), str(Path.home() / "Pictures"),
+                                              tr(IMAGE_FILES))
         if path:
             self.picture_path = path
             self._show_picture()
@@ -750,7 +751,8 @@ class CameraDialog(QDialog):
             self.accept()
 
     def _choose(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Photo", str(self._folders[0] if self._folders else Path.home()),
+        path, _ = QFileDialog.getOpenFileName(self, tr("Photo"),
+                                              str(self._folders[0] if self._folders else Path.home()),
                                               IMAGE_FILES)
         if path:
             self.photo = path
@@ -897,7 +899,7 @@ class LiveCameraDialog(QDialog):
 
     def _choose(self) -> None:
         pictures = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.PicturesLocation)
-        path, _ = QFileDialog.getOpenFileName(self, "Photo", pictures or str(Path.home()), IMAGE_FILES)
+        path, _ = QFileDialog.getOpenFileName(self, tr("Photo"), pictures or str(Path.home()), tr(IMAGE_FILES))
         if path:
             self.photo = path
             self.temporary = False

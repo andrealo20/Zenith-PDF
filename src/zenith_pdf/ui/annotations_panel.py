@@ -283,7 +283,7 @@ class AnnotationsPanel(QWidget):
             return
         default = str(self._document.path.with_name(f"{self._document.path.stem} annotations.csv"))
         path, chosen = QFileDialog.getSaveFileName(
-            self, "Export annotations", default, "CSV spreadsheet (*.csv);;Plain text (*.txt)"
+            self, tr("Export annotations"), default, tr("CSV spreadsheet (*.csv);;Plain text (*.txt)")
         )
         if not path:
             return

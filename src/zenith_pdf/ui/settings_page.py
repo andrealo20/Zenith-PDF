@@ -142,6 +142,7 @@ class Row(QFrame):
         if title:
             heading = QLabel(tr(title))
             heading.setObjectName("SettingTitle")
+            heading.setWordWrap(True)  # a long title on one line would set the page's width and push the control out
             grid.addWidget(heading, rows, 0)
             rows += 1
         if description:
@@ -712,7 +713,8 @@ class SettingsWindow(QDialog):
                   folder, "location directory", below=True))
 
     def _choose_new_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Folder for new documents", self._settings.new_document_folder)
+        folder = QFileDialog.getExistingDirectory(self, tr("Folder for new documents"),
+                                                  self._settings.new_document_folder)
         if folder:
             self._settings.set("new_folder", folder)
 

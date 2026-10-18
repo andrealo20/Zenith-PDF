@@ -101,7 +101,7 @@ class ToolForm(messages.MessageDialog):
             box.addItem(tr(text), value)
         if default is not None:
             box.setCurrentIndex(max(box.findData(default), 0))
-        self._form.addRow(label, box)
+        self._form.addRow(tr(label), box)
         self._getters[key] = box.currentData
         return box
 
@@ -113,7 +113,7 @@ class ToolForm(messages.MessageDialog):
         box.setRange(low, high)
         box.setValue(default)
         box.setSuffix(suffix)
-        self._form.addRow(label, box)
+        self._form.addRow(tr(label), box)
         self._getters[key] = box.value
         return box
 
@@ -122,7 +122,7 @@ class ToolForm(messages.MessageDialog):
         edit.setPlaceholderText(tr(placeholder))
         if password:
             edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self._form.addRow(label, edit)
+        self._form.addRow(tr(label), edit)
         self._getters[key] = lambda: edit.text()
         return edit
 
@@ -135,7 +135,7 @@ class ToolForm(messages.MessageDialog):
 
     def color(self, key: str, label: str, default) -> ColorButton:
         button = ColorButton(default)
-        self._form.addRow(label, button)
+        self._form.addRow(tr(label), button)
         self._getters[key] = lambda: button.color
         return button
 
@@ -154,7 +154,7 @@ class ToolForm(messages.MessageDialog):
         layout.setSpacing(8)
         layout.addWidget(box)
         layout.addWidget(pick, 1)
-        self._form.addRow(label, row)
+        self._form.addRow(tr(label), row)
 
         def chosen() -> list[int]:
             kind = box.currentData()
@@ -310,7 +310,7 @@ def _edit(workspace: Workspace, label: str, operation) -> bool:
 
 
 def _folder(window, title: str, start: Path) -> Path | None:
-    folder = QFileDialog.getExistingDirectory(window, title, str(start))
+    folder = QFileDialog.getExistingDirectory(window, tr(title), str(start))
     return Path(folder) if folder else None
 
 
@@ -635,8 +635,8 @@ def export_text(window: MainWindow) -> None:
     values = form.run()
     if values is None:
         return
-    target, _ = QFileDialog.getSaveFileName(window, "Save text as", str(document.path.with_suffix(".txt")),
-                                            "Text files (*.txt)")
+    target, _ = QFileDialog.getSaveFileName(window, tr("Save text as"), str(document.path.with_suffix(".txt")),
+                                            tr("Text files (*.txt)"))
     if not target:
         return
     parts = []
@@ -652,8 +652,8 @@ def export_text(window: MainWindow) -> None:
 
 
 def images_to_pdf(window: MainWindow) -> None:
-    paths, _ = QFileDialog.getOpenFileNames(window, "Pictures for the new PDF", window.settings.last_directory,
-                                            IMAGE_FILES)
+    paths, _ = QFileDialog.getOpenFileNames(window, tr("Pictures for the new PDF"), window.settings.last_directory,
+                                            tr(IMAGE_FILES))
     if not paths:
         return
     form = ToolForm("Images to PDF", f"Makes a new document with one page for each of the {len(paths)} "
@@ -1122,7 +1122,7 @@ class AttachmentsDialog(messages.MessageDialog):
     def add(self) -> None:
         import pikepdf
 
-        paths, _ = QFileDialog.getOpenFileNames(self, "Attach files", str(self._workspace.document.path.parent))
+        paths, _ = QFileDialog.getOpenFileNames(self, tr("Attach files"), str(self._workspace.document.path.parent))
         if not paths:
             return
 
@@ -1137,7 +1137,8 @@ class AttachmentsDialog(messages.MessageDialog):
         names = self._selected()
         if len(names) != 1:
             return
-        target, _ = QFileDialog.getSaveFileName(self, "Save attachment", str(self._workspace.document.path.parent / names[0]))
+        target, _ = QFileDialog.getSaveFileName(self, tr("Save attachment"),
+                                                str(self._workspace.document.path.parent / names[0]))
         if not target:
             return
         try:
@@ -1309,7 +1310,8 @@ def compress(window: MainWindow) -> None:
 
 
 def repair(window: MainWindow) -> None:
-    path, _ = QFileDialog.getOpenFileName(window, "Repair a PDF", window.settings.last_directory, "PDF documents (*.pdf)")
+    path, _ = QFileDialog.getOpenFileName(window, tr("Repair a PDF"), window.settings.last_directory,
+                                          tr("PDF documents (*.pdf)"))
     if not path:
         return
     source = Path(path)
@@ -1402,7 +1404,9 @@ class ToolTile(QFrame):
         self.setFixedSize(TILE_WIDTH, max(64, lines + 20))
 
     def matches(self, words: list[str]) -> bool:
-        text = f"{self.tool.title} {self.tool.description} {self.tool.group}".lower()
+        # In English and in the language shown, as the user may type either (as Settings' search does).
+        t = self.tool
+        text = f"{t.title} {t.description} {t.group} {tr(t.title)} {tr(t.description)} {tr(t.group)}".lower()
         return all(word in text for word in words)
 
     def mouseReleaseEvent(self, event) -> None:

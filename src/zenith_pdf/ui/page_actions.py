@@ -12,6 +12,7 @@ from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication, QFileDialog, QProgressDialog
 
+from ..core.i18n import tr
 from ..core import ocr, textlayout
 from ..core.annotations import FreeText
 from ..core.pages import TEMPLATES
@@ -99,7 +100,8 @@ class PageActions(QObject):
     def extract_pages(self, pages: list[int]) -> None:
         """Save copies of these pages, with their annotations, as a new PDF."""
         default = self._document.path.with_name(f"{self._document.path.stem} (pages).pdf")
-        target, _ = QFileDialog.getSaveFileName(self._view, "Save pages as", str(default), "PDF documents (*.pdf)")
+        target, _ = QFileDialog.getSaveFileName(self._view, tr("Save pages as"), str(default),
+                                                tr("PDF documents (*.pdf)"))
         if not target:
             return
         try:
@@ -109,8 +111,8 @@ class PageActions(QObject):
                           detail=error.strerror or str(error))
 
     def insert_pdf(self, after: int) -> None:
-        path, _ = QFileDialog.getOpenFileName(self._view, "Insert pages from", str(self._document.path.parent),
-                                              "PDF documents (*.pdf)")
+        path, _ = QFileDialog.getOpenFileName(self._view, tr("Insert pages from"), str(self._document.path.parent),
+                                              tr("PDF documents (*.pdf)"))
         if not path:
             return
         name = Path(path).name
@@ -140,7 +142,8 @@ class PageActions(QObject):
         self._edit("Insert pages", lambda a: self._document.insert_pdf(a, after + 1, data, password), after + 1)
 
     def insert_image(self, after: int) -> None:
-        path, _ = QFileDialog.getOpenFileName(self._view, "Insert image", str(self._document.path.parent), IMAGE_FILES)
+        path, _ = QFileDialog.getOpenFileName(self._view, tr("Insert image"), str(self._document.path.parent),
+                                              tr(IMAGE_FILES))
         if path:
             self._insert_image(after, QImage(path))
 
@@ -246,7 +249,7 @@ class PageActions(QObject):
         settings = self._workspace.settings
         language = settings.get("ocr_language") if settings is not None else ""
         dpi = settings.get("ocr_dpi") if settings is not None else ocr.OCR_DPI
-        progress = QProgressDialog("Recognising text…", "Cancel", 0, len(pages), self._view)
+        progress = QProgressDialog(tr("Recognising text…"), tr("Cancel"), 0, len(pages), self._view)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
         results: dict[int, list] = {}

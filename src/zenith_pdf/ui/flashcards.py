@@ -182,7 +182,7 @@ def flashcards_for(view) -> str | None:
         study.exec()
         study.deleteLater()
     elif choice == "anki" and cards:
-        target, _ = QFileDialog.getSaveFileName(view, "Save flashcards for Anki",
+        target, _ = QFileDialog.getSaveFileName(view, tr("Save flashcards for Anki"),
                                                 str(path.with_name(f"{path.stem} flashcards.txt")),
                                                 "Anki text (*.txt)")
         if target:

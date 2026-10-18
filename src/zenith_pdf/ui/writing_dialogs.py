@@ -415,7 +415,7 @@ def choose_vault(parent, settings) -> Path | None:
             if settings is not None:
                 settings.set("obsidian_vault", str(vault))
             return vault
-    folder = QFileDialog.getExistingDirectory(parent, "Your Obsidian vault", str(Path.home()))
+    folder = QFileDialog.getExistingDirectory(parent, tr("Your Obsidian vault"), str(Path.home()))
     if not folder:
         return None
     if settings is not None:
@@ -459,7 +459,8 @@ def study_notes(view: DocumentView) -> str | None:
         QApplication.clipboard().setText(notes)
         view.message.emit("Study notes copied.")
     elif choice == "save":
-        target, _ = QFileDialog.getSaveFileName(view, "Save study notes", str(path.with_name(f"{path.stem} notes.md")),
+        target, _ = QFileDialog.getSaveFileName(view, tr("Save study notes"),
+                                                str(path.with_name(f"{path.stem} notes.md")),
                                                 "Markdown (*.md);;Text (*.txt)")
         if target:
             Path(target).write_text(notes, encoding="utf-8")

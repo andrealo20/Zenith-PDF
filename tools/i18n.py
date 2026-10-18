@@ -4,9 +4,10 @@
                                      each language the ones it still lacks (locales/missing-<code>.json)
     python tools/i18n.py wrap FILE   pass the text of the Qt calls that show it through tr(), in FILE
 
-A text shown with QLabel, a button, setText, setToolTip, a window title, a menu entry, a list item or
-drawText goes through core.i18n.tr when it is shown, so the source stays English. extract finds what to
-translate: every string and f-string of the app that reads as words (f-strings as templates, "Page {}").
+A text shown with QLabel, a button, setText, setToolTip, a window title, a menu entry, a list item, the caption
+of a file dialog, a progress dialog or drawText goes through core.i18n.tr when it is shown, so the source stays
+English. extract finds what to translate: every string and f-string of the app that reads as words (f-strings as
+templates, "Page {}").
 """
 
 from __future__ import annotations
@@ -24,8 +25,9 @@ LOCALES = PACKAGE / "locales"
 # Calls that show the text in these positional arguments.
 FIRST = {"QLabel", "QPushButton", "QCheckBox", "QRadioButton", "QGroupBox", "QListWidgetItem", "setText", "setToolTip",
          "setWindowTitle", "setPlaceholderText", "setTitle", "setStatusTip", "show_message", "setHtml",
-         "setMarkdown", "showMessage"}
-SECOND = {"setTabText", "setItemText"}
+         "setMarkdown", "showMessage", "QProgressDialog"}
+SECOND = {"setTabText", "setItemText", "getOpenFileName", "getOpenFileNames", "getSaveFileName", "getExistingDirectory",
+          "QProgressDialog"}  # a progress dialog shows both: its text, then its button
 FLEXIBLE = {"addAction", "addMenu", "addItem", "QAction", "insertItem"}  # (text, ...) or (icon, text, ...)
 LAST = {"drawText"}
 TEXT_NAMES = {"text", "label", "title", "name", "tip", "tooltip", "caption", "heading", "message", "detail",
@@ -70,10 +72,9 @@ def _targets(call: ast.Call) -> list:
     args = call.args
     if not args or any(isinstance(a, ast.Starred) for a in args):
         return []
-    if name in FIRST:
-        return [args[0]] if text_like(args[0]) else []
-    if name in SECOND:
-        return [args[1]] if len(args) > 1 and text_like(args[1]) else []
+    if name in FIRST or name in SECOND:
+        found = [args[0]] if name in FIRST and text_like(args[0]) else []
+        return found + ([args[1]] if name in SECOND and len(args) > 1 and text_like(args[1]) else [])
     if name in LAST:
         return [args[-1]] if len(args) >= 2 and text_like(args[-1]) else []
     if name in FLEXIBLE:

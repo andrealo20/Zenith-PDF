@@ -593,7 +593,8 @@ class DocBuilder(QWidget):
         self.refresh(select=set(select))
 
     def open_dialog(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(self, "Add PDF files", str(Path.home() / "Documents"), "PDF documents (*.pdf)")
+        paths, _ = QFileDialog.getOpenFileNames(self, tr("Add PDF files"), str(Path.home() / "Documents"),
+                                                tr("PDF documents (*.pdf)"))
         self.add_files(paths)
 
     def add_files(self, paths) -> None:
@@ -699,7 +700,8 @@ class DocBuilder(QWidget):
 
     def _save(self, entries: list[core.Entry], default_name: str) -> Path | None:
         folder = self.sources[self.order[0]].path.parent if self.order else Path.home() / "Documents"
-        target, _ = QFileDialog.getSaveFileName(self, "Save PDF", str(folder / f"{default_name}.pdf"), "PDF documents (*.pdf)")
+        target, _ = QFileDialog.getSaveFileName(self, tr("Save PDF"), str(folder / f"{default_name}.pdf"),
+                                                tr("PDF documents (*.pdf)"))
         if not target:
             return None
         try:
