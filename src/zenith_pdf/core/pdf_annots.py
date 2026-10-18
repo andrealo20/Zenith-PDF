@@ -682,9 +682,13 @@ def write_annotation(pdf: pikepdf.Pdf, obj: Dictionary, annotation: Annotation, 
     obj.NM = String(a.id)
     obj.M = String(pdf_date())
     obj.F = (int(obj.get("/F", 0)) & ~FLAG_HIDDEN & ~FLAG_LOCKED) | FLAG_PRINT | (FLAG_LOCKED if a.locked else 0)
+    if "/RC" in obj and _text(obj.get("/Contents")) != a.contents:
+        del obj["/RC"]  # another app's rich text, which viewers show instead: stale once the text changes
     obj.Contents = String(a.contents)
     if a.author:
         obj.T = String(a.author)
+    elif "/T" in obj:
+        del obj["/T"]
     if "/CreationDate" not in obj:
         obj.CreationDate = String(pdf_date())
     if a.opacity < 1:
@@ -907,7 +911,8 @@ def write_page(
     Returns the managed ids in that order.
     """
     page = pdf.pages[page_index].obj
-    old = list(page.get("/Annots", Array()))
+    # Nulls and references to missing objects (pikepdf gives None for both) are dropped.
+    old = [obj for obj in page.get("/Annots", Array()) if isinstance(obj, Dictionary)]
     current = {a.id for a in annotations}
     owned_keys = {key(sources[i]): i for i in owned if i in sources}
     deleted = {k for k, i in owned_keys.items() if i not in current}
@@ -916,7 +921,7 @@ def write_page(
     for obj in old:
         if key(obj) in owned_keys:
             continue  # managed: re-added below in order, unless deleted
-        parent = obj.get("/Parent") if isinstance(obj, Dictionary) else None
+        parent = obj.get("/Parent")
         if parent is not None and str(obj.get("/Subtype", "")) == "/Popup" and key(parent) in deleted:
             continue  # the popup of a deleted annotation
         result.append(obj)
@@ -951,6 +956,10 @@ def _link_groups(annotations: list[Annotation], sources: dict[str, Dictionary]) 
         if key(head) != key(obj):
             obj.IRT = head
             obj.RT = Name.Group
+        elif obj.get("/RT") == Name.Group:  # a new head: its link to a removed one would keep that in the file
+            for k in ("/IRT", "/RT"):
+                if k in obj:
+                    del obj[k]
 
 
 def groups_of(objects: list[tuple[Dictionary, Annotation]]) -> dict[str, str]:
