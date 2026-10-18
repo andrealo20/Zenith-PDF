@@ -6,9 +6,8 @@ import json
 
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
 
+from conftest import wait_for
 from zenith_pdf import __version__
 from zenith_pdf.app import create_app
 from zenith_pdf.core import releases, updates
@@ -107,15 +106,6 @@ def test_installing_runs_the_installer_or_swaps_the_appimage(tmp_path, monkeypat
     with pytest.raises(UpdateError):
         updates.install(setup, "")
     assert updates.install_kind() == ""  # run from source: it can't replace itself
-
-
-def wait_for(condition, ms=3000):
-    for _ in range(ms // 10):
-        QApplication.processEvents()
-        if condition():
-            return True
-        QTest.qWait(10)
-    return condition()
 
 
 @pytest.fixture

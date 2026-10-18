@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.core.annotations import FreeText, Redaction, Shape
 from zenith_pdf.settings import Settings
@@ -31,11 +32,6 @@ from zenith_pdf.ui import messages, widgets
 from zenith_pdf.ui.new_file import NewFilePanel
 from zenith_pdf.ui.widgets import BAR_BUTTON, MOST_ALPHA, FloatingBar, IconButton, contrast, glass_alpha, luminance
 from zenith_pdf.ui.workspace import SnappingPopup
-
-
-def settle(ms=60):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 def idle(window, view, timeout=10.0):
@@ -104,7 +100,7 @@ def test_scrolling_moves_the_glass_at_once_and_resamples_while_it_goes(workspace
     idle(workspace.window(), view)
     scrollbar = view.verticalScrollBar()
     scrollbar.setValue(0)
-    settle()
+    settle(60)
     samples = record_samples(bar, scrollbar)
     misplaced = []
     steps = []

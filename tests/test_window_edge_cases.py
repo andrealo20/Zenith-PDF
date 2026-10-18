@@ -9,18 +9,14 @@ from PySide6.QtCore import QSettings
 from PySide6.QtGui import QPdfWriter
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QFileDialog, QTabBar
+from PySide6.QtWidgets import QFileDialog, QTabBar
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.core.i18n import set_language, tr
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui import main_window, messages
 from zenith_pdf.ui.main_window import MainWindow
-
-
-def settle(ms=30):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 @pytest.fixture

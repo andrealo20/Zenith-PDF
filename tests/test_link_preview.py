@@ -7,16 +7,12 @@ import traceback
 import pytest
 from PySide6.QtCore import QPoint, QPointF, QSettings, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QToolTip
+from PySide6.QtWidgets import QToolTip
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui.link_preview import CAPTION_BELOW, COLUMN, HEIGHT, LINE_CLEARANCE, preview_area, whole_lines
-
-
-def settle(ms=30):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 @pytest.fixture(scope="module")

@@ -5,8 +5,9 @@ import shutil
 import pytest
 from PySide6.QtCore import QPoint, QPointF, QSettings, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QDialog
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.core import spelling, writing
 from zenith_pdf.core.annotations import FreeText, Note, TextMarkup
@@ -23,11 +24,6 @@ from zenith_pdf.ui.tool_catalog import CATALOG
 
 HAS_ENGLISH = spelling.available("en")
 needs_english = pytest.mark.skipif(not HAS_ENGLISH, reason="the system has no English dictionary here")
-
-
-def settle(ms=30):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 # The search ---------------------------------------------------------------------------------

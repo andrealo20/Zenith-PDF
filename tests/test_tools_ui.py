@@ -5,8 +5,8 @@ import shutil
 import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.core import builder as core
 from zenith_pdf.core.annotations import Shape
@@ -14,11 +14,6 @@ from zenith_pdf.core.document import Document
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui.doc_builder import DocBuilder
 from zenith_pdf.ui.new_file import NewFilePanel
-
-
-def settle(ms=60):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 @pytest.fixture(scope="module")
@@ -50,7 +45,7 @@ def test_selection_bar_follows_the_selection(workspace):
     shapes = [Shape(page=0, rect=(100, 300 + 10 * i, 120, 80)) for i in range(2)]
     view.add_annotations(shapes, "Shapes")
     view.reveal_annotation(shapes[0].id)
-    settle()
+    settle(60)
     bar = workspace.selection_bar
     assert bar.isVisible() and bar.count.text() == "1"
     shape_on_screen = view.selection_rect()
@@ -73,7 +68,7 @@ def test_selection_bar_follows_the_selection(workspace):
     workspace.undo_stack.undo()
     workspace.undo_stack.undo()
     view.scene().clearSelection()
-    settle()
+    settle(60)
     assert not bar.isVisible()
 
 

@@ -17,6 +17,7 @@ from PySide6.QtGui import QColor, QImage, QTextCursor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QFileDialog, QLabel, QMenu, QPushButton
 
+from conftest import wait_for
 from zenith_pdf.core import audio
 from zenith_pdf.core.audio import AudioError, Player, Recorder, wav_bytes, wav_seconds
 from zenith_pdf.ui import audio_dialog, insert_dialogs
@@ -85,14 +86,6 @@ class FakeMci:
         return ""
 
 
-def wait_for(condition, timeout: float = 3.0) -> None:
-    deadline = time.monotonic() + timeout
-    while not condition() and time.monotonic() < deadline:
-        QApplication.processEvents()
-        time.sleep(0.01)
-    assert condition()
-
-
 def fake_players(made: list, length_ms: int = 1500):
     def factory(data, name):
         player = Player(data, name, send=FakeMci(length_ms))
@@ -137,7 +130,7 @@ def test_recorder_records_stops_and_clears():
     recorder = Recorder(backend=mic)
     recorder.start()
     assert recorder.recording and mic.opened == 1
-    wait_for(lambda: recorder.seconds > 0.2)
+    assert wait_for(lambda: recorder.seconds > 0.2)
     assert recorder.heard and 0.1 < recorder.level < 0.2
     recorder.stop()
     recorder.stop()  # twice is fine
@@ -146,7 +139,7 @@ def test_recorder_records_stops_and_clears():
     data = recorder.wav()
     assert wav_seconds(data) == pytest.approx(seconds, abs=0.001)
     recorder.start()  # carries on the same recording
-    wait_for(lambda: recorder.seconds > seconds + 0.1)
+    assert wait_for(lambda: recorder.seconds > seconds + 0.1)
     recorder.clear()
     assert recorder.seconds == 0.0 and not recorder.heard and not recorder.recording
     assert wav_seconds(recorder.wav()) == 0.0
@@ -172,11 +165,11 @@ def test_a_slow_driver_never_gets_two_workers(monkeypatch):
     recorder.stop()  # bounded: the window never freezes on a hung driver
     assert time.monotonic() - started < 1.0
     mic.release.set()
-    wait_for(lambda: mic.closed == 1)  # the late worker closes the device at once and keeps nothing
+    assert wait_for(lambda: mic.closed == 1)  # the late worker closes the device at once and keeps nothing
     assert recorder.seconds == 0.0 and not recorder.recording
     mic.release.set()
     recorder.start()
-    wait_for(lambda: recorder.seconds > 0.1)
+    assert wait_for(lambda: recorder.seconds > 0.1)
     recorder.stop()
     assert mic.opened == 2 and recorder.heard
 
@@ -185,7 +178,7 @@ def test_recorder_stops_by_itself_at_the_limit():
     recorder = Recorder(backend=FakeMic())
     recorder._max_bytes = 22050 * 2 // 4  # a quarter of a second
     recorder.start()
-    wait_for(lambda: not recorder.recording)
+    assert wait_for(lambda: not recorder.recording)
     assert recorder.seconds == pytest.approx(0.25, abs=0.001)
     recorder.start()  # nothing left to record into
     assert not recorder.recording
@@ -194,7 +187,7 @@ def test_recorder_stops_by_itself_at_the_limit():
 def test_silence_is_not_heard():
     recorder = Recorder(backend=FakeMic(chunk=bytes(2204)))
     recorder.start()
-    wait_for(lambda: recorder.seconds > 0.2)
+    assert wait_for(lambda: recorder.seconds > 0.2)
     recorder.stop()
     assert not recorder.heard
 
@@ -268,7 +261,7 @@ def test_record_dialog_records_and_adds(qt_app):
     dialog.record_button.click()
     assert dialog.state == "recording" and dialog.stop_button.isVisibleTo(dialog)
     assert dialog.focusWidget() is dialog.stop_button  # Space stops, as it started
-    wait_for(lambda: dialog.recorder.seconds > 1.2)
+    assert wait_for(lambda: dialog.recorder.seconds > 1.2)
     dialog.stop_button.click()
     assert dialog.state == "recorded" and dialog.add_button.isEnabled() and dialog.add_button.isDefault()
     assert dialog.again_button.isVisibleTo(dialog) and not dialog.record_button.isVisibleTo(dialog)
@@ -289,7 +282,7 @@ def test_record_dialog_records_and_adds(qt_app):
 def test_record_again_starts_over(qt_app):
     dialog = RecordDialog(recorder=Recorder(backend=FakeMic()), player_factory=fake_players([]))
     dialog.record_button.click()
-    wait_for(lambda: dialog.recorder.seconds > 0.5)
+    assert wait_for(lambda: dialog.recorder.seconds > 0.5)
     dialog.stop_button.click()
     first = dialog.recorder.seconds
     dialog.again_button.click()
@@ -301,7 +294,7 @@ def test_cancelling_while_recording_stops_and_drops_it(qt_app):
     mic = FakeMic()
     dialog = RecordDialog(recorder=Recorder(backend=mic))
     dialog.record_button.click()
-    wait_for(lambda: dialog.recorder.seconds > 0.1)
+    assert wait_for(lambda: dialog.recorder.seconds > 0.1)
     dialog.reject()
     assert not dialog.recorder.recording and dialog.recorder.seconds == 0.0 and mic.closed == 1
     assert dialog.audio() is None
@@ -314,7 +307,7 @@ def test_a_long_take_is_confirmed_before_cancel_drops_it(qt_app, monkeypatch):
     dialog = RecordDialog(recorder=Recorder(backend=FakeMic()))
     dialog.show()
     dialog.record_button.click()
-    wait_for(lambda: dialog.recorder.seconds > 0.5)
+    assert wait_for(lambda: dialog.recorder.seconds > 0.5)
     answers.append(None)  # Go back
     dialog.reject()
     assert dialog.isVisible() and dialog.state == "recorded" and dialog.recorder.seconds > 0.5
@@ -326,7 +319,7 @@ def test_a_long_take_is_confirmed_before_cancel_drops_it(qt_app, monkeypatch):
 def test_no_sound_and_no_device_messages(qt_app):
     dialog = RecordDialog(recorder=Recorder(backend=FakeMic(chunk=bytes(2204))))
     dialog.record_button.click()
-    wait_for(lambda: dialog.message == audio_dialog.NO_SOUND)
+    assert wait_for(lambda: dialog.message == audio_dialog.NO_SOUND)
     assert dialog.status_icon.isVisibleTo(dialog)
     if audio_dialog.PRIVACY_SETTINGS is not None:  # Linux has no such page to link to
         assert audio_dialog.PRIVACY_SETTINGS[1] in dialog.status.text()  # a link to the system's page
@@ -355,7 +348,7 @@ def test_a_take_that_cannot_be_played_can_still_be_added(qt_app):
 
     dialog = RecordDialog(recorder=Recorder(backend=FakeMic()), player_factory=refuse)
     dialog.record_button.click()
-    wait_for(lambda: dialog.recorder.seconds > 0.2)
+    assert wait_for(lambda: dialog.recorder.seconds > 0.2)
     dialog.stop_button.click()
     dialog.play_button.click()
     assert dialog.state == "recorded" and "No player." in dialog.message and not dialog.play_button.isEnabled()

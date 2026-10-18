@@ -6,8 +6,8 @@ import sys
 import pytest
 from PySide6.QtCore import QPoint, QPointF, QRect, QSettings, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.core import textclean
 from zenith_pdf.core.annotations import Shape, TextMarkup
@@ -18,11 +18,6 @@ from zenith_pdf.ui import messages
 from zenith_pdf.ui.text_bar import COLOUR_NAMES
 from zenith_pdf.ui.tool_menu import HIGHLIGHTER
 from zenith_pdf.ui.tools import DEFAULT_STYLES
-
-
-def settle(ms=30):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 @pytest.fixture(scope="module")

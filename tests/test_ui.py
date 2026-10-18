@@ -1,21 +1,9 @@
-import time
-
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication
 
+from conftest import wait_for
 from zenith_pdf.app import create_app
 from zenith_pdf.settings import Settings
-
-
-def wait_until(condition, timeout=10.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        QApplication.processEvents()
-        if condition():
-            return True
-        time.sleep(0.01)
-    return False
 
 
 @pytest.fixture(scope="module")
@@ -45,7 +33,7 @@ def test_open_navigate_and_close_tabs(window, sample_pdf, tmp_path):
     view.goto_page(3)
     assert view.current_page == 3
     page = view._pages[3]
-    assert wait_until(lambda: window.renderer.is_idle() and page.base is not None and view._cache.levels(3))
+    assert wait_for(lambda: window.renderer.is_idle() and page.base is not None and view._cache.levels(3))
 
     window.close_current_tab()
     window.close_tab(0)
@@ -62,7 +50,7 @@ def test_tiles_land_on_screen_exactly_where_the_page_is(window, sample_pdf):
     view.set_zoom(2.5)
     view.goto_page(0)
     view.horizontalScrollBar().setValue(0)  # the page is wider than the view: show its left edge
-    assert wait_until(lambda: window.renderer.is_idle() and view.missing_tiles() == 0)
+    assert wait_for(lambda: window.renderer.is_idle() and view.missing_tiles() == 0)
 
     grab = window.grab().toImage()
     ratio = grab.devicePixelRatio()
@@ -86,7 +74,7 @@ def test_search_highlights_every_hit(window, sample_pdf):
     workspace.show_search()
     workspace.search.field.setText("needle")
     workspace.search.start()
-    assert wait_until(lambda: workspace.search.status.text() == "4 results")
+    assert wait_for(lambda: workspace.search.status.text() == "4 results")
     assert len(workspace.view._hit_items) == 4
     workspace.search.step(1)
     assert workspace.view.current_page == 1

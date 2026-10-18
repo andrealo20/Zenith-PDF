@@ -1,28 +1,16 @@
 """The multi-process render pool."""
 
-import time
-
 import pytest
 from PySide6.QtCore import QRectF
 from PySide6.QtGui import QImage, QPainter
-from PySide6.QtWidgets import QApplication
 
+from conftest import wait_for
 from zenith_pdf.core.document import Document
 from zenith_pdf.core.render import RenderPool
 from zenith_pdf.core.render_worker import full_size
 from zenith_pdf.ui.tiles import render_area, tile_grid
 
 SCALE = 3.1  # not a round number, so tiles at the edges are partial
-
-
-def wait_for(condition, timeout=20.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        QApplication.processEvents()
-        if condition():
-            return True
-        time.sleep(0.01)
-    return False
 
 
 @pytest.fixture(scope="module")

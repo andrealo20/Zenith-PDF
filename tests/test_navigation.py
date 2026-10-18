@@ -7,8 +7,8 @@ import pikepdf
 import pytest
 from PySide6.QtCore import QPointF, QSettings, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.core.annotations import Link, new_id
 from zenith_pdf.core.document import Document
@@ -16,11 +16,6 @@ from zenith_pdf.core.platforms import native_keys
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui.commands import ChangeAnnotations
 from zenith_pdf.ui.history import LIMIT, History, Spot
-
-
-def settle(ms=30):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 @pytest.fixture(scope="module")

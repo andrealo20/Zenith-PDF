@@ -9,6 +9,7 @@ from PySide6.QtGui import QCursor, QKeySequence, QMouseEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.core.annotations import Shape
 from zenith_pdf.core.platforms import key
@@ -16,11 +17,6 @@ from zenith_pdf.settings import Settings
 from zenith_pdf.ui import reading
 from zenith_pdf.ui.document_view import HOLD_MS
 from zenith_pdf.ui.widgets import FADE_MS, Fade
-
-
-def settle(ms=30):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 def faded():

@@ -8,6 +8,7 @@ from PySide6.QtGui import QContextMenuEvent, QKeyEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.core.annotations import Ink, Line, Shape
 from zenith_pdf.settings import Settings
@@ -33,11 +34,6 @@ from zenith_pdf.ui.tools import DEFAULT_STYLES, OPTIONS
 def full_title(menu) -> str:
     """The tool's name in the menu's header: elided where it doesn't fit, whole in the tooltip then."""
     return menu.title.toolTip() or menu.title.text()
-
-
-def settle(ms=40):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 class Mouse:
@@ -80,7 +76,7 @@ def workspace(window, sample_pdf, tmp_path):
     shutil.copy(sample_pdf, path)
     window.open_file(path)
     workspace = window.current_workspace()
-    settle()
+    settle(40)
     yield workspace
     menu = workspace.toolbar.tool_menu
     if menu is not None:
@@ -108,7 +104,7 @@ def open_menu(workspace, key):
     if not BY_KEY[base_of(key)].action:
         workspace.tool_settings.set_tool(key)
     toolbar.open_menu(key)
-    settle()
+    settle(40)
     return toolbar.tool_menu
 
 
@@ -123,7 +119,7 @@ def test_a_click_turns_a_tool_on_and_another_opens_its_menu(workspace):
     toolbar, tools = workspace.toolbar, workspace.tool_settings
     button = toolbar._buttons["rectangle"]
     QTest.mouseClick(button, Qt.MouseButton.LeftButton)
-    settle()
+    settle(40)
     assert tools.tool == "rectangle" and (toolbar.tool_menu is None or not toolbar.tool_menu.isVisible())
     assert button.isChecked() and button.size() == ToolButton.ACTIVE  # wider, with its caret
     assert toolbar._buttons["ellipse"].size() == ToolButton.INACTIVE
@@ -139,7 +135,7 @@ def test_a_click_turns_a_tool_on_and_another_opens_its_menu(workspace):
     other = toolbar._buttons["ellipse"]
     QApplication.sendEvent(other, QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(5, 5),
                                                     other.mapToGlobal(QPoint(5, 5))))
-    settle()
+    settle(40)
     assert menu.isVisible() and menu.key == "ellipse" and tools.tool == "rectangle"  # a right click only opens
     press_key(menu, Qt.Key.Key_Escape)
     assert not menu.isVisible()
@@ -157,7 +153,7 @@ def test_a_long_press_opens_the_menu_without_a_click(workspace):
     menu = toolbar.tool_menu
     assert menu is not None and menu.isVisible() and menu.key == "line"
     button.mouseReleaseEvent(_release(button))
-    settle()
+    settle(40)
     assert tools.tool == "select" and menu.isVisible()  # the release after a long press is no click
 
 
@@ -202,7 +198,7 @@ def test_a_short_window_scrolls_the_menu_body(window, workspace):
         # squeezed to the last one's (options on top of each other) nor left longer (an empty tail).
         for key in ("rectangle", "line", "polygon", "marker"):
             menu = open_menu(workspace, key)
-            settle()
+            settle(40)
             assert menu.body.height() == menu._body_height(), key
         menu.close_menu()
     finally:
@@ -227,7 +223,7 @@ def test_lock_subject_duplicate_and_remove(workspace):
     assert menu.subject_edit.isVisible() and not menu.subject_caption.isVisible()
     menu.subject_edit.setText("Important")
     press_key(menu.subject_edit, Qt.Key.Key_Return)
-    settle()
+    settle(40)
     assert tools.subject("highlight") == "Important" and menu.subject_caption.text() == "Tool subject: Important"
     menu.subject_pencil.click()
     menu.subject_edit.setText("Nothing")
@@ -237,7 +233,7 @@ def test_lock_subject_duplicate_and_remove(workspace):
     actions = {a.text(): a for a in menu.more_menu().actions() if a.text()}
     assert {"Duplicate", "Reset to default", "Move left", "Move right", "Help", "All tool settings…"} <= set(actions)
     actions["Duplicate"].trigger()
-    settle()
+    settle(40)
     keys = toolbar.keys()
     assert keys[keys.index("highlight") + 1] == "highlight#2" and tools.tool == "highlight#2"
     assert menu.isVisible() and menu.key == "highlight#2" and full_title(menu) == "Text highlight 2"
@@ -247,7 +243,7 @@ def test_lock_subject_duplicate_and_remove(workspace):
     assert copy.tint is not None and copy.tint != toolbar._buttons["highlight"].tint  # told apart by colour
 
     menu.remove_button.click()
-    settle()
+    settle(40)
     assert "highlight#2" not in toolbar.keys() and tools.instances("highlight") == ["highlight"]
     assert not menu.isVisible() and tools.tool == "select"
 
@@ -272,11 +268,11 @@ def test_a_pinned_menu_stays_while_drawing_and_follows_the_tool(window, workspac
     tools, view = workspace.tool_settings, workspace.view
     menu = open_menu(workspace, "pen")
     menu.pin_button.click()
-    settle()
+    settle(40)
     assert menu.pinned and menu.isVisible() and window.settings.get("tool_menu_pinned") is True
     assert menu.windowFlags() & Qt.WindowType.Tool == Qt.WindowType.Tool  # clicks on the page go through
     drag(view, "pen", [(100, 100), (150, 130), (200, 110)])
-    settle()
+    settle(40)
     assert menu.isVisible() and [a for a in workspace.store.all() if isinstance(a, Ink)]
     tools.set_tool("rectangle")
     settle(200)
@@ -294,12 +290,12 @@ def test_each_tool_has_its_own_options(workspace):
     assert [v for v, *_ in cards.items] == ["basic", "pro", "calligraphy"]
     assert {"ink_to_line", "ink_to_shape"} <= set(pen.editor.blocks) and "Smart ink" in pen.editor.sections
     cards.choose("calligraphy")
-    settle()
+    settle(40)
     assert workspace.tool_settings.style("pen").pen == "calligraphy"
     nib = pen.editor.blocks["pen_type"].findChildren(SliderRow)[0]
     assert nib.isVisibleTo(pen.editor)  # the nib angle shows for calligraphy only
     cards.choose("basic")
-    settle()
+    settle(40)
     assert not nib.isVisibleTo(pen.editor)
 
     eraser = open_menu(workspace, "eraser")
@@ -391,7 +387,7 @@ def test_settings_backed_options_and_the_scale(window, workspace, monkeypatch):
     monkeypatch.setattr(insert_dialogs, "ScaleDialog", Scale)
     distance = open_menu(workspace, "distance")
     distance.editor.scale_button.click()
-    settle()
+    settle(40)
     assert workspace.tool_settings.measure == (1.0, "cm", 2.0, "m")
     assert "1 cm = 2 m" in distance.editor.scale_button.text() and distance.isVisible()
     workspace.tool_settings.set_measure(1.0, "cm", 1.0, "cm")
@@ -404,7 +400,7 @@ def test_copies_survive_a_rebuild_and_the_chooser_takes_them_all_off(window, wor
     toolbar, tools = workspace.toolbar, workspace.tool_settings
     toolbar.add_tool("pen")
     copy = toolbar.duplicate_tool("pen")
-    settle()
+    settle(40)
     assert copy == "pen#2" and tools.tool == "pen#2"
     toolbar.rebuild()
     assert "pen#2" in toolbar._buttons and toolbar._buttons["pen#2"].active
@@ -425,7 +421,7 @@ def test_the_chooser_scrolls_and_acts_on_the_tab_on_screen(window, workspace, sa
     try:
         chooser.show_under(workspace.toolbar)
         chooser.search.setText("e")
-        settle()
+        settle(40)
         tiles = chooser.results.findChildren(ToolTile)
         rows = sorted({t.pos().y() for t in tiles})
         assert len(tiles) > 10 and all(b - a >= tiles[0].height() for a, b in zip(rows, rows[1:]))  # no overlap
@@ -434,7 +430,7 @@ def test_the_chooser_scrolls_and_acts_on_the_tab_on_screen(window, workspace, sa
         other = tmp_path / "other.pdf"
         shutil.copy(sample_pdf, other)
         window.open_file(other)
-        settle()
+        settle(40)
         assert chooser.toolbar() is window.current_workspace().toolbar
         window.close_tab(window.workspaces.index(window.current_workspace()), confirm=False)
     finally:
@@ -450,11 +446,11 @@ def test_the_selection_style_menu_changes_dash_and_endings(workspace):
     shape = Shape(page=0, rect=(100, 300, 80, 60), fill=(1.0, 1.0, 0.0))
     view.add_annotations([line, shape], "Shapes")
     view.select([line])
-    settle()
+    settle(40)
     bar = workspace.selection_bar
     assert bar.isVisible() and bar.width() < 400  # icons only, small over the page
     bar.open_style()
-    settle()
+    settle(40)
     menu = bar.style_menu
     assert menu.isVisible() and full_title(menu) == "Line"
     assert {"dash", "endings", "color", "width"} <= set(menu.editor.blocks)
@@ -468,9 +464,9 @@ def test_the_selection_style_menu_changes_dash_and_endings(workspace):
     assert changed.dash == "dotted" and changed.head_start == "None"  # one change, one undo step
 
     view.select([a for a in store.all() if isinstance(a, (Line, Shape))])
-    settle()
+    settle(40)
     bar.open_style()
-    settle()
+    settle(40)
     assert menu.isVisible() and full_title(menu) == "2 annotations"
     assert "endings" not in menu.editor.blocks and "fill" not in menu.editor.blocks
     menu.close_menu()
@@ -493,7 +489,7 @@ def test_menus_follow_the_theme(window, workspace):
     dark = menu.grab().toImage()
     theme = window.settings.get("theme")
     window.settings.set("theme", "light" if themes.current.name == "dark" else "dark")
-    settle()
+    settle(40)
     try:
         assert menu.grab().toImage() != dark
     finally:

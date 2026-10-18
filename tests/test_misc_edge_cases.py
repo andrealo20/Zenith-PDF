@@ -10,8 +10,9 @@ import pytest
 from PySide6.QtCore import QPointF, QRect, QSettings, Qt
 from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QPushButton, QWidget
+from PySide6.QtWidgets import QPushButton, QWidget
 
+from conftest import settle, wait_for
 from zenith_pdf.app import create_app
 from zenith_pdf.core import arrange, images, updates
 from zenith_pdf.core.annotations import ImageStamp, Shape, TextMarkup
@@ -20,20 +21,6 @@ from zenith_pdf.core.updates import Update, UpdateError
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui.annotation_items import paint_annotation
 from zenith_pdf.ui.updates import UpdateCard, Updater
-
-
-def settle(ms=60):
-    QTest.qWait(ms)
-    QApplication.processEvents()
-
-
-def wait_for(condition, ms=3000):
-    for _ in range(ms // 10):
-        QApplication.processEvents()
-        if condition():
-            return True
-        QTest.qWait(10)
-    return condition()
 
 
 class Mouse:
@@ -67,7 +54,7 @@ def workspace(window, sample_pdf, tmp_path):
     window.resize(1300, 900)
     window.open_file(path)
     workspace = window.current_workspace()
-    settle()
+    settle(60)
     yield workspace
     menu = workspace.toolbar.tool_menu
     if menu is not None:
@@ -87,7 +74,7 @@ def italian():
 def open_menu(workspace, key):
     workspace.tool_settings.set_tool(key)
     workspace.toolbar.open_menu(key)
-    settle()
+    settle(60)
     return workspace.toolbar.tool_menu
 
 
@@ -110,7 +97,7 @@ def test_the_selection_bar_keeps_off_the_page_counter(window, workspace):
     shape = Shape(page=0, rect=(250, 300, 120, 60), color=(0.9, 0.2, 0.2))
     view.add_annotations([shape], "Rectangle")
     view.select([shape])
-    settle()
+    settle(60)
     counter = canvas.bars["counter"]
     assert counter.isVisible()
     spot = counter.geometry()

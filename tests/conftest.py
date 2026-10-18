@@ -3,6 +3,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("ZENITH_LANGUAGE", "en")  # the tests read the English texts, whatever the system speaks
@@ -16,6 +17,7 @@ os.environ["ZENITH_CACHE_DIR"] = CACHE
 import pypdfium2 as pdfium
 import pypdfium2.raw as raw
 import pytest
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 
@@ -29,6 +31,23 @@ def qt_app():
 def private_cache():
     yield CACHE
     shutil.rmtree(CACHE, ignore_errors=True)
+
+
+def settle(ms=30):
+    """Let Qt run its timers and events for `ms` milliseconds."""
+    QTest.qWait(ms)
+    QApplication.processEvents()
+
+
+def wait_for(condition, timeout=20.0) -> bool:
+    """Whether `condition()` comes true within `timeout` seconds, with Qt running meanwhile."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        QApplication.processEvents()
+        if condition():
+            return True
+        QTest.qWait(10)
+    return condition()
 
 # (width, height, rotation, cropbox or None)
 PAGES = [

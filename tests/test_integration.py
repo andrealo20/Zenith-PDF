@@ -14,6 +14,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QSpinBox
 
+from conftest import settle
 from zenith_pdf.app import SPIN_INSET, create_app
 from zenith_pdf.core.annotations import Attachment, FreeText, Ink, Note, Shape, TextMarkup
 from zenith_pdf.core.builder import Entry, Source, build
@@ -46,11 +47,6 @@ def drag(view, key, points, page=0):
     for point in points[1:]:
         tool.move(item, QPointF(*point), Mouse())
     tool.release(item, QPointF(*points[-1]), Mouse())
-
-
-def settle(ms=30):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 @pytest.fixture(scope="module")

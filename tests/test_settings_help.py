@@ -8,17 +8,13 @@ from PySide6.QtGui import QHelpEvent, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QPushButton, QSpinBox, QWidget
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.settings import Settings
 from zenith_pdf.theme import themes
 from zenith_pdf.ui import widgets
 from zenith_pdf.ui.help import TOPICS, badges, help_card
 from zenith_pdf.ui.tools import DEFAULT_STYLES, ToolSettings
-
-
-def settle(ms=50):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 def test_settings_keep_types_and_old_values(qt_app, tmp_path):
@@ -78,7 +74,7 @@ def workspace(window, sample_pdf, tmp_path):
     shutil.copy(sample_pdf, path)
     window.open_file(path)
     workspace = window.current_workspace()
-    settle()
+    settle(50)
     yield workspace
     window.close_tab(window.workspaces.index(workspace), confirm=False)
 
@@ -123,10 +119,10 @@ def test_wheel_can_zoom_without_ctrl(window, workspace):
 def test_settings_window_search_and_controls(window):
     window.open_settings()
     dialog = window._settings_window
-    settle()
+    settle(50)
     assert dialog.sections["view"].isVisible() and not dialog.sections["files"].isVisible()
     dialog.search.setText("autosave")
-    settle()
+    settle(50)
     assert dialog.sections["files"].isVisible() and not dialog.sections["view"].isVisible()
     visible = [row for row in dialog.sections["files"].rows if row.isVisible()]
     assert len(visible) == 1
@@ -141,7 +137,7 @@ def test_settings_window_search_and_controls(window):
     assert window.settings.get("glass") == "balanced" and widgets.glass.style == "balanced"
     window.settings.set("glass", "clear")
     dialog.show_category("about")
-    settle()
+    settle(50)
     assert dialog.sections["about"].isVisible()
     dialog.close()
 
@@ -155,7 +151,7 @@ def test_help_card_when_pointing_and_optional_badges(window, workspace):
 
     card = help_card()
     card.show_for(hook, pinned=False)
-    settle()
+    settle(50)
     assert card.isVisible() and card.title.text() == TOPICS["tool_highlight"].title
     hook.eventFilter(button, QEvent(QEvent.Type.Leave))
     settle(300)
@@ -190,7 +186,7 @@ def wheel_over(widget):
 def test_the_wheel_scrolls_the_settings_and_changes_nothing(window, tmp_path):
     window.open_settings("view")
     dialog = window._settings_window
-    settle()
+    settle(50)
     theme = window.settings.get("theme")
     combo = next(c for c in dialog.findChildren(QComboBox) if c.currentData() == theme)
     assert combo.focusPolicy() == Qt.FocusPolicy.StrongFocus
@@ -200,7 +196,7 @@ def test_the_wheel_scrolls_the_settings_and_changes_nothing(window, tmp_path):
     for number in range(5):
         window.settings.add_recent(tmp_path / f"{number}.pdf")
     dialog.show_category("files")
-    settle()
+    settle(50)
     limit = next(s for s in dialog.findChildren(QSpinBox) if s.value() == window.settings.get("recent_limit"))
     before = window.settings.get("recent_limit")
     limit.setValue(1)  # typing 10 starts with a 1
@@ -214,13 +210,13 @@ def test_a_category_click_leaves_the_search(window):
     window.open_settings()
     dialog = window._settings_window
     dialog.search.setText("zoom")
-    settle()
+    settle(50)
     assert dialog.sections["navigation"].isVisible() and dialog.sections["view"].isVisible()
     item = next(dialog.nav.item(r) for r in range(dialog.nav.count())
                 if dialog.nav.item(r).data(Qt.ItemDataRole.UserRole) == "performance")
     dialog.nav.itemClicked.emit(item)
     dialog.nav.setCurrentItem(item)
-    settle()
+    settle(50)
     assert dialog.search.text() == "" and dialog.sections["performance"].isVisible()
     assert not dialog.sections["view"].isVisible()
     dialog.close()
@@ -233,11 +229,11 @@ def test_tool_styles_open_each_tools_menu(window):
     tools.set_tool("select")
     window.open_settings("annotation")
     dialog = window._settings_window
-    settle()
+    settle(50)
     rows = dialog.tool_list.rows
     assert "rectangle" in rows and "select" not in rows and "bookmark" not in rows
     rows["rectangle"].clicked.emit("rectangle")
-    settle()
+    settle(50)
     menu = dialog.tool_list.menu
     assert menu.isVisible() and menu.key == "rectangle" and menu.toolbar is None
     assert menu.lock_button.isVisible() and not menu.remove_button.isVisible() and not menu.pin_button.isVisible()
@@ -253,10 +249,10 @@ def test_tool_styles_open_each_tools_menu(window):
     menu.close_menu()
 
     copy = tools.duplicate("pen")
-    settle()
+    settle(50)
     assert copy in dialog.tool_list.rows and dialog.tool_list.rows[copy].name.text() == "Pen 2"
     tools.forget(copy)
-    settle()
+    settle(50)
     assert copy not in dialog.tool_list.rows
 
     dialog._lock_all(False)
@@ -278,7 +274,7 @@ def test_about_names_the_app_once_with_real_versions(window):
 
     window.open_settings("about")
     dialog = window._settings_window
-    settle()
+    settle(50)
     about = dialog.sections["about"]
     names = [label for label in about.findChildren(QLabel) if label.text() == "Zenith PDF"]
     assert len(names) == 1
@@ -307,7 +303,7 @@ def test_the_guide_says_when_nothing_matches(window):
 
     guide = GuideWindow(window)
     guide.show()
-    settle()
+    settle(50)
     assert guide.text.frameShape() == guide.text.frameShape().NoFrame
     guide.show_chapter("tools")
     assert "lock" in guide.text.toPlainText().lower() and "Pan" in guide.text.toPlainText()
@@ -315,11 +311,11 @@ def test_the_guide_says_when_nothing_matches(window):
     guide.show_chapter("problem")
     assert guide.bottom.isVisible()
     guide.search.setText("xyzzy")
-    settle()
+    settle(50)
     assert "No chapter mentions" in guide.text.toPlainText() and guide.list.currentItem() is None
     assert not guide.bottom.isVisible()
     guide.search.clear()
-    settle()
+    settle(50)
     assert guide.list.currentItem() is not None and "No chapter" not in guide.text.toPlainText()
     guide.close()
 
@@ -343,10 +339,10 @@ def test_a_pinned_help_card_goes_with_its_tab(window, workspace, sample_pdf, tmp
     hook = workspace.toolbar._buttons["rectangle"]._help_hook
     card = help_card()
     card.show_for(hook, pinned=True)
-    settle()
+    settle(50)
     assert card.isVisible()
     window.open_file(other)  # another tab shows, as Ctrl+Tab would
-    settle()
+    settle(50)
     assert not card.isVisible()
     window.close_tab(window.workspaces.index(window.current_workspace()), confirm=False)
 

@@ -4,9 +4,8 @@ Nothing is played on the speakers."""
 import pytest
 import pypdfium2 as pdfium
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
 
-from conftest import _add_text
+from conftest import _add_text, wait_for
 from zenith_pdf.core import writing
 from zenith_pdf.core.document import Document
 from zenith_pdf.ui import read_aloud
@@ -33,15 +32,6 @@ def two_pages(tmp_path):
     document = Document(path)
     yield document
     document.close()
-
-
-def wait_for(condition, ms=4000):
-    for _ in range(ms // 10):
-        QApplication.processEvents()
-        if condition():
-            return True
-        QTest.qWait(10)
-    return condition()
 
 
 def test_sentences_keep_their_place_on_the_page(two_pages):

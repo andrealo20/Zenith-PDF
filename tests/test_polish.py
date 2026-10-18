@@ -16,6 +16,7 @@ from PySide6.QtGui import QColor, QContextMenuEvent, QMouseEvent, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QSlider, QWidget
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.core import images
 from zenith_pdf.core.audio import Player, Recorder, wav_bytes
@@ -32,11 +33,6 @@ from zenith_pdf.ui.widgets import Segmented, Switch, contrast, keyboard_focus, l
     segment_colours
 
 TONE = (b"\x00\x10" + b"\x00\xf0") * 551  # 50 ms of a quiet tone at 22050 Hz
-
-
-def settle(ms=40):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 def centre(widget: QWidget) -> QPoint:
@@ -116,10 +112,10 @@ def open_menu(workspace, name):
     toolbar = workspace.toolbar
     if name not in toolbar.keys():
         toolbar.add_tool(name)
-        settle()
+        settle(40)
     workspace.tool_settings.set_tool(name)
     toolbar.open_menu(name)
-    settle()
+    settle(40)
     menu = toolbar.tool_menu
     assert menu.isVisible() and QApplication.focusWidget() is menu
     return menu
@@ -195,7 +191,7 @@ def test_the_chosen_segment_reads_clearly(qt_app, theme):
         control = Segmented([("color", "Border"), ("fill", "Fill")])
         control.resize(288, 32)
         control.show()
-        settle()
+        settle(40)
         picture = control.grab().toImage()
         chosen = control.buttons[0].geometry()
         sample = picture.pixelColor(chosen.left() + 6, chosen.center().y())
@@ -319,14 +315,14 @@ def test_tab_goes_down_the_line_menu_and_keys_pick(workspace):
     advanced = tab()
     assert advanced is editor.sections["Advanced"].header and not editor.sections["Advanced"].is_open()
     QTest.keyClick(advanced, Qt.Key.Key_Space)
-    settle()
+    settle(40)
     assert editor.sections["Advanced"].is_open()
     switch = tab()
     assert isinstance(switch, Switch)
     QTest.keyClick(switch, Qt.Key.Key_Space)
     assert tools.style("line").highlight is True
     QTest.keyClick(advanced, Qt.Key.Key_Return)  # and shut again
-    settle()
+    settle(40)
 
 
 def test_cards_rings_and_the_header_from_the_keyboard(workspace):
@@ -403,7 +399,7 @@ def test_a_click_on_another_tool_switches_in_one_click(workspace):
     if windows_press(menu, centre(other)):
         QTest.mousePress(other, Qt.MouseButton.LeftButton)  # Qt hands the press on
     QTest.mouseRelease(other, Qt.MouseButton.LeftButton)  # the release goes to the button under the pointer
-    settle()
+    settle(40)
     assert not menu.isVisible() and tools.tool == "ellipse" and not menu.closed_by_anchor
 
 
@@ -417,17 +413,17 @@ def test_a_click_on_the_menus_own_button_closes_it_for_good(workspace):
     settle(100)
     assert not menu.isVisible() and tools.tool == "rectangle"
     QTest.mouseClick(button, Qt.MouseButton.LeftButton)  # the next click opens it again, at once
-    settle()
+    settle(40)
     assert menu.isVisible()
 
     # A right click: the press closes the menu, and the context menu event of its release is swallowed.
     assert not windows_press(menu, centre(button), Qt.MouseButton.RightButton)
     QApplication.sendEvent(button, QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(5, 5), centre(button)))
-    settle()
+    settle(40)
     assert not menu.isVisible()
     QTest.qWait(toolbar_module.REPLAY_MS + 50)
     QApplication.sendEvent(button, QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(5, 5), centre(button)))
-    settle()
+    settle(40)
     assert menu.isVisible() and menu.key == "rectangle"
 
 
@@ -455,7 +451,7 @@ def test_where_the_press_reaches_the_button_itself_the_click_is_swallowed(worksp
     menu.close_menu()  # the platform closed it as the button was pressed
     monkeypatch.undo()
     QTest.mouseClick(button, Qt.MouseButton.LeftButton)
-    settle()
+    settle(40)
     assert not menu.isVisible()
 
 
@@ -471,7 +467,7 @@ def test_a_press_on_the_menus_shadow_goes_on_to_the_toolbar(workspace):
     assert not windows_press(menu, point)  # inside the popup's window: Qt would not hand it on, the menu does
     assert not menu.isVisible() and target.isDown()
     QTest.mouseRelease(target, Qt.MouseButton.LeftButton, pos=target.mapFromGlobal(point))
-    settle()
+    settle(40)
     assert tools.tool == target.key
 
 
@@ -487,18 +483,18 @@ def test_the_wheel_over_the_page_scrolls_it(window, workspace):
     over_page = view.viewport().mapToGlobal(QPoint(40, view.viewport().height() // 2))
     assert not panel.contains(over_page)
     wheel_at(menu, over_page)  # a popup gets the wheel, wherever the pointer is
-    settle()
+    settle(40)
     assert not menu.isVisible() and bar.value() > before
 
     menu = open_menu(workspace, "rectangle")
     menu.pin_button.click()
-    settle()
+    settle(40)
     assert menu.pinned and menu.margins() == tool_menu.PINNED_SHADOW
     left, top, _, _ = menu.margins()
     in_margin = menu.mapToGlobal(QPoint(left - 2, top + 40))  # a pinned menu's window still has a little margin
     before = bar.value()
     wheel_at(menu, in_margin)
-    settle()
+    settle(40)
     assert menu.isVisible() and bar.value() > before
     menu.pin_button.click()
 
@@ -541,12 +537,12 @@ class QuietMic:
 def test_the_record_dialog_keeps_its_size_and_centres_a_short_message(qt_app):
     dialog = audio_dialog.RecordDialog(recorder=Recorder(backend=QuietMic()))
     dialog.show()
-    settle()
+    settle(40)
     height = dialog.height()
     box = dialog.status.parentWidget()
 
     def balanced() -> bool:
-        settle()
+        settle(40)
         label = dialog.status.geometry()
         return abs(label.center().y() - box.rect().center().y()) <= 1
 
@@ -554,7 +550,7 @@ def test_the_record_dialog_keeps_its_size_and_centres_a_short_message(qt_app):
     for text, link in ((audio_dialog.NO_SOUND, audio_dialog.PRIVACY_SETTINGS),
                        (audio_dialog.NO_DEVICE, audio_dialog.SOUND_SETTINGS)):
         dialog._say(text, problem=True, link=link)
-        settle()
+        settle(40)
         assert dialog.status.height() <= box.height() and dialog.height() == height, text
     dialog._say(audio_dialog.RECORDED)
     assert balanced() and dialog.height() == height
@@ -574,13 +570,13 @@ def test_the_player_lines_its_parts_up(qt_app):
     player = Player(wav_bytes(TONE), "Audio note 2026-10-16 10.42.wav", send=Mci())
     popover = audio_dialog.AudioPopover(player, "Audio note 2026-10-16 10.42.wav")
     popover.show_at(QPoint(100, 100))
-    settle()
+    settle(40)
     assert popover.title.geometry().left() == popover.bar.geometry().left()  # the name over the bar
     assert popover.close_button.geometry().right() == popover.time_label.geometry().right()
     play = popover.play_button.geometry()
     assert play.top() > 0 and abs(play.center().y() - popover.rect().center().y()) <= 1
     popover.close()
-    settle()
+    settle(40)
 
 
 def test_the_author_column_shows_whenever_the_name_keeps_its_room(window, sample_pdf, tmp_path):
@@ -592,13 +588,13 @@ def test_the_author_column_shows_whenever_the_name_keeps_its_room(window, sample
         home.show()
         for width in (960, 1100, 1180, 1279, 1290, 1400):
             home.resize(width, 760)
-            settle()
+            settle(40)
             room = home.table.viewport().width() - COLUMN_WIDTHS[STAR] - COLUMN_WIDTHS[MORE] - NAME_WIDTH
             fits = sum(LEAST_WIDTHS[c] for c in OPTIONAL_COLUMNS) <= room
             assert home.table.isColumnHidden(AUTHOR) is not fits, width
             assert home.table.columnWidth(NAME) >= NAME_WIDTH, width
         home.resize(1180, 760)
-        settle()
+        settle(40)
         assert not home.table.isColumnHidden(AUTHOR)  # below 1300 px, where it used to stay hidden
     finally:
         home.close()

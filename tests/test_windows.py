@@ -8,15 +8,11 @@ from PySide6.QtGui import QMouseEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui.main_window import MainWindow
 from zenith_pdf.ui.tab_drag import THRESHOLD
-
-
-def settle(ms=30):
-    QTest.qWait(ms)
-    QApplication.processEvents()
 
 
 @pytest.fixture
