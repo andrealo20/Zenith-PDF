@@ -13,6 +13,13 @@ from dataclasses import dataclass
 Box = tuple[float, float, float, float]  # left, bottom, right, top
 
 
+def multiply(m, n) -> tuple[float, ...]:
+    """The PDF matrix that applies `m`, then `n`."""
+    a, b, c, d, e, f = m
+    A, B, C, D, E, F = n
+    return a * A + b * C, a * B + b * D, c * A + d * C, c * B + d * D, e * A + f * C + E, e * B + f * D + F
+
+
 def visible_box(mediabox: Box, cropbox: Box) -> Box:
     """The area PDFium displays: the crop box clipped to the media box."""
     left = max(mediabox[0], cropbox[0])

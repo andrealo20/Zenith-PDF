@@ -22,7 +22,7 @@ from pikepdf import Array, Dictionary, Name
 
 from . import images
 from .appearance import display_matrix, num, pdf_rect, pdf_string
-from .geometry import PageGeometry
+from .geometry import PageGeometry, multiply
 from .pages import PAPER_SIZES, SaveBuffer, flatten
 
 POSITIONS = {
@@ -120,12 +120,6 @@ def _transform(point, matrix) -> tuple[float, float]:
     return a * x + c * y + e, b * x + d * y + f
 
 
-def _compose(m, n) -> tuple[float, ...]:
-    a, b, c, d, e, f = m
-    A, B, C, D, E, F = n
-    return a * A + b * C, a * B + b * D, c * A + d * C, c * B + d * D, e * A + f * C + E, e * B + f * D + F
-
-
 def _move_links(links, matrix) -> list:
     """Links of a placed page, their Rect carried along to where the page now is."""
     moved = []
@@ -165,7 +159,7 @@ def resize_pages(pdf: pikepdf.Pdf, indices: list[int], paper: str, orientation: 
         page_w, page_h = (max(width, height), min(width, height)) if landscape else (width, height)
         matrix = _placement(form, (margin, margin, page_w - margin, page_h - margin))
         links = [a for a in old.obj.get("/Annots", Array()) if isinstance(a, Dictionary) and a.get("/Subtype") == Name.Link]
-        full = _compose(tuple(float(v) for v in form.get("/Matrix", [1, 0, 0, 1, 0, 0])), matrix)
+        full = multiply(tuple(float(v) for v in form.get("/Matrix", [1, 0, 0, 1, 0, 0])), matrix)
         new = pikepdf.Page(pdf.make_indirect(Dictionary(
             Type=Name.Page,
             MediaBox=Array([0, 0, page_w, page_h]),
@@ -207,7 +201,7 @@ def pages_per_sheet(data: bytes, per_sheet: int, paper: str, margin: float, gap:
                 ops.append(f"q {' '.join(num(v) for v in matrix)} cm /{name} Do Q")
                 if border:
                     x0, y0, x1, y1 = (float(v) for v in form.BBox)
-                    m = _compose(tuple(float(v) for v in form.get("/Matrix", [1, 0, 0, 1, 0, 0])), matrix)
+                    m = multiply(tuple(float(v) for v in form.get("/Matrix", [1, 0, 0, 1, 0, 0])), matrix)
                     corners = [_transform(p, m) for p in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
                     xs, ys = [p[0] for p in corners], [p[1] for p in corners]
                     ops.append(f"q 0.6 g 0.6 G 0.5 w {num(min(xs))} {num(min(ys))} {num(max(xs) - min(xs))} "

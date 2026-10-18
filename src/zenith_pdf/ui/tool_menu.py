@@ -694,11 +694,6 @@ class Swatches(QWidget):
     def minimumSizeHint(self) -> QSize:
         return QSize(self._columns() * 24, self._rows() * self.SLOT)
 
-    def set_colours(self, colours) -> None:
-        self.colours = [tuple(c) for c in colours]
-        self.setFixedHeight(self._rows() * self.SLOT)
-        self.update()
-
     def slot_width(self) -> float:
         share = self.width() / self._columns()
         return share if self.spread else min(float(self.SLOT), share)
@@ -2022,9 +2017,6 @@ class StyleEditor(QWidget):
         return build(base) if build is not None else None
 
     # Showing a style ----------------------------------------------------------
-
-    def current_style(self) -> ToolStyle:
-        return self._style
 
     def set_style(self, style: ToolStyle) -> None:
         self._style = style

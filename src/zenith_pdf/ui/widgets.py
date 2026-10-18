@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 
 from ..core.i18n import tr
 from ..core.platforms import native_keys
-from ..icons import hue_colour, icon
+from ..icons import CachedIconEngine, hue_colour, icon
 from ..theme import Theme, qcolor, themes, tone_sheet
 
 GLASS_BLEED = 24  # logical px of backdrop sampled beyond the bar: the blur reaches its edges from what is there
@@ -357,7 +357,7 @@ def _snapped(value: float) -> int:
 # Icons ------------------------------------------------------------------------------
 
 
-class _CachedIcon(QIconEngine):
+class _CachedIcon(CachedIconEngine):
     """Keeps every picture of an icon it has drawn, by size, mode, state and screen scale.
 
     The bars repaint whenever the pages scroll under them; drawing the vector glyphs
@@ -367,26 +367,9 @@ class _CachedIcon(QIconEngine):
     def __init__(self, source: QIcon):
         super().__init__()
         self._source = source
-        self._pixmaps: dict[tuple, QPixmap] = {}
 
-    def scaledPixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
-        key = (size.width(), size.height(), mode, state, round(scale * 100))
-        pixmap = self._pixmaps.get(key)
-        if pixmap is None:
-            pixmap = self._source.pixmap(size, scale, mode, state)
-            self._pixmaps[key] = pixmap
-        return pixmap
-
-    def pixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QPixmap:
-        return self.scaledPixmap(size, mode, state, 1.0)
-
-    def paint(self, painter: QPainter, rect: QRect, mode: QIcon.Mode, state: QIcon.State) -> None:
-        device = painter.device()
-        scale = device.devicePixelRatioF() if device is not None else 1.0
-        painter.drawPixmap(rect, self.scaledPixmap(rect.size(), mode, state, scale))
-
-    def actualSize(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QSize:
-        return size
+    def _render(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
+        return self._source.pixmap(size, scale, mode, state)
 
     def clone(self) -> QIconEngine:
         return _CachedIcon(self._source)

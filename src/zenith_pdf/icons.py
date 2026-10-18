@@ -35,7 +35,7 @@ from PySide6.QtGui import (
 from .core.annotations import DASHES, ENDINGS, PATTERNS, dash_array, line_ending, round_dash_caps
 from .core.inking import calligraphy_widths, stroke_polygons
 from .core.platforms import math_font, ui_font
-from .theme import themes
+from .theme import luminance, themes
 
 
 def _squiggle(p: QPainter) -> None:
@@ -315,16 +315,9 @@ CUSTOM |= {f"z-end-{name}": _ending(name, start=False) for name in ENDINGS}
 CUSTOM |= {f"z-start-{name}": _ending(name, start=True) for name in ENDINGS}
 
 
-def _luminance(color: QColor) -> float:
-    def linear(c: float) -> float:
-        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
-
-    return 0.2126 * linear(color.redF()) + 0.7152 * linear(color.greenF()) + 0.0722 * linear(color.blueF())
-
-
 def contrast(a: QColor, b: QColor) -> float:
     """The WCAG contrast ratio of two colours, 1 to 21."""
-    light, dark = sorted((_luminance(a), _luminance(b)), reverse=True)
+    light, dark = sorted((luminance(a), luminance(b)), reverse=True)
     return (light + 0.05) / (dark + 0.05)
 
 
@@ -453,15 +446,15 @@ def _mix(color: QColor, toward: QColor, share: float) -> QColor:
         (color.redF(), toward.redF()), (color.greenF(), toward.greenF()), (color.blueF(), toward.blueF()))))
 
 
-class _DepthIcon(QIconEngine):
-    """An icon with depth: lit from above, its colour runs from a lighter shade at the top to a deeper one at the
-    bottom, over a soft shadow a little below it. A disabled icon, or one smaller than DEPTH_LEAST, stays flat."""
+class CachedIconEngine(QIconEngine):
+    """Draws each picture of an icon once (by size, mode, state, screen scale and theme) with _render."""
 
-    def __init__(self, flat: QIcon, color: str, on: str):
+    def __init__(self):
         super().__init__()
-        self._flat = flat
-        self._colors = (color, on)
         self._pixmaps: dict[tuple, QPixmap] = {}
+
+    def _render(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
+        raise NotImplementedError
 
     def scaledPixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
         key = (size.width(), size.height(), mode, state, round(scale * 100), themes.current.name)
@@ -469,6 +462,27 @@ class _DepthIcon(QIconEngine):
         if pixmap is None:
             pixmap = self._pixmaps[key] = self._render(size, mode, state, scale)
         return pixmap
+
+    def pixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QPixmap:
+        return self.scaledPixmap(size, mode, state, 1.0)
+
+    def paint(self, painter: QPainter, rect: QRect, mode: QIcon.Mode, state: QIcon.State) -> None:
+        device = painter.device()
+        scale = device.devicePixelRatioF() if device is not None else 1.0
+        painter.drawPixmap(rect, self.scaledPixmap(rect.size(), mode, state, scale))
+
+    def actualSize(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QSize:
+        return size
+
+
+class _DepthIcon(CachedIconEngine):
+    """An icon with depth: lit from above, its colour runs from a lighter shade at the top to a deeper one at the
+    bottom, over a soft shadow a little below it. A disabled icon, or one smaller than DEPTH_LEAST, stays flat."""
+
+    def __init__(self, flat: QIcon, color: str, on: str):
+        super().__init__()
+        self._flat = flat
+        self._colors = (color, on)
 
     def _render(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
         flat = self._flat.pixmap(size, scale, mode, state)
@@ -482,7 +496,7 @@ class _DepthIcon(QIconEngine):
         colour = QColor(self._colors[1] if state == QIcon.State.On else self._colors[0])
         # The icon's own lightness says what it stands on: a light icon on a dark bar takes a deeper shadow
         # and a dark one on a light bar a faint one, whatever the app's theme (a bar can change tone).
-        level = _luminance(colour)
+        level = luminance(colour)
         on_dark = level > 0.4
 
         def filled(brush) -> QImage:
@@ -513,17 +527,6 @@ class _DepthIcon(QIconEngine):
         pixmap = QPixmap.fromImage(out)
         pixmap.setDevicePixelRatio(scale)
         return pixmap
-
-    def pixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QPixmap:
-        return self.scaledPixmap(size, mode, state, 1.0)
-
-    def paint(self, painter: QPainter, rect: QRect, mode: QIcon.Mode, state: QIcon.State) -> None:
-        device = painter.device()
-        scale = device.devicePixelRatioF() if device is not None else 1.0
-        painter.drawPixmap(rect, self.scaledPixmap(rect.size(), mode, state, scale))
-
-    def actualSize(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QSize:
-        return size
 
     def clone(self) -> QIconEngine:
         return _DepthIcon(self._flat, *self._colors)

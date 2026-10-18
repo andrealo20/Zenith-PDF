@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from functools import lru_cache
 
-from PySide6.QtCore import QLineF, QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPainterPathStroker, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem
 
@@ -872,7 +872,3 @@ class LockBadge(QGraphicsItem):
         glyph = disc.adjusted(3.5, 3.5, -3.5, -3.5)
         icon("lock-simple-fill", "#ffffff").paint(painter, glyph.toRect())
         painter.restore()
-
-
-def line_length(a: Line) -> float:
-    return QLineF(QPointF(*a.start), QPointF(*a.end)).length()

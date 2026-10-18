@@ -170,7 +170,7 @@ def with_accent(theme: Theme, accent: str) -> Theme:
     )
 
 
-def _luminance(color: QColor) -> float:
+def luminance(color: QColor) -> float:
     def linear(c: float) -> float:
         return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
@@ -185,11 +185,11 @@ def _ink(accent: QColor, theme: Theme) -> str:
     fills = []
     for back in (theme.window, theme.surface, theme.raised):
         under = QColor(back)
-        fills.append(_luminance(QColor.fromRgbF(*(u + (a - u) * 0.16 for u, a in
+        fills.append(luminance(QColor.fromRgbF(*(u + (a - u) * 0.16 for u, a in
                                                  zip((under.redF(), under.greenF(), under.blueF()), rgb)))))
     while True:
         ink = QColor.fromRgbF(*(c + (toward - c) * share for c in rgb))
-        light = _luminance(ink)
+        light = luminance(ink)
         if share >= 1.0 or all((max(light, f) + 0.05) / (min(light, f) + 0.05) >= 4.6 for f in fills):
             return ink.name()
         share = min(share + 0.05, 1.0)

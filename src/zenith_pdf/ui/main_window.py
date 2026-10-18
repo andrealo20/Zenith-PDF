@@ -538,10 +538,6 @@ class MainWindow(QMainWindow):
             window = workspace.window()  # the file may be open in another window: the tool works there
         tool.run(window)
 
-    def open_files(self, paths) -> None:
-        for path in paths:
-            self.open_file(path)
-
     def open_targets(self, targets: list[str]) -> None:
         """Open files and zenith-pdf links (a file at a page), as the command line or a later start gives them."""
         for target in targets:

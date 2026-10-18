@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 
-import shiboken6
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPen, QTextCursor, QTransform
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsRectItem, QGraphicsTextItem
@@ -114,9 +113,3 @@ class TextBoxEditor(QGraphicsTextItem):
         if not self._finished:
             self._finished = True
             self._on_finish(self.toPlainText())
-
-    def dispose(self) -> None:
-        # A page reload may have cleared the scene, and deleted both, before this runs.
-        for item in (self.frame, self, self.holder, self.backdrop):
-            if shiboken6.isValid(item) and item.scene() is not None:
-                item.scene().removeItem(item)

@@ -84,6 +84,14 @@ class Annotation:
         raise NotImplementedError
 
 
+class MovesByRect:
+    """For an annotation whose place is its `rect` alone."""
+
+    def translated(self, dx: float, dy: float):
+        x, y, w, h = self.rect
+        return replace(self, rect=(x + dx, y + dy, w, h))
+
+
 @dataclass(frozen=True, kw_only=True)
 class TextMarkup(Annotation):
     style: str = "Highlight"  # Highlight, Underline, Squiggly or StrikeOut
@@ -111,7 +119,7 @@ class TextMarkup(Annotation):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Shape(Annotation):
+class Shape(MovesByRect, Annotation):
     shape: str = "Square"  # Square or Circle
     rect: Rect = (0.0, 0.0, 0.0, 0.0)
     width: float = 2.0
@@ -139,10 +147,6 @@ class Shape(Annotation):
         x, y, w, h = self.rect
         out = cloud_reach(w, h) + (self.width / 2 if self.border else 0.0)
         return x - out, y - out, w + 2 * out, h + 2 * out
-
-    def translated(self, dx: float, dy: float) -> Shape:
-        x, y, w, h = self.rect
-        return replace(self, rect=(x + dx, y + dy, w, h))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -312,7 +316,7 @@ class Note(Annotation):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Caret(Annotation):
+class Caret(MovesByRect, Annotation):
     """A proofreader's mark for text to put in: a caret where it goes, `contents` the text."""
 
     rect: Rect = (0.0, 0.0, 0.0, 0.0)  # the caret's tip at the top middle, its feet on the bottom edge
@@ -327,10 +331,6 @@ class Caret(Annotation):
 
     def bounds(self) -> Rect:
         return self.rect
-
-    def translated(self, dx: float, dy: float) -> Caret:
-        x, y, w, h = self.rect
-        return replace(self, rect=(x + dx, y + dy, w, h))
 
     def outline(self) -> tuple[Point, ...]:
         """The caret's shape: two strokes meeting at the top, hollowed at the bottom."""
@@ -363,7 +363,7 @@ STAMP_NAMES = {"Approved": "Approved", "Draft": "Draft", "Confidential": "Confid
 
 
 @dataclass(frozen=True, kw_only=True)
-class TextStamp(Annotation):
+class TextStamp(MovesByRect, Annotation):
     """A rubber stamp: a word such as APPROVED in a frame, and a smaller line under it if `detail` has one
     (who stamped it, and when)."""
 
@@ -391,13 +391,9 @@ class TextStamp(Annotation):
     def bounds(self) -> Rect:
         return self.rect
 
-    def translated(self, dx: float, dy: float) -> TextStamp:
-        x, y, w, h = self.rect
-        return replace(self, rect=(x + dx, y + dy, w, h))
-
 
 @dataclass(frozen=True, kw_only=True)
-class ImageStamp(Annotation):
+class ImageStamp(MovesByRect, Annotation):
     """A picture on the page. `data` is the picture as PNG or JPEG bytes.
 
     Two images are equal when their pictures' bytes are: `digest` stands for
@@ -431,10 +427,6 @@ class ImageStamp(Annotation):
 
     def bounds(self) -> Rect:
         return self.rect
-
-    def translated(self, dx: float, dy: float) -> ImageStamp:
-        x, y, w, h = self.rect
-        return replace(self, rect=(x + dx, y + dy, w, h))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -631,7 +623,7 @@ class Measurement(Annotation):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Link(Annotation):
+class Link(MovesByRect, Annotation):
     """A clickable area: to a web address, or to a page of this document."""
 
     rect: Rect = (0.0, 0.0, 0.0, 0.0)
@@ -653,10 +645,6 @@ class Link(Annotation):
 
     def bounds(self) -> Rect:
         return self.rect
-
-    def translated(self, dx: float, dy: float) -> Link:
-        x, y, w, h = self.rect
-        return replace(self, rect=(x + dx, y + dy, w, h))
 
 
 @dataclass(frozen=True, kw_only=True)

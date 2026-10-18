@@ -47,7 +47,7 @@ from .annotations import (
     points_bounds,
     quarter_turn,
 )
-from .geometry import PageGeometry, visible_box
+from .geometry import PageGeometry, multiply, visible_box
 
 log = logging.getLogger(__name__)
 
@@ -525,13 +525,6 @@ def _embedded_file(spec) -> tuple[str, bytes | None]:
         return name, None
 
 
-def _multiply(m, n) -> tuple[float, ...]:
-    """The PDF matrix that applies `m`, then `n`."""
-    a, b, c, d, e, f = m
-    A, B, C, D, E, F = n
-    return a * A + b * C, a * B + b * D, c * A + d * C, c * B + d * D, e * A + f * C + E, e * B + f * D + F
-
-
 def picture_parts(obj) -> tuple[pikepdf.Stream, tuple[float, ...]] | None:
     """For a stamp whose appearance only shows one picture: (the image, image space to page space).
 
@@ -560,7 +553,7 @@ def picture_parts(obj) -> tuple[pikepdf.Stream, tuple[float, ...]] | None:
         elif op == "Q":
             ctm = stack.pop() if stack else IDENTITY
         elif op == "cm":
-            ctm = _multiply(tuple(float(v) for v in operands), ctm)
+            ctm = multiply(tuple(float(v) for v in operands), ctm)
         elif op == "Do" and drawn is None and str(operands[0]) == name:
             drawn = ctm
         elif op != "gs":
@@ -569,7 +562,7 @@ def picture_parts(obj) -> tuple[pikepdf.Stream, tuple[float, ...]] | None:
         return None
     form_matrix = tuple(float(v) for v in form.get("/Matrix", IDENTITY))
     placement = tuple(form_placement(form, [float(v) for v in obj.Rect]))
-    return image, _multiply(_multiply(drawn, form_matrix), placement)
+    return image, multiply(multiply(drawn, form_matrix), placement)
 
 
 def _read_picture(obj, geometry: PageGeometry, common: dict) -> ImageStamp | None:
