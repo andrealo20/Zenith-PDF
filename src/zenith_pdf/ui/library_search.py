@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.i18n import tr
-from ..core.library_index import Hit, LibraryIndex, query_terms
+from ..core.library_index import MATCH_END, MATCH_START, Hit, LibraryIndex, query_terms
 from ..settings import Settings
 from ..theme import qcolor, themes
 from .widgets import muted_label
@@ -120,7 +120,8 @@ class _HitDelegate(QStyledItemDelegate):
                          tr(f"{hit.path.stem}   ·   p. {hit.page + 1}"))
         painter.restore()
         painter.save()
-        words = hit.snippet.replace("&", "&amp;").replace("<", "&lt;").replace("[", "<b>").replace("]", "</b>")
+        words = hit.snippet.replace("&", "&amp;").replace("<", "&lt;")
+        words = words.replace(MATCH_START, "<b>").replace(MATCH_END, "</b>")
         text = QTextDocument()
         text.setDefaultFont(option.font)
         text.setHtml(tr(f'<span style="color:{t.text_muted}">{words}</span>'))

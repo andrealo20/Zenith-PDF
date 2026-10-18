@@ -255,8 +255,9 @@ class InfoLoader(QObject):
             try:
                 stat = path.stat()
                 info = {"mtime": stat.st_mtime, "size": stat.st_size}
+                pdf_bytes = path.read_bytes()  # PDFium holding the file open would make saving it fail on Windows
                 with PDFIUM_LOCK:
-                    pdf = pdfium.PdfDocument(str(path))
+                    pdf = pdfium.PdfDocument(pdf_bytes)
                     try:
                         info["pages"] = len(pdf)
                         # Metadata can hold line breaks and runs of spaces: keep one line.
@@ -303,7 +304,7 @@ class FileModel(QAbstractTableModel):
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            return COLUMNS[section]
+            return tr(COLUMNS[section])
         return None
 
     def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole):
@@ -321,7 +322,7 @@ class FileModel(QAbstractTableModel):
                     TAGS: ",".join(entry.tags)}.get(column, "")
         if role == Qt.ItemDataRole.DisplayRole:
             return {NAME: entry.path.name, LOCATION: short_folder(entry.path), AUTHOR: entry.author,
-                    PAGES: str(entry.pages) if entry.pages else "", OPENED: ago(entry.opened)}.get(column, "")
+                    PAGES: str(entry.pages) if entry.pages else "", OPENED: tr(ago(entry.opened))}.get(column, "")
         return None
 
     def changed(self, path: str) -> None:
@@ -419,10 +420,12 @@ class FileDelegate(QStyledItemDelegate):
                 painter.setPen(QColor(t.text))
                 painter.drawText(chip, Qt.AlignmentFlag.AlignCenter, tag)
                 x += width + 4
-            if not entry.tags:
+            if not entry.tags and option.state & QStyle.StateFlag.State_MouseOver:  # an extra: only under the pointer
                 painter.setPen(QColor(t.text_muted))
                 icon("tag", t.text_muted).paint(painter, QRect(x, rect.center().y() - 8, 16, 16))
-                painter.drawText(QRect(x + 22, rect.y(), 100, rect.height()), Qt.AlignmentFlag.AlignVCenter, tr("Add tag"))
+                area = QRect(x + 22, rect.y(), rect.right() - 4 - (x + 22), rect.height())
+                painter.drawText(area, Qt.AlignmentFlag.AlignVCenter,
+                                 metrics.elidedText(tr("Add tag"), Qt.TextElideMode.ElideRight, area.width()))
         elif column == MORE:
             icon("dots-three-vertical", t.text_muted).paint(painter, QRect(rect.center().x() - 9, rect.center().y() - 9,
                                                                            18, 18))
@@ -532,7 +535,7 @@ class QuickCard(QFrame):
         self.caption.setVisible(mode == "full")
         self.name.setVisible(mode != "icon")
         self.layout().setAlignment(self.glyph, Qt.AlignmentFlag.AlignHCenter if mode == "icon" else Qt.AlignmentFlag(0))
-        self.setToolTip(tr("" if mode == "full" else f"{self.title}: {self.detail_text}"))
+        self.setToolTip("" if mode == "full" else f"{tr(self.title)}: {tr(self.detail_text)}")
 
     def minimumSizeHint(self) -> QSize:
         return QSize(56, super().minimumSizeHint().height())
@@ -842,7 +845,8 @@ class HomePage(QWidget):
         if self.scope.startswith("folder:"):
             self.title.setText(Path(self.scope[7:]).name or self.scope[7:])
         elif self.scope.startswith("tag:"):
-            self.title.setText(tr(f"Tagged {self.scope[4:]}"))
+            # A one-word template only takes numbers: the tag's name goes after the translated word.
+            self.title.setText(f"{tr('Tagged')} {self.scope[4:]}")
         else:
             self.title.setText(tr(titles.get(self.scope, "All files")))
         count = len(entries)

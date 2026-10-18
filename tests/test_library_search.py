@@ -10,7 +10,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from conftest import _add_text
-from zenith_pdf.core.library_index import LibraryIndex, query_terms
+from zenith_pdf.core.library_index import MATCH_END, MATCH_START, LibraryIndex, query_terms
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui.library_search import Indexer, InsideResults
 
@@ -53,7 +53,7 @@ def test_the_index_finds_every_word_on_one_page(tmp_path, library):
     assert index.add(lecture) == -1  # unchanged: not read again
     hits = index.search("maximum power temperature")
     assert [(h.path.name, h.page) for h in hits] == [("Lecture 4.pdf", 1)]
-    assert "[maximum]" in hits[0].snippet.lower()
+    assert f"{MATCH_START}maximum{MATCH_END}" in hits[0].snippet.lower()
     assert [h.path.name for h in index.search("effic")] == ["Lab report.pdf"]  # the start of a word is enough
     assert [h.page for h in index.search("CAFFE perche")] == [1]  # no case, no accents
     assert index.search("sun inverter") == []  # never on the same page

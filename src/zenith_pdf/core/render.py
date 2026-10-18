@@ -297,11 +297,15 @@ class RenderPool(QObject):
 
     def _dispatch(self) -> None:
         with self._lock:
+            # A process that died for good stays "ready": alive() keeps the thread at work then.
+            processes_ready = any(worker.ready and worker.alive() for worker in self._workers[1:])
             for worker in self._workers:
                 if not self._jobs:
                     return
                 if not worker.ready or worker.index in self._inflight:
                     continue
+                if worker.index == 0 and processes_ready:
+                    continue  # its tiles hold PDFIUM_LOCK, which the GUI thread waits on at every mouse move
                 key = self._pick(worker.index)
                 job = self._jobs.pop(key)
                 job_id = next(self._ids)

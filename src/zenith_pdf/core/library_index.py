@@ -19,13 +19,15 @@ from .writing import clean_pdf_text
 
 SNIPPET_WORDS = 14  # words of context around a match
 MIN_QUERY = 2  # shorter words would match half the documents
+# Around a matched word in a snippet: control codes, which page text never holds (textclean spells them out).
+MATCH_START, MATCH_END = "\x02", "\x03"
 
 
 @dataclass(frozen=True)
 class Hit:
     path: Path
     page: int  # from 0
-    snippet: str  # with the matched words between [ and ]
+    snippet: str  # with the matched words between MATCH_START and MATCH_END
 
 
 def query_terms(text: str) -> list[str]:
@@ -40,6 +42,17 @@ class LibraryIndex:
         self.path = path
         self._local = threading.local()
         path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self._create()
+        except sqlite3.OperationalError:
+            raise  # locked or out of reach: the file itself may be sound
+        except sqlite3.DatabaseError:  # damaged: it is only a cache, so it starts again empty
+            self.close()
+            for name in (path.name, f"{path.name}-wal", f"{path.name}-shm"):
+                (path.parent / name).unlink(missing_ok=True)
+            self._create()
+
+    def _create(self) -> None:
         with self._connect() as db:
             db.execute("PRAGMA journal_mode=WAL")
             db.execute("CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, mtime REAL, size INTEGER, "
@@ -95,8 +108,9 @@ class LibraryIndex:
 
         texts = []
         try:
+            data = path.read_bytes()  # PDFium holding the file open would make saving it fail on Windows
             with PDFIUM_LOCK:
-                pdf = pdfium.PdfDocument(str(path))
+                pdf = pdfium.PdfDocument(data)
                 count = len(pdf)
             try:
                 for index in range(count):
@@ -139,8 +153,8 @@ class LibraryIndex:
         match = " AND ".join(f'"{term}"*' for term in terms)
         try:
             rows = self._connect().execute(
-                "SELECT path, page, snippet(pages, 0, '[', ']', '…', ?) FROM pages WHERE pages MATCH ? "
-                "ORDER BY bm25(pages) LIMIT ?", (SNIPPET_WORDS, match, limit)).fetchall()
+                "SELECT path, page, snippet(pages, 0, ?, ?, '…', ?) FROM pages WHERE pages MATCH ? "
+                "ORDER BY bm25(pages) LIMIT ?", (MATCH_START, MATCH_END, SNIPPET_WORDS, match, limit)).fetchall()
         except sqlite3.Error:
             return []
         return [Hit(Path(path), int(page), " ".join(snippet.split())) for path, page, snippet in rows

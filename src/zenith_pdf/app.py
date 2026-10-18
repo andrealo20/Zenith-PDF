@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -271,9 +272,13 @@ def main(argv: list[str] | None = None) -> int:
     window.open_targets(targets)
     # Once the window is up: the tour after an update, or the first time, whether to open PDF files.
     QTimer.singleShot(700, lambda: window.after_update() or window.offer_default_app())
-    indexer = MainWindow.make_indexer(window.settings)
-    # The files on the home page, a while after starting: searching inside them works from then on.
-    QTimer.singleShot(15000, lambda: indexer.add(window.settings.recent_files()))
+    try:
+        indexer = MainWindow.make_indexer(window.settings)
+    except (OSError, sqlite3.Error):  # an index that can't be opened costs the search inside documents, not the app
+        indexer = None
+    if indexer is not None:
+        # The files on the home page, a while after starting: searching inside them works from then on.
+        QTimer.singleShot(15000, lambda: indexer.add(window.settings.recent_files()))
     updater = MainWindow.make_updater(window.settings)
     if updater.due():
         QTimer.singleShot(8000, updater.check)  # a moment after starting, never in the way of it
