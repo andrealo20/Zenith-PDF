@@ -261,7 +261,7 @@ class RenderPool(QObject):
                 return  # a late repaint after shutdown: the workers are gone
             running = {key for _, key, _ in self._inflight.values()}
             for key, document, page, scale, priority, region in jobs:
-                if key in running:
+                if key in running or document.closed:  # a late request for a closed tab: it would come back
                     continue
                 if document.key not in self._documents:
                     self._register(document)

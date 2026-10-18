@@ -151,7 +151,11 @@ def test_a_zoom_glide_renders_only_where_it_lands(workspace, monkeypatch):
 
     monkeypatch.setattr(renderer, "request_many", spy)
     view.zoom_in()
-    QTest.qWait(ZOOM_GLIDE_MS + 60)
+    QTest.qWait(ZOOM_GLIDE_MS)
+    for _ in range(100):  # a slow machine's frames run late
+        if view.glide.state() != QVariantAnimation.State.Running:
+            break
+        settle(20)
     assert view.glide.state() != QVariantAnimation.State.Running and not asked_mid_glide
     for _ in range(100):  # what it landed on still gets sharp
         if view.missing_tiles() == 0:

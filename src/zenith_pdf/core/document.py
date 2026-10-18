@@ -243,6 +243,10 @@ class Document:
             self._source.close()
 
     @property
+    def closed(self) -> bool:
+        return self._closed
+
+    @property
     def read_only(self) -> bool:
         """Nothing can be changed: the file could not be fully parsed, or the reader chose to only read it."""
         return self._source is None or self.view_only
