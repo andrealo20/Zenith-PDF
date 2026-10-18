@@ -30,7 +30,7 @@ from PySide6.QtGui import QImage
 from . import forms, pages, textclean
 from .annotations import Annotation, ImageStamp, Point, Rect, merge_line_rects, new_id
 from .appearance import pdf_rect
-from .geometry import Box, PageGeometry, visible_box
+from .geometry import Box, PageGeometry
 from .pdf_annots import SUPPORTED, groups_of, picture_parts, read_annotation, write_page
 from .render_worker import PAGE_CACHE, hide_annotations, render_region
 
@@ -215,7 +215,12 @@ class Document:
         if display == self._display:
             return
         self._display = display
-        self._unload()
+        # Only PDFium's copy: _unload would close the editable PDF too, and pages it had not read yet would save blank.
+        for textpage in self._textpages.values():
+            textpage.close()
+        self._textpages.clear()
+        for page in self._pages.values():
+            page.close()
         self._pages.clear()
         if self._pdf is not None:
             self._pdf.close()
@@ -283,7 +288,7 @@ class Document:
         if index not in self._geometry:
             with PDFIUM_LOCK:
                 page = self._page(index)
-                box = visible_box(_box(page.get_mediabox()), _box(page.get_cropbox()))
+                box = _box(page.get_bbox())  # what PDFium shows, so it always matches page_size
                 self._geometry[index] = PageGeometry(box, page.get_rotation())
         return self._geometry[index]
 
@@ -585,8 +590,10 @@ class Document:
             raise ValueError("A PDF needs at least one page.")
 
         def operation(pdf):
+            gone = {pdf.pages[index].obj.objgen for index in indices}
             for index in sorted(set(indices), reverse=True):
                 del pdf.pages[index]
+            pages.forget_pages(pdf, gone)  # else a link or bookmark to a page keeps it in the file
 
         self.edit_pages(annotations, operation)
 
@@ -1050,7 +1057,7 @@ def _box(values) -> Box:
 
 def _view_point(destination) -> Point | None:
     """The spot a PDFium destination shows, in its page's PDF space: (x, y) for /XYZ (a null x is 0) and
-    (0, y) for /FitH and /FitBH. None for the other views and a null height: the whole page.
+    (0, y) for /FitH and /FitBH. None for the other views and a null or zero height: the whole page.
     The caller holds PDFIUM_LOCK."""
     import ctypes
 
@@ -1065,8 +1072,8 @@ def _view_point(destination) -> Point | None:
         if not raw.FPDFDest_GetLocationInPage(destination, has_x, has_y, has_zoom, x, y, zoom) or not has_y.value:
             return None
         return (float(x.value) if has_x.value else 0.0), float(y.value)
-    if mode in (raw.PDFDEST_VIEW_FITH, raw.PDFDEST_VIEW_FITBH) and count.value >= 1:
-        return 0.0, float(values[0])
+    if mode in (raw.PDFDEST_VIEW_FITH, raw.PDFDEST_VIEW_FITBH) and count.value >= 1 and values[0] != 0:
+        return 0.0, float(values[0])  # PDFium gives 0 for a null height, and the bottom edge is no place to go
     return None
 
 

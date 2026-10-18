@@ -20,7 +20,7 @@ PAGE_SIZE_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
 def _thumb_size(page_size: tuple[float, float]) -> tuple[float, float]:
-    width, height = page_size
+    width, height = (max(side, 1.0) for side in page_size)  # 0 x 0: a CropBox outside the MediaBox
     scale = min(THUMB_WIDTH / width, THUMB_MAX_HEIGHT / height)
     return width * scale, height * scale
 
@@ -67,7 +67,7 @@ class ThumbnailModel(QAbstractListModel):
             if annotations:
                 painter = QPainter(image)
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                scale = image.width() / self._document.page_size(row)[0]
+                scale = image.width() / max(self._document.page_size(row)[0], 1.0)
                 painter.scale(scale, scale)
                 for annotation in annotations:
                     paint_annotation(painter, annotation)
@@ -112,7 +112,7 @@ class ThumbnailModel(QAbstractListModel):
             if row not in self._pixmaps and row not in self._pending:
                 self._pending.add(row)
                 width, _ = _thumb_size(self._document.page_size(row))
-                scale = width * self._ratio / self._document.page_size(row)[0]
+                scale = width * self._ratio / max(self._document.page_size(row)[0], 1.0)
                 self._renderer.request((self._token, row), self._document, row, scale, (2, row))
             return self._pixmaps.get(row)
         if role == PAGE_SIZE_ROLE:

@@ -96,27 +96,50 @@ def new_page(pdf: pikepdf.Pdf, size: tuple[float, float], kind: str = "blank") -
     return pikepdf.Page(pdf.make_indirect(page))
 
 
-def detach_annotations(pdf: pikepdf.Pdf, index: int, keep=None) -> None:
+def detach_annotations(pdf: pikepdf.Pdf, index: int, keep=None, forms: bool = False) -> None:
     """Give a copied page annotations of its own: fresh dictionaries (a page copied
     twice may otherwise share them), no /NM (new ids are assigned on import), no
-    popups, and /P pointing at the new page.
+    popups, and /P pointing at the new page. With `forms`, copy_form_fields gave
+    the page widgets of its own, listed in /AcroForm: they stay as they are.
 
     `keep(position, copy)` may change each copy (`position` is where the original
-    sat in /Annots) and says whether it stays.
+    sat among the dictionaries in /Annots, see link_targets) and says whether it stays.
     """
     page = pdf.pages[index].obj
     annots = page.get("/Annots")
     if not isinstance(annots, Array):
         return
     kept = []
-    for position, annot in enumerate(annots):
-        if not isinstance(annot, Dictionary) or str(annot.get("/Subtype", "")) == "/Popup":
+    for position, annot in enumerate(_entries(annots)):
+        if str(annot.get("/Subtype", "")) == "/Popup":
             continue
-        copy = Dictionary({key: annot[key] for key in annot.keys() if key not in ("/NM", "/Popup", "/IRT", "/P")})
+        if forms and annot.get("/Subtype") == Name.Widget:
+            copy = annot
+        else:
+            copy = Dictionary({key: annot[key] for key in annot.keys() if key not in ("/NM", "/Popup", "/IRT", "/P")})
         copy.P = page
         if keep is None or keep(position, copy):
-            kept.append(pdf.make_indirect(copy))
+            kept.append(copy if copy.is_indirect else pdf.make_indirect(copy))
     page.Annots = Array(kept)
+
+
+def _entries(annots: Array) -> list[Dictionary]:
+    """The annotations in /Annots, without the nulls and other junk qpdf drops when it copies a form."""
+    return [annot for annot in annots if isinstance(annot, Dictionary)]
+
+
+def copy_form_fields(pdf: pikepdf.Pdf, first: int, other: pikepdf.Pdf, copied: list) -> bool:
+    """Make the form fields on pages just copied from `other` fields of pdf's form, renamed where a
+    name is taken: pdf.pages[first + n] is the copy of copied[n]. Says whether `other` has a form.
+
+    Without this the copied widgets are reachable from no /AcroForm, so filling one fills the original.
+    """
+    form = other.acroform
+    if not form.exists:
+        return False
+    for offset, page in enumerate(copied):
+        pdf.acroform.fix_copied_annotations(pdf.pages[first + offset], page, form)
+    return True
 
 
 def name_annotations(pdf: pikepdf.Pdf, subtypes) -> None:
@@ -159,14 +182,14 @@ def _destination(link: Dictionary):
 
 
 def link_targets(page: Dictionary, numbers: dict) -> dict[int, int]:
-    """/Annots position -> index of the page the link there leads to, for links to pages.
-    `numbers` maps page objects (objgen) to their indices."""
+    """Position among the dictionaries in /Annots -> index of the page the link there leads to,
+    for links to pages. `numbers` maps page objects (objgen) to their indices."""
     targets = {}
     annots = page.get("/Annots")
     if not isinstance(annots, Array):
         return targets
-    for position, annot in enumerate(annots):
-        found = _destination(annot) if isinstance(annot, Dictionary) else None
+    for position, annot in enumerate(_entries(annots)):
+        found = _destination(annot)
         if found is None:
             continue
         holder, key = found
@@ -192,6 +215,69 @@ def aim_link(link: Dictionary, page: Dictionary) -> None:
 
 def page_numbers(pdf: pikepdf.Pdf) -> dict:
     return {page.obj.objgen: index for index, page in enumerate(pdf.pages)}
+
+
+def forget_pages(pdf: pikepdf.Pdf, gone: set) -> None:
+    """Take out what still leads to pages taken out of `pdf` (`gone` holds their objgens): links,
+    bookmarks, named destinations and the opening view. Any of them would keep such a page, content
+    and all, in the saved file. A bookmark with others under it stays, leading nowhere."""
+    names = set()  # the named destinations that went with the pages
+
+    def dead(destination) -> bool:
+        """Whether a destination, or a GoTo action holding one, leads to a page that went."""
+        if isinstance(destination, Dictionary):
+            if destination.get("/S") != Name.GoTo:
+                return False
+            destination = destination.get("/D")
+        if isinstance(destination, (pikepdf.String, Name)):
+            return str(destination) in names
+        return (isinstance(destination, Array) and len(destination) > 0
+                and isinstance(destination[0], Dictionary) and destination[0].objgen in gone)
+
+    def goal(obj: Dictionary):  # what a link or a bookmark leads to
+        return obj.get("/A") if "/A" in obj else obj.get("/Dest")
+
+    holder = pdf.Root.get("/Names")
+    if isinstance(holder, Dictionary) and isinstance(holder.get("/Dests"), Dictionary):
+        tree = pikepdf.NameTree(holder.Dests)
+        for name in [name for name, value in tree.items()
+                     if dead(value.get("/D") if isinstance(value, Dictionary) else value)]:
+            del tree[name]
+            names.add(name)
+    old = pdf.Root.get("/Dests")  # named destinations as PDF 1.1 kept them
+    if isinstance(old, Dictionary):
+        for key in [key for key in old.keys()
+                    if dead(old[key].get("/D") if isinstance(old[key], Dictionary) else old[key])]:
+            del old[key]
+            names.add(key)
+    if dead(pdf.Root.get("/OpenAction")):
+        del pdf.Root["/OpenAction"]
+    for page in pdf.pages:
+        annots = page.obj.get("/Annots")
+        if not isinstance(annots, Array):
+            continue
+        kept = [a for a in annots
+                if not (isinstance(a, Dictionary) and a.get("/Subtype") == Name.Link and dead(goal(a)))]
+        if len(kept) < len(annots):
+            page.obj.Annots = Array(kept)
+
+    def prune(items: list) -> None:
+        for position in reversed(range(len(items))):
+            item = items[position]
+            prune(item.children)
+            if item.obj is None or not dead(goal(item.obj)):
+                continue
+            if item.children:
+                item.destination = item.action = None
+                for key in ("/Dest", "/A"):
+                    if key in item.obj:
+                        del item.obj[key]
+            else:
+                del items[position]
+
+    if "/Outlines" in pdf.Root:
+        with pdf.open_outline() as outline:
+            prune(outline.root)
 
 
 def new_document(size: tuple[float, float], kind: str = "blank", count: int = 1) -> bytes:
@@ -244,7 +330,9 @@ def flatten(pdf: pikepdf.Pdf, index: int, annots: list[Dictionary]) -> None:
         page.contents_add(pdf.make_stream(("Q\n" + "\n".join(ops)).encode("ascii")))
     kept = []
     for annot in page.obj.get("/Annots", Array()):
-        parent = annot.get("/Parent") if isinstance(annot, Dictionary) else None
+        if not isinstance(annot, Dictionary):
+            continue  # a null or a reference to a missing object (pikepdf gives None for both)
+        parent = annot.get("/Parent")
         if annot.objgen in targets or (parent is not None and parent.objgen in targets):
             continue  # flattened, or the popup of one that was
         kept.append(annot)
@@ -264,6 +352,7 @@ def extract(pdf: pikepdf.Pdf, indices: list[int], origin: str = "") -> bytes:
     out = pikepdf.new()
     for index in indices:
         out.pages.append(pdf.pages[index])
+    forms = copy_form_fields(out, 0, pdf, [pdf.pages[i] for i in indices])
     copies: dict[int, int] = {}
     for position, index in enumerate(indices):
         copies.setdefault(index, position)
@@ -279,7 +368,7 @@ def extract(pdf: pikepdf.Pdf, indices: list[int], origin: str = "") -> bytes:
         return bool(origin)
 
     for page in range(len(out.pages)):
-        detach_annotations(out, page, lambda position, link, page=page: keep(page, position, link))
+        detach_annotations(out, page, lambda position, link, page=page: keep(page, position, link), forms)
     if origin:
         out.Root.ZenithOrigin = pikepdf.String(origin)
     buffer = io.BytesIO()
@@ -301,8 +390,12 @@ def insert_pdf(pdf: pikepdf.Pdf, at: int, data: bytes, password: str = "", origi
         count, before = len(other.pages), len(pdf.pages)
         for offset, page in enumerate(other.pages):
             pdf.pages.insert(at + offset, page)
+        forms = copy_form_fields(pdf, at, other, list(other.pages))
+    groups: dict[str, str] = {}
 
     def keep(offset: int, position: int, link: Dictionary) -> bool:
+        if "/ZenithGroup" in link:  # copies group among themselves, never with the originals
+            link.ZenithGroup = pikepdf.String(groups.setdefault(str(link.ZenithGroup), new_id()))
         target = targets[offset].get(position)
         if target is not None:
             aim_link(link, pdf.pages[at + target].obj)
@@ -317,7 +410,7 @@ def insert_pdf(pdf: pikepdf.Pdf, at: int, data: bytes, password: str = "", origi
         return True
 
     for offset in range(count):
-        detach_annotations(pdf, at + offset, lambda position, link, offset=offset: keep(offset, position, link))
+        detach_annotations(pdf, at + offset, lambda position, link, offset=offset: keep(offset, position, link), forms)
     return count
 
 

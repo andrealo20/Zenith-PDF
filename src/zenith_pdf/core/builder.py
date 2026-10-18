@@ -40,7 +40,7 @@ def build(sources: dict[str, Source], entries: list[Entry]) -> bytes:
     opened: dict[str, pikepdf.Pdf] = {}
     numbers: dict[str, dict] = {}  # source -> its page objects' indices
     placed: dict[tuple[str, int], int] = {}  # (source, page) -> its first copy in the result
-    copied: list[tuple[int, str, dict[int, int]]] = []  # result page, its source, its links' targets
+    copied: list[tuple[int, str, dict[int, int], pikepdf.Page]] = []  # result page, source, link targets, original
     turned: dict[int, int] = {}  # result page -> its extra turn, in degrees
     try:
         for entry in entries:
@@ -56,7 +56,7 @@ def build(sources: dict[str, Source], entries: list[Entry]) -> bytes:
             out.pages.append(page)
             index = len(out.pages) - 1
             placed.setdefault((entry.source, entry.page), index)
-            copied.append((index, entry.source, targets))
+            copied.append((index, entry.source, targets, page))
             if entry.rotation % 360:
                 turned[index] = entry.rotation
         # Turned only now: a page copied again is a copy of its first copy, so a turn given to
@@ -72,8 +72,10 @@ def build(sources: dict[str, Source], entries: list[Entry]) -> bytes:
                 pages.aim_link(link, out.pages[found].obj)
             return found is not None
 
-        for index, source, targets in copied:
-            pages.detach_annotations(out, index, lambda position, link, s=source, t=targets: keep(s, t, position, link))
+        for index, source, targets, original in copied:
+            forms = pages.copy_form_fields(out, index, opened[source], [original])  # fields of the result's own form
+            pages.detach_annotations(out, index, lambda position, link, s=source, t=targets: keep(s, t, position, link),
+                                     forms=forms)
             if index in turned:  # only now: before detaching, copies of one page share their annotations
                 pdf_annots.redraw_turned(out, index)
         buffer = io.BytesIO()
