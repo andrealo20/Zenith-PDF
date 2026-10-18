@@ -237,3 +237,26 @@ def test_file_info_threads_stop_when_asked(window, pdf, tmp_path):
     loader.request(copies)  # after shutdown nothing new starts
     assert not any(thread.is_alive() for thread in loader._threads)
     loader.deleteLater()
+
+
+def test_a_narrow_home_opens_its_left_column_from_the_menu(window):
+    size = window.size()
+    home = window.home
+    window.show_home()
+    try:
+        window.resize(400, 800)
+        wait()
+        assert window.width() <= 420 and home.width() <= 420
+        assert home.menu_button.isVisible() and not home.nav.isVisible()
+        home.menu_button.click()
+        assert home.nav.isVisible() and home.scrim.isVisible() and home.nav.x() == 0
+        home.show_scope("starred")  # picking something closes it
+        assert not home.nav.isVisible() and not home.scrim.isVisible()
+        home.toggle_nav()
+        home.scrim.click()  # so does a tap on the files
+        assert not home.nav.isVisible()
+        home.show_scope("all")
+    finally:
+        window.resize(size)
+        wait()
+    assert home.nav.isVisible() and not home.menu_button.isVisible()

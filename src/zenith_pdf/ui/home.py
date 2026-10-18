@@ -91,6 +91,7 @@ LEAST_WIDTHS = {LOCATION: 110, AUTHOR: 100, PAGES: 56, OPENED: 100, TAGS: 100}  
 NAME_WIDTH = 260  # the least the name column gets; other columns shrink, then go, before it does
 OPTIONAL_COLUMNS = (OPENED, TAGS, LOCATION, PAGES, AUTHOR)  # kept in this order while there is room
 ASIDE_FROM = 1280  # page width from which the guide column shows
+NAV_FROM = 760  # page width from which the left column stays; narrower, the menu button opens it over the files
 NAV_WIDTH = 220
 BUTTON_HEIGHT = 36
 FULL_CARD = 150  # quick action width that fits its caption
@@ -566,7 +567,7 @@ class HomePage(QWidget):
         self.loader.loaded.connect(self._on_loaded)
 
         # Left column
-        nav = QFrame()
+        self.nav = nav = QFrame()
         nav.setObjectName("HomeSide")
         nav.setFixedWidth(NAV_WIDTH)
         self._nav = QVBoxLayout(nav)
@@ -600,10 +601,10 @@ class HomePage(QWidget):
         self._nav.addSpacing(8)
         guide = NavButton("graduation-cap", "Guide", "guide")
         guide.setCheckable(False)
-        guide.clicked.connect(lambda: self.guide_requested.emit(""))
+        guide.clicked.connect(lambda: (self.close_nav(), self.guide_requested.emit("")))
         gear = NavButton("gear-six", "Settings", "settings")
         gear.setCheckable(False)
-        gear.clicked.connect(self.settings_requested.emit)
+        gear.clicked.connect(lambda: (self.close_nav(), self.settings_requested.emit()))
         self._nav.addWidget(guide)
         self._nav.addWidget(gear)
 
@@ -626,6 +627,12 @@ class HomePage(QWidget):
         self.new_button.clicked.connect(self.new_requested.emit)
         top = QHBoxLayout()
         top.setSpacing(10)
+        # On a narrow page the left column is out of the row: this opens it over the files.
+        self.menu_button = IconButton("list", "Files, folders, tags and tools", icon_size=20)
+        self.menu_button.setFixedSize(BUTTON_HEIGHT, BUTTON_HEIGHT)
+        self.menu_button.clicked.connect(self.toggle_nav)
+        self.menu_button.hide()
+        top.addWidget(self.menu_button)
         top.addWidget(self.search, 1)
         top.addWidget(self.open_button)
         top.addWidget(self.new_button)
@@ -740,10 +747,16 @@ class HomePage(QWidget):
         aside.addWidget(self.tip)
         aside.addStretch()
 
-        outer = QHBoxLayout(self)
+        self._outer = outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
         outer.addWidget(nav)
+        self._narrow = False
+        self.scrim = QPushButton(self)  # behind the open column: a tap on the files closes it
+        self.scrim.setStyleSheet("QPushButton { background: rgba(0, 0, 0, 110); border: none; }")
+        self.scrim.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.scrim.clicked.connect(self.close_nav)
+        self.scrim.hide()
         outer.addLayout(main, 1)
         outer.addWidget(self.aside)
 
@@ -949,6 +962,7 @@ class HomePage(QWidget):
         self._dynamic.addStretch()
 
     def _tool(self, key: str) -> None:
+        self.close_nav()
         if key == "compare":
             self.compare_requested.emit()
         else:
@@ -983,6 +997,7 @@ class HomePage(QWidget):
         self._nav_buttons.append(button)
 
     def show_scope(self, key: str) -> None:
+        self.close_nav()
         self.scope = key
         self.refresh()
 
@@ -1112,7 +1127,45 @@ class HomePage(QWidget):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self.aside.setVisible(self.width() >= ASIDE_FROM)
+        self._set_narrow(self.width() < NAV_FROM)
+        if self.nav.isVisible() and self._narrow:
+            self._place_nav()
         self._fit_columns()
+
+    # A narrow page: the left column over the files -------------------------------------
+
+    def _set_narrow(self, narrow: bool) -> None:
+        if narrow == self._narrow:
+            return
+        self._narrow = narrow
+        self.menu_button.setVisible(narrow)
+        self.scrim.hide()
+        if narrow:
+            self._outer.removeWidget(self.nav)
+            self.nav.hide()
+        else:
+            self._outer.insertWidget(0, self.nav)
+            self.nav.show()
+
+    def _place_nav(self) -> None:
+        self.scrim.setGeometry(self.rect())
+        self.nav.setGeometry(0, 0, NAV_WIDTH, self.height())
+
+    def toggle_nav(self) -> None:
+        if self.nav.isVisible():
+            self.close_nav()
+            return
+        self._place_nav()
+        self.scrim.show()
+        self.scrim.raise_()
+        self.nav.show()
+        self.nav.raise_()
+
+    def close_nav(self) -> None:
+        """Close the left column when it is open over the files; in a wide page it stays."""
+        if self._narrow:
+            self.nav.hide()
+            self.scrim.hide()
 
     def _refresh_icons(self, *_):
         self.open_button.setIcon(icon("folder-open", themes.current.accent_text))

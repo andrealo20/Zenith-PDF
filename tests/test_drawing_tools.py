@@ -816,7 +816,7 @@ def test_the_tool_chooser_closes_with_its_tab(window, workspace, sample_pdf, tmp
 
 
 def test_the_window_can_be_narrow(window):
-    assert window.stack.minimumWidth() == 720 and window.minimumSizeHint().width() <= 960
+    assert window.stack.minimumWidth() == 360 and window.minimumSizeHint().width() <= 960
 
 
 def test_unsaved_changes_are_asked_about_with_verbs(window, workspace, monkeypatch):

@@ -57,7 +57,8 @@ from .workspace import Workspace
 
 APP_NAME = "Zenith PDF"
 PRINT_DPI = 300  # enough for print; more only makes huge spool files
-MIN_CONTENT_WIDTH = 720  # pixels: the window can be snapped to half of a 1280 pixel wide screen
+MIN_CONTENT_WIDTH = 360  # pixels: a window snapped to a third of a screen still shows a page
+FULL_TOP_BAR = 560  # narrower, save as, print and full screen leave the top bar for the More menu
 REMEMBER_STYLES_MS = 300  # tool styles are written this long after the last change: a slider sends many
 
 
@@ -151,6 +152,7 @@ class MainWindow(QMainWindow):
         self.full_screen_button = IconButton("corners-out", "Full screen (F11)", help="full_screen")
         self.full_screen_button.clicked.connect(self._toggle_full_screen)
         right += [self.full_screen_button, self.menu_button]
+        self._spare_buttons = [*self.document_buttons[1:], self.full_screen_button]  # in the More menu too
 
         self.top_bar = top = QFrame()
         top.setObjectName("TopBar")
@@ -1260,6 +1262,8 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        for button in self._spare_buttons:
+            button.setVisible(self.width() >= FULL_TOP_BAR)
         if self.update_card is not None and self.update_card.isVisible():
             self.update_card.place()
 
