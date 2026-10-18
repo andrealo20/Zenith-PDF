@@ -106,7 +106,8 @@ class TextBoxEditor(QGraphicsTextItem):
 
     def focusOutEvent(self, event) -> None:
         super().focusOutEvent(event)
-        if event.reason() != Qt.FocusReason.PopupFocusReason:  # its own context menu: still typing
+        # Its own context menu takes the focus as a popup, or on macOS as another window: still typing.
+        if event.reason() not in (Qt.FocusReason.PopupFocusReason, Qt.FocusReason.ActiveWindowFocusReason):
             self.finish()
 
     def finish(self) -> None:
