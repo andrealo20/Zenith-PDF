@@ -43,14 +43,14 @@ from PySide6.QtWidgets import (
 
 from ..core.i18n import tr
 from ..core.platforms import native_keys
-from ..icons import CachedIconEngine, hue_colour, icon
+from ..icons import hue_colour, icon
 from ..theme import Theme, qcolor, themes, tone_sheet
 
 GLASS_BLEED = 24  # logical px of backdrop sampled beyond the bar: the blur reaches its edges from what is there
 GLASS_RADIUS = 14  # corner radius of tall glass panels, as the tool menu's; bars are capsules
 CAPSULE_MAX = 48  # px: a floating bar this tall or less is a capsule, its ends half circles
 BLUR_STEP = 2  # logical px per texel of the blurred backdrop, which the painter stretches smoothly
-BLUR_SIGMA = 3.5  # logical px: lines of text show through as soft strokes, too soft to read
+BLUR_SIGMA = 6.0  # logical px: lines of text behind melt into an even wash, never strokes to read
 STATS_STEP = 18  # logical px per sample when judging how strong the tint must be
 SHADOW_BLUR = 14  # logical px the shadow fades over, all round the bar
 SHADOW_OFFSET = 6  # the shadow falls this far below the bar
@@ -67,7 +67,7 @@ CONTRAST_MARGIN = 0.15  # aimed above both, for the rounding of 8-bit colours an
 MOST_ALPHA = 0.92  # the glass never covers what is behind it completely
 ALPHA_STEP = 0.02
 GLASS_STYLES = ("clear", "balanced", "solid")
-SATURATION = {"clear": 1.6, "balanced": 1.2}  # colours behind the glass, lifted so the tint never turns them grey
+SATURATION = {"clear": 1.3, "balanced": 1.2}  # colours behind the glass, lifted so the tint never turns them grey
 NOISE_ALPHA = 4  # 0-255: the faint grain on the glass, which keeps its smooth gradients from banding
 NOISE_SIZE = 64  # device px of the grain's tile
 FADE_MS = 150  # floating bars and chips come and go this fast
@@ -357,8 +357,8 @@ def _snapped(value: float) -> int:
 # Icons ------------------------------------------------------------------------------
 
 
-class _CachedIcon(CachedIconEngine):
-    """Keeps every picture of an icon it has drawn, by size, mode, state and screen scale.
+class _CachedIcon(QIconEngine):
+    """Keeps every picture of an icon it has drawn, by size, mode, state, screen scale and theme.
 
     The bars repaint whenever the pages scroll under them; drawing the vector glyphs
     again each time cost more than the scrolling itself.
@@ -367,9 +367,25 @@ class _CachedIcon(CachedIconEngine):
     def __init__(self, source: QIcon):
         super().__init__()
         self._source = source
+        self._pixmaps: dict[tuple, QPixmap] = {}
 
-    def _render(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
-        return self._source.pixmap(size, scale, mode, state)
+    def scaledPixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
+        key = (size.width(), size.height(), mode, state, round(scale * 100), themes.current.name)
+        pixmap = self._pixmaps.get(key)
+        if pixmap is None:
+            pixmap = self._pixmaps[key] = self._source.pixmap(size, scale, mode, state)
+        return pixmap
+
+    def pixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QPixmap:
+        return self.scaledPixmap(size, mode, state, 1.0)
+
+    def paint(self, painter: QPainter, rect: QRect, mode: QIcon.Mode, state: QIcon.State) -> None:
+        device = painter.device()
+        scale = device.devicePixelRatioF() if device is not None else 1.0
+        painter.drawPixmap(rect, self.scaledPixmap(rect.size(), mode, state, scale))
+
+    def actualSize(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QSize:
+        return size
 
     def clone(self) -> QIconEngine:
         return _CachedIcon(self._source)

@@ -1,16 +1,45 @@
-"""Icon rail on the left edge plus the panel it opens."""
+"""Icon rail on the left edge plus the panel it opens, which its right edge widens or narrows."""
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
 
 from .widgets import IconButton
 
 RAIL_WIDTH = 48
-PANEL_WIDTH = 264
+PANEL_WIDTH = 264  # at first; dragging the panel's right edge changes it, for every tab
+PANEL_MIN, PANEL_MAX = 200, 640
+GRIP = 5  # px of the panel's right edge that take the drag: its border and the scroll bar's margin, no more
+
+
+class _Grip(QWidget):
+    """The panel's right edge: dragged, it makes the panel wider or narrower."""
+
+    def __init__(self, side: SidePanel):
+        super().__init__(side)
+        self._side = side
+        self._start: tuple[float, int] | None = None  # where the drag began, and the width then
+        self.setCursor(Qt.CursorShape.SplitHCursor)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._start = (event.globalPosition().x(), self._side.panel_width())
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._start is not None:
+            x, width = self._start
+            self._side.set_panel_width(round(width + event.globalPosition().x() - x))
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._start is not None:
+            self._start = None
+            self._side.resized.emit(self._side.panel_width())
 
 
 class SidePanel(QWidget):
+    resized = Signal(int)  # the panel's width, once a drag of its edge ends
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._rail = QFrame()
@@ -25,6 +54,8 @@ class SidePanel(QWidget):
         self._stack.setObjectName("Panel")
         self._stack.setFixedWidth(PANEL_WIDTH)
         self._stack.hide()
+        self._grip = _Grip(self)
+        self._grip.hide()
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -34,6 +65,23 @@ class SidePanel(QWidget):
 
         self._buttons: dict[str, IconButton] = {}
         self._panels: dict[str, QWidget] = {}
+
+    def panel_width(self) -> int:
+        return self._stack.minimumWidth()  # its fixed width, shown or not
+
+    def set_panel_width(self, width: int) -> None:
+        """The panel this wide, within PANEL_MIN and PANEL_MAX."""
+        self._stack.setFixedWidth(max(PANEL_MIN, min(PANEL_MAX, int(width))))
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._place_grip()
+
+    def _place_grip(self) -> None:
+        self._grip.setVisible(self._stack.isVisibleTo(self))
+        if self._grip.isVisible():
+            self._grip.setGeometry(RAIL_WIDTH + self._stack.minimumWidth() - GRIP, 0, GRIP, self.height())
+            self._grip.raise_()
 
     def add_panel(self, key: str, icon_name: str, tooltip: str, widget: QWidget) -> None:
         button = IconButton(icon_name, tooltip, checkable=True, help=f"panel_{key}")
@@ -64,11 +112,13 @@ class SidePanel(QWidget):
         self._stack.show()
         for name, button in self._buttons.items():
             button.setChecked(name == key)
+        self._place_grip()
 
     def hide_panel(self) -> None:
         self._stack.hide()
         for button in self._buttons.values():
             button.setChecked(False)
+        self._place_grip()
 
     def toggle(self, key: str | None = None) -> None:
         key = key or next(iter(self._panels))

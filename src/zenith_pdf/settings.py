@@ -24,13 +24,14 @@ DEFAULTS: dict[str, object] = {
     "language": "auto",  # "auto" for the system's, else a key of core.i18n.LANGUAGES
     "accent": "blue",  # a key of theme.ACCENTS
     "glass": "clear",  # the floating bars: "clear" or "balanced" frosted glass, or "solid"
-    "icon_colours": True,  # icons coloured by what they do, as Acrobat's tools are; off: the text colour
+    "icon_colours": False,  # icons coloured by what they do, as Acrobat's tools are; off: the text colour
     "glass_adaptive": True,  # the bars turn light over a bright page and dark over dark content
     "reading_full_screen": False,  # reading mode also fills the screen
     "default_zoom": "width",  # width, page or actual
     "default_layout": "single",  # a key of document_view.LAYOUTS
     "default_tint": "normal",  # a key of document_view.TINTS
     "side_panel": "auto",  # auto (pages panel for multi-page documents), always or never
+    "side_panel_width": 264,  # px: the panel's right edge drags it wider or narrower, in every tab
     "link_preview": True,  # pointing at a link to a page shows a card of the spot it goes to
     # Help
     "help_badges": "hover",  # hover (a card after pointing for a moment), badges (a ? on buttons too) or never

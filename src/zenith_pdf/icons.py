@@ -1,10 +1,9 @@
 """Theme-aware icons: Phosphor (MIT licensed, bundled with qtawesome), plus a few drawn here.
 
-Icons have a colour by what they do, as in Acrobat's tool list: blue for files, purple for pens and
-signing, pink for editing text, red for making and taking away, green for pages and searching, orange for
-comments, teal for help (HUES). Little controls (a caret, a close cross, zoom) keep the text colour. Every
-icon has some depth: lit from above, its colour runs from a lighter shade at the top to a deeper one at the
-bottom, over a soft shadow (_DepthIcon).
+Icons are drawn flat in the text colour, the clearest on every bar. Settings > View & Layout > Coloured icons
+gives them a colour by what they do, as in Acrobat's tool list: blue for files, purple for pens and signing,
+pink for editing text, red for making and taking away, green for pages and searching, orange for comments,
+teal for help (HUES). Little controls (a caret, a close cross, zoom) keep the text colour either way.
 
 Phosphor 1.3 has no squiggle, tape, lasso, laser pointer, signature or equation
 glyph, so those are painted with the same thin stroke, on a 24-unit grid. So are
@@ -23,8 +22,6 @@ from PySide6.QtGui import (
     QFont,
     QIcon,
     QIconEngine,
-    QImage,
-    QLinearGradient,
     QPainter,
     QPainterPath,
     QPen,
@@ -425,7 +422,7 @@ HUES = {name: hue for hue, names in _HUE_NAMES.items() for name in names.split()
 
 
 class _Style:
-    colourful = True  # Settings > View & Layout > Coloured icons
+    colourful = False  # Settings > View & Layout > Coloured icons
 
 
 style = _Style()
@@ -441,115 +438,19 @@ def hue_colour(name: str, theme: str | None = None) -> str | None:
     return dark if (theme or themes.current.name) == "dark" else light
 
 
-def _mix(color: QColor, toward: QColor, share: float) -> QColor:
-    return QColor.fromRgbF(*(c + (t - c) * share for c, t in (
-        (color.redF(), toward.redF()), (color.greenF(), toward.greenF()), (color.blueF(), toward.blueF()))))
-
-
-class CachedIconEngine(QIconEngine):
-    """Draws each picture of an icon once (by size, mode, state, screen scale and theme) with _render."""
-
-    def __init__(self):
-        super().__init__()
-        self._pixmaps: dict[tuple, QPixmap] = {}
-
-    def _render(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
-        raise NotImplementedError
-
-    def scaledPixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
-        key = (size.width(), size.height(), mode, state, round(scale * 100), themes.current.name)
-        pixmap = self._pixmaps.get(key)
-        if pixmap is None:
-            pixmap = self._pixmaps[key] = self._render(size, mode, state, scale)
-        return pixmap
-
-    def pixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QPixmap:
-        return self.scaledPixmap(size, mode, state, 1.0)
-
-    def paint(self, painter: QPainter, rect: QRect, mode: QIcon.Mode, state: QIcon.State) -> None:
-        device = painter.device()
-        scale = device.devicePixelRatioF() if device is not None else 1.0
-        painter.drawPixmap(rect, self.scaledPixmap(rect.size(), mode, state, scale))
-
-    def actualSize(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QSize:
-        return size
-
-
-class _DepthIcon(CachedIconEngine):
-    """An icon with depth: lit from above, its colour runs from a lighter shade at the top to a deeper one at the
-    bottom, over a soft shadow a little below it. A disabled icon, or one smaller than DEPTH_LEAST, stays flat."""
-
-    def __init__(self, flat: QIcon, color: str, on: str):
-        super().__init__()
-        self._flat = flat
-        self._colors = (color, on)
-
-    def _render(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
-        flat = self._flat.pixmap(size, scale, mode, state)
-        if mode == QIcon.Mode.Disabled or min(size.width(), size.height()) < DEPTH_LEAST:
-            return flat
-        mask = flat.toImage().convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
-        # Work in device pixels: a layer that kept the screen's ratio would be drawn at its logical size on the
-        # others, the icon shrunk by the display scaling (half its size at 200%).
-        mask.setDevicePixelRatio(1.0)
-        width, height = mask.width(), mask.height()
-        colour = QColor(self._colors[1] if state == QIcon.State.On else self._colors[0])
-        # The icon's own lightness says what it stands on: a light icon on a dark bar takes a deeper shadow
-        # and a dark one on a light bar a faint one, whatever the app's theme (a bar can change tone).
-        level = luminance(colour)
-        on_dark = level > 0.4
-
-        def filled(brush) -> QImage:
-            layer = QImage(mask)
-            painter = QPainter(layer)
-            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-            painter.fillRect(layer.rect(), brush)
-            painter.end()
-            return layer
-
-        gradient = QLinearGradient(0, 0, 0, height)
-        gradient.setColorAt(0.0, _mix(colour, QColor("white"), 0.16 if level < 0.06 else 0.32))
-        gradient.setColorAt(0.55, colour)
-        gradient.setColorAt(1.0, _mix(colour, QColor("black"), 0.12 if level < 0.06 else 0.22))
-        body = filled(gradient)
-        shadow = filled(QColor(0, 0, 0, 150 if on_dark else 46))
-        out = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
-        out.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(out)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        drop = max(1.0, height * 0.05)
-        for dx, dy, opacity in ((0, drop, 0.55), (-0.6, drop * 1.4, 0.25), (0.6, drop * 1.4, 0.25)):
-            painter.setOpacity(opacity)  # three soft copies: a blurred shadow, cheaply
-            painter.drawImage(QPointF(dx, dy), shadow)
-        painter.setOpacity(1.0)
-        painter.drawImage(0, 0, body)
-        painter.end()
-        pixmap = QPixmap.fromImage(out)
-        pixmap.setDevicePixelRatio(scale)
-        return pixmap
-
-    def clone(self) -> QIconEngine:
-        return _DepthIcon(self._flat, *self._colors)
-
-
-DEPTH_LEAST = 12  # logical px: smaller icons (badges, carets) stay flat, where a shadow would smudge them
-
-
 def icon(name: str, color: str | None = None) -> QIcon:
-    """The icon `name` (Phosphor, or one drawn here), in `color`, else the colour of what it does (hue_colour),
-    else the theme's text colour; with depth."""
+    """The icon `name` (Phosphor, or one drawn here), in `color`, else the colour of what it does when coloured
+    icons are on (hue_colour), else the theme's text colour."""
     t = themes.current
     color = color or hue_colour(name) or t.text
     if name in CUSTOM:
-        flat = QIcon(_DrawnIcon(CUSTOM[name], color, t.accent, t.text_muted))
-    else:
-        # qtawesome derives the hover colour from the checked one unless both are given.
-        flat = qta.icon(
-            name if "." in name else f"ph.{name}",
-            color=color,
-            color_active=color,
-            color_on=t.accent,
-            color_on_active=t.accent,
-            color_disabled=t.text_muted,
-        )
-    return QIcon(_DepthIcon(flat, color, t.accent))
+        return QIcon(_DrawnIcon(CUSTOM[name], color, t.accent, t.text_disabled))
+    # qtawesome derives the hover colour from the checked one unless both are given.
+    return qta.icon(
+        name if "." in name else f"ph.{name}",
+        color=color,
+        color_active=color,
+        color_on=t.accent,
+        color_on_active=t.accent,
+        color_disabled=t.text_disabled,
+    )

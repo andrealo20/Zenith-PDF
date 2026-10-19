@@ -12,16 +12,17 @@ from ..theme import themes
 from .annotation_items import paint_annotation
 from .widgets import panel_title
 
-THUMB_WIDTH = 120
-THUMB_MAX_HEIGHT = 180
+THUMB_WIDTH = 120  # in the panel at its first width: a wider panel has them as large a share of it
+TALLEST = 1.5  # a thumbnail's height at most, in its widths
+PANEL_SHARE = THUMB_WIDTH / 264  # of the panel's width at first (side_panel.PANEL_WIDTH)
 PADDING = 10
 LABEL_HEIGHT = 22
 PAGE_SIZE_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
-def _thumb_size(page_size: tuple[float, float]) -> tuple[float, float]:
+def _thumb_size(page_size: tuple[float, float], thumb_width: int = THUMB_WIDTH) -> tuple[float, float]:
     width, height = (max(side, 1.0) for side in page_size)  # 0 x 0: a CropBox outside the MediaBox
-    scale = min(THUMB_WIDTH / width, THUMB_MAX_HEIGHT / height)
+    scale = min(thumb_width / width, thumb_width * TALLEST / height)
     return width * scale, height * scale
 
 
@@ -39,9 +40,11 @@ class ThumbnailModel(QAbstractListModel):
         self._ratio = device_pixel_ratio
         self._store = store
         self._token = object()
+        self.thumb_width = THUMB_WIDTH
         self._pixmaps: dict[int, QPixmap] = {}
         self._bases: dict[int, QImage] = {}  # the page as rendered, before annotations
         self._pending: set[int] = set()
+        self._stale: set[int] = set()  # drawn at an earlier width: shown stretched until drawn again
         self._labels: dict[int, str] = {}
         self._dirty: set[int] = set()
         self._redraw = QTimer(self)
@@ -93,8 +96,22 @@ class ThumbnailModel(QAbstractListModel):
         self._pixmaps.clear()
         self._bases.clear()
         self._pending.clear()
+        self._stale.clear()
         self._labels.clear()
         self.endResetModel()
+
+    def set_thumb_width(self, width: int) -> None:
+        """Thumbnails `width` px wide, as the panel was made wider or narrower. Until each is drawn again at
+        that size, the old one is shown stretched."""
+        if width == self.thumb_width:
+            return
+        self.thumb_width = width
+        token = self._token
+        self._renderer.discard(lambda key: isinstance(key, tuple) and key[0] is token)
+        self._token = object()
+        self._pending.clear()
+        self._stale = set(self._pixmaps)
+        self.layoutChanged.emit()  # every row changes height
 
     def rowCount(self, parent=QModelIndex()) -> int:
         return 0 if parent.isValid() else self._document.page_count
@@ -109,9 +126,9 @@ class ThumbnailModel(QAbstractListModel):
             return self._labels[row]
         if role == Qt.ItemDataRole.DecorationRole:
             # data() is only asked for rows being painted, which makes this the lazy-load hook.
-            if row not in self._pixmaps and row not in self._pending:
+            if (row not in self._pixmaps or row in self._stale) and row not in self._pending:
                 self._pending.add(row)
-                width, _ = _thumb_size(self._document.page_size(row))
+                width, _ = _thumb_size(self._document.page_size(row), self.thumb_width)
                 scale = width * self._ratio / max(self._document.page_size(row)[0], 1.0)
                 self._renderer.request((self._token, row), self._document, row, scale, (2, row))
             return self._pixmaps.get(row)
@@ -126,6 +143,7 @@ class ThumbnailModel(QAbstractListModel):
         self._bases[row] = image
         self._pixmaps[row] = self._compose(row)
         self._pending.discard(row)
+        self._stale.discard(row)
         index = self.index(row)
         self.dataChanged.emit(index, index, [Qt.ItemDataRole.DecorationRole])
 
@@ -137,9 +155,9 @@ class ThumbnailModel(QAbstractListModel):
 
 class ThumbnailDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index) -> QSize:
-        size = index.data(PAGE_SIZE_ROLE)
-        height = _thumb_size(size)[1] if size is not None else THUMB_MAX_HEIGHT
-        return QSize(THUMB_WIDTH + 2 * PADDING, round(height) + LABEL_HEIGHT + 2 * PADDING)
+        size, width = index.data(PAGE_SIZE_ROLE), index.model().thumb_width
+        height = _thumb_size(size, width)[1] if size is not None else width * TALLEST
+        return QSize(width + 2 * PADDING, round(height) + LABEL_HEIGHT + 2 * PADDING)
 
     def paint(self, painter: QPainter, option, index) -> None:
         if index.data(PAGE_SIZE_ROLE) is None:
@@ -148,7 +166,7 @@ class ThumbnailDelegate(QStyledItemDelegate):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        width, height = _thumb_size(index.data(PAGE_SIZE_ROLE))
+        width, height = _thumb_size(index.data(PAGE_SIZE_ROLE), index.model().thumb_width)
         rect = option.rect
         thumb = QRectF(rect.x() + (rect.width() - width) / 2, rect.y() + PADDING, width, height)
 
@@ -194,6 +212,11 @@ class ThumbnailPanel(QWidget):
         layout.addWidget(title)
         layout.addWidget(self.list)
         self.set_current_page(0)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        # The panel's edge was dragged: thumbnails as large a share of it as at first.
+        self.model.set_thumb_width(max(THUMB_WIDTH // 2, round(self.width() * PANEL_SHARE)))
 
     def reload(self) -> None:
         current = self.list.currentIndex().row()

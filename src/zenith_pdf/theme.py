@@ -24,7 +24,8 @@ class Theme:
     canvas: str  # behind the pages
     border: str
     text: str
-    text_muted: str
+    text_muted: str  # secondary text: 6:1 or more on the window, to read without effort
+    text_disabled: str  # what can't be used now: dimmer than muted text, so the two stay apart
     hover: str
     pressed: str
     accent: str
@@ -66,7 +67,8 @@ DARK = Theme(
     canvas="#131416",
     border="#393a40",
     text="#ececf0",
-    text_muted="#9b9ca5",
+    text_muted="#adaeb7",
+    text_disabled="#74757d",
     hover="rgba(255, 255, 255, 20)",
     pressed="rgba(255, 255, 255, 36)",
     accent="#2a8cff",  # the blues of the logo
@@ -79,7 +81,7 @@ DARK = Theme(
     search_current=QColor(255, 140, 0, 150),
     glass_base=QColor(28, 29, 34),
     glass_alpha=0.72,
-    glass_clear_alpha=0.16,
+    glass_clear_alpha=0.34,
     glass_highlight=QColor(255, 255, 255, 46),
     glass_border=QColor(255, 255, 255, 26),
     glass_text_muted="#bfc0c8",
@@ -106,7 +108,8 @@ LIGHT = Theme(
     canvas="#dcdde2",
     border="#d6d7dd",
     text="#1c1d21",
-    text_muted="#676872",
+    text_muted="#55565f",
+    text_disabled="#9a9ba3",
     hover="rgba(0, 0, 0, 14)",
     pressed="rgba(0, 0, 0, 26)",
     accent="#0a6cf0",
@@ -119,7 +122,7 @@ LIGHT = Theme(
     search_current=QColor(255, 140, 0, 160),
     glass_base=QColor(246, 247, 250),
     glass_alpha=0.70,
-    glass_clear_alpha=0.12,
+    glass_clear_alpha=0.30,
     glass_highlight=QColor(255, 255, 255, 230),
     glass_border=QColor(0, 0, 0, 23),
     glass_text_muted="#4a4b52",
@@ -223,7 +226,7 @@ def _palette(t: Theme) -> QPalette:
     for role, color in roles.items():
         palette.setColor(role, QColor(color))
     for role in (QPalette.ColorRole.Text, QPalette.ColorRole.WindowText, QPalette.ColorRole.ButtonText):
-        palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(t.text_muted))
+        palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(t.text_disabled))
     return palette
 
 
@@ -250,7 +253,7 @@ def _style_sheet(t: Theme) -> str:
     return _for_platform(f"""
     * {{ font-family: "{ui_font()}"; font-size: 10pt; }}
     QWidget {{ color: {t.text}; }}
-    QWidget:disabled {{ color: {t.text_muted}; }}
+    QWidget:disabled {{ color: {t.text_disabled}; }}
     QMainWindow, #Central, #TopBar, #Home {{ background: {t.window}; }}
 
     QTabBar {{ background: transparent; }}
@@ -334,7 +337,7 @@ def _style_sheet(t: Theme) -> str:
     QMenu {{ background: {t.raised}; border: 1px solid {t.border}; border-radius: 8px; padding: 4px; }}
     QMenu::item {{ padding: 7px 28px 7px 12px; border-radius: 6px; }}
     QMenu::item:selected {{ background: {t.hover}; }}
-    QMenu::item:disabled {{ color: {t.text_muted}; background: transparent; }}
+    QMenu::item:disabled {{ color: {t.text_disabled}; background: transparent; }}
     QMenu::separator {{ height: 1px; background: {t.border}; margin: 4px 8px; }}
     QMenu::right-arrow {{ image: url({right}); width: 12px; height: 12px; margin-right: 8px; }}
 
@@ -343,20 +346,20 @@ def _style_sheet(t: Theme) -> str:
     }}
     QPushButton:hover {{ border-color: {t.text_muted}; }}
     QPushButton:pressed {{ background: {t.pressed}; }}
-    QPushButton:disabled {{ color: {t.text_muted}; border-color: {t.border}; background: transparent; }}
+    QPushButton:disabled {{ color: {t.text_disabled}; border-color: {t.border}; background: transparent; }}
     QPushButton#Primary {{
         background: {t.accent}; color: {t.accent_text}; border: 1px solid {t.accent}; font-weight: 600;
     }}
     QPushButton#Primary:hover {{ background: {t.accent_hover}; border-color: {t.accent_hover}; }}
-    QPushButton#Primary:disabled {{ background: {t.hover}; color: {t.text_muted}; border-color: {t.border}; }}
+    QPushButton#Primary:disabled {{ background: {t.hover}; color: {t.text_disabled}; border-color: {t.border}; }}
     QPushButton#Danger {{
         background: {t.danger_fill}; color: #ffffff; border: 1px solid {t.danger_fill}; font-weight: 600;
     }}
     QPushButton#Danger:hover {{ background: {t.danger_hover}; border-color: {t.danger_hover}; }}
-    QPushButton#Danger:disabled {{ background: {t.hover}; color: {t.text_muted}; border-color: {t.border}; }}
+    QPushButton#Danger:disabled {{ background: {t.hover}; color: {t.text_disabled}; border-color: {t.border}; }}
     QPushButton#DangerText {{ color: {t.danger}; }}
     QPushButton#DangerText:hover {{ border-color: {t.danger}; }}
-    QPushButton#DangerText:disabled {{ color: {t.text_muted}; }}
+    QPushButton#DangerText:disabled {{ color: {t.text_disabled}; }}
 
     QToolTip {{ background: {t.raised}; color: {t.text}; border: 1px solid {t.border}; padding: 4px 6px; }}
     #FloatingBar QLabel#ToastText {{ color: {t.text}; }}  /* on glass, so always full contrast */
@@ -420,7 +423,7 @@ def _style_sheet(t: Theme) -> str:
     QSlider::handle:horizontal {{ margin: -6px 0; }}
     QSlider::handle:vertical {{ margin: 0 -6px; }}
     QSlider::handle:hover {{ border-color: {t.accent}; }}
-    QSlider::sub-page:horizontal:disabled, QSlider::add-page:vertical:disabled {{ background: {t.text_muted}; }}
+    QSlider::sub-page:horizontal:disabled, QSlider::add-page:vertical:disabled {{ background: {t.text_disabled}; }}
     QSlider::handle:disabled {{ background: {t.border}; border-color: {t.border}; }}
 
     QCheckBox, QRadioButton {{ spacing: 8px; }}
@@ -453,7 +456,7 @@ def _style_sheet(t: Theme) -> str:
     #HomeAside {{ background: {t.surface}; border-left: 1px solid {t.border}; }}
     #HomeBrand {{ font-size: 13.5pt; font-weight: 600; }}
     #HomeSection {{ font-size: 15pt; font-weight: 600; }}
-    #HomeNavHeading {{ color: {t.text_muted}; font-size: 8.5pt; font-weight: 600; letter-spacing: 1px; }}
+    #HomeNavHeading {{ color: {t.text_muted}; font-size: 9pt; font-weight: 600; letter-spacing: 1px; }}
     QPushButton#HomeNav {{ background: transparent; border: none; border-radius: 8px; padding: 0; text-align: left; }}
     QPushButton#HomeNav:hover {{ background: {t.hover}; }}
     QPushButton#HomeNav:checked {{ background: {t.selection}; }}
@@ -484,7 +487,7 @@ def _style_sheet(t: Theme) -> str:
                                  padding: 4px; }}
     QTextBrowser#GuideText {{ background: {t.window}; border: none; }}
     #HelpTitle {{ font-size: 10.5pt; font-weight: 600; }}
-    #HelpHeading {{ color: {t.text_muted}; font-size: 8.5pt; font-weight: 600; padding-top: 2px; }}
+    #HelpHeading {{ color: {t.text_muted}; font-size: 9pt; font-weight: 600; padding-top: 2px; }}
     #HelpKeys {{ background: {t.hover}; border: 1px solid {t.border}; border-radius: 5px; padding: 1px 7px;
                  font-size: 9pt; }}
     QDialog {{ background: {t.window}; }}
@@ -509,10 +512,10 @@ def _style_sheet(t: Theme) -> str:
     QListWidget#AssistantList::item:selected {{ background: {t.selection}; }}
     QListWidget#AssistantList::item:hover:!selected {{ background: {t.hover}; }}
     QLabel#AssistantSection {{
-        color: {t.text_muted}; font-size: 8.5pt; font-weight: 600; letter-spacing: 1px; padding: 8px 10px 0 10px;
+        color: {t.text_muted}; font-size: 9pt; font-weight: 600; letter-spacing: 1px; padding: 8px 10px 0 10px;
     }}
     QLabel#AssistantTitle {{ font-size: 10pt; }}
-    QLabel#AssistantKind {{ color: {t.text_muted}; font-size: 8.5pt; }}
+    QLabel#AssistantKind {{ color: {t.text_muted}; font-size: 9pt; }}
     QTextEdit#SpellingPreview, QTextBrowser#SummaryText {{
         background: {t.field}; border: 1px solid {t.border}; border-radius: 8px; padding: 6px 8px;
     }}

@@ -833,6 +833,10 @@ class Workspace(QWidget):
         self._panel_before_manager: str | None = None
 
         self.side = SidePanel()
+        self.side.set_panel_width(self.view._pref("side_panel_width"))
+        if self.view.settings is not None:
+            self.side.resized.connect(lambda width: self.view.settings.set("side_panel_width", width))
+            self.view.settings.changed.connect(self._follow_panel_width)
         self.side.add_panel("pages", "files", "Pages", self.thumbnails)
         self.side.add_panel("outline", "bookmark-simple", "Bookmarks", self.outline)
         self.side.add_panel("search", "magnifying-glass", "Search (Ctrl+F)", self.search)
@@ -891,6 +895,10 @@ class Workspace(QWidget):
             QTimer.singleShot(0, self.view.fit_page)
         elif default_zoom == "actual":
             QTimer.singleShot(0, lambda: self.view.set_zoom(1.0))
+
+    def _follow_panel_width(self, key: str) -> None:
+        if key == "side_panel_width":  # dragged in another tab, or here: every tab's panel is as wide
+            self.side.set_panel_width(self.view.settings.get("side_panel_width"))
 
     def view_state(self) -> dict:
         """Where the reader is: page, zoom and the view options, to come back to later."""
