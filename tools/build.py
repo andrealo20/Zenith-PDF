@@ -10,6 +10,13 @@
 - Linux: Zenith-PDF-Linux-x86_64.AppImage, one file to make executable and run
   (appimagetool on the PATH, or APPIMAGETOOL naming it).
 
+    python tools/build.py --store
+
+builds Zenith-PDF.msix instead, the package to upload to the Microsoft Store, which
+signs it. It needs makeappx and makepri from the Windows SDK. To try it before
+uploading, with Windows' Developer Mode on: Add-AppxPackage -Register
+build/msix/AppxManifest.xml.
+
 Signing on Windows: with WINDOWS_CERTIFICATE (a .pfx file) and
 WINDOWS_CERTIFICATE_PASSWORD set, the app, the installer and its uninstaller are
 signed with signtool and time-stamped. Without them the files are left unsigned.
@@ -40,6 +47,23 @@ NAME = "Zenith-PDF"  # the program's file name
 TITLE = "Zenith PDF"  # what people see
 BUNDLE_ID = "io.github.andrealo20.zenithpdf"
 TIMESTAMP = "http://timestamp.digicert.com"
+# The Store package's identity, from Partner Center > Product identity (public: every copy of the package has it).
+STORE_IDENTITY = {
+    "name": os.environ.get("STORE_IDENTITY_NAME", "ZenithPDF.Local"),
+    "publisher": os.environ.get("STORE_PUBLISHER", "CN=Andrea Loroni"),
+    "publisher_name": os.environ.get("STORE_PUBLISHER_NAME", "Andrea Loroni"),
+}
+# The languages the Store package says it speaks, as Windows names them: the app's own (core.i18n.LANGUAGES).
+STORE_LANGUAGES = {"en": "en-US", "it": "it-IT", "fr": "fr-FR", "es": "es-ES", "de": "de-DE", "pt": "pt-BR",
+                   "nl": "nl-NL", "pl": "pl-PL", "cs": "cs-CZ", "tr": "tr-TR", "ru": "ru-RU", "uk": "uk-UA",
+                   "zh": "zh-CN", "ja": "ja-JP", "ko": "ko-KR"}
+# The Store package's logos: name, size in pixels, share of it the logo takes. The unplated ones are the taskbar's
+# and the Start menu's, drawn without a coloured square behind.
+STORE_LOGOS = [("StoreLogo.scale-100.png", 50, 1.0), ("StoreLogo.scale-200.png", 100, 1.0),
+               ("Square150x150Logo.scale-100.png", 150, 0.66), ("Square150x150Logo.scale-200.png", 300, 0.66),
+               ("Square44x44Logo.scale-100.png", 44, 1.0), ("Square44x44Logo.scale-200.png", 88, 1.0)] + [
+    (f"Square44x44Logo.targetsize-{size}{plate}.png", size, 1.0)
+    for size in (16, 24, 32, 48, 256) for plate in ("", "_altform-unplated")]
 LANGUAGES = ("en", "it", "fr", "es", "de", "pt")  # Qt's own translations kept: those the app speaks
 # Python modules nothing in Zenith PDF uses, which PyInstaller would otherwise follow from PySide6 and Pillow.
 UNUSED = ("tkinter", "PySide6.QtDataVisualization", "PySide6.QtCharts", "PySide6.QtGraphs", "PySide6.QtQml",
@@ -214,10 +238,15 @@ def uninstall_list(folder: Path) -> Path:
     return target
 
 
-def windows() -> Path:
+def windows_app() -> Path:
     app = pyinstaller(NAME, ["--icon", ASSETS / "zenith.ico", "--version-file", version_info(),
                              "--collect-all", "winrt"])  # text recognition with the engine built into Windows
     self_test(app)
+    return app
+
+
+def windows() -> Path:
+    app = windows_app()
     sign = signing_script()
     if sign is not None:
         run([sign, app / f"{NAME}.exe"])
@@ -233,6 +262,68 @@ def windows() -> Path:
         defines["SIGN"] = sign
     run([makensis, "/V2", "/INPUTCHARSET", "UTF8", *(f"/D{key}={value}" for key, value in defines.items()),
          PACKAGING / "windows" / "zenith-pdf.nsi"])
+    return target
+
+
+def store_manifest() -> str:
+    """The Store package's AppxManifest.xml: packaging/windows/AppxManifest.xml with this build's values."""
+    from zenith_pdf.core.default_app import STORE_APP_ID
+
+    numbers = (re.findall(r"\d+", __version__) + ["0", "0", "0"])[:3]
+    languages = "\n".join(f'    <Resource Language="{tag}"/>' for tag in STORE_LANGUAGES.values())
+    template = (PACKAGING / "windows" / "AppxManifest.xml").read_text(encoding="utf-8")
+    return template.format(**STORE_IDENTITY, version=".".join(numbers) + ".0", languages=languages,
+                           app_id=STORE_APP_ID)  # the Store wants the fourth number 0
+
+
+def store_logos(folder: Path) -> None:
+    from PIL import Image
+
+    logo = Image.open(ASSETS / "zenith.png").convert("RGBA")
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, size, share in STORE_LOGOS:
+        side = round(size * share)
+        picture = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        mark = logo.resize((side, side), Image.Resampling.LANCZOS)
+        picture.paste(mark, ((size - side) // 2, (size - side) // 2), mark)
+        picture.save(folder / name)
+
+
+def windows_kit(tool: str) -> Path:
+    """A tool of the Windows SDK, from its newest version."""
+    kits = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Windows Kits" / "10" / "bin"
+    found = sorted(kits.glob(f"10.*/x64/{tool}"), key=lambda p: [int(n) for n in p.parts[-3].split(".")])
+    if not found:
+        raise SystemExit(f"{tool} was not found: install the Windows SDK.")
+    return found[-1]
+
+
+def store() -> Path:
+    """Zenith-PDF.msix, for the Microsoft Store: the Store signs it, hosts it and keeps it up to date."""
+    return store_package(windows_app())
+
+
+def store_package(app: Path) -> Path:
+    layout, resources = BUILD / "msix", BUILD / "msix-resources"
+    for folder in (layout, resources):
+        shutil.rmtree(folder, ignore_errors=True)
+    shutil.copytree(app, layout)
+    store_logos(resources / "Assets")
+    manifest = store_manifest()
+    for folder in (layout, resources):
+        (folder / "AppxManifest.xml").write_text(manifest, encoding="utf-8")
+    shutil.copytree(resources / "Assets", layout / "Assets")
+    # The index of the logos' sizes, made from the logos alone: indexed whole, the app's thousands of files
+    # would go in too.
+    makepri, config = windows_kit("makepri.exe"), BUILD / "priconfig.xml"
+    run([makepri, "createconfig", "/cf", config, "/dq", "en-US", "/o"])
+    # One package: the logos of every scale in its own index, none split off into resource packages.
+    config.write_text(re.sub(r"\s*<packaging>.*?</packaging>", "", config.read_text(encoding="utf-8"), flags=re.S),
+                      encoding="utf-8")
+    run([makepri, "new", "/pr", resources, "/cf", config, "/mn", resources / "AppxManifest.xml",
+         "/of", layout / "resources.pri", "/o"])
+    target = RELEASE / f"{NAME}.msix"
+    run([windows_kit("makeappx.exe"), "pack", "/d", layout, "/p", target, "/o"])
     return target
 
 
@@ -301,7 +392,7 @@ def linux() -> Path:
 
 def main() -> int:
     RELEASE.mkdir(parents=True, exist_ok=True)
-    build = {"win32": windows, "darwin": mac}.get(sys.platform, linux)
+    build = {"win32": store if "--store" in sys.argv else windows, "darwin": mac}.get(sys.platform, linux)
     target = build()
     print(f"Built {target.relative_to(ROOT)} ({target.stat().st_size / 1e6:.1f} MB)")
     return 0

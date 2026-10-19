@@ -35,7 +35,7 @@ from shiboken6 import isValid
 from .. import __version__
 from ..core import default_app, ocr
 from ..core.i18n import LANGUAGES, system_language, tr, tr_in
-from ..core.platforms import SYSTEM_NAME, native_keys
+from ..core.platforms import SYSTEM_NAME, native_keys, package_family
 from ..icons import icon, readable
 from ..settings import DEFAULTS, Settings
 from ..theme import ACCENTS, THEME_NAMES, themes
@@ -960,15 +960,19 @@ class SettingsWindow(QDialog):
         guide.clicked.connect(self._open_guide)
         s.add(Row("Guide", "A short guide to every part of Zenith PDF. F1 opens it from anywhere.", guide,
                   "manual help learn tutorial"))
-        s.add(Row("Check for updates", "Once a day Zenith PDF asks GitHub whether a new version is out, and a card "
-                  "says so. Nothing about you or your files is sent.", self._switch("update_check"),
-                  "update new version upgrade github"))
-        s.add(Row("Install updates automatically", "New versions download in the background, checked against the "
-                  "release's fingerprints, and install when you close Zenith PDF.", self._switch("update_auto"),
-                  "update automatic install upgrade background"))
-        check = QPushButton(tr("Check now"))
-        check.clicked.connect(self._check_updates)
-        s.add(Row("Updates", f"This is version {__version__}.", check, "update version latest check"))
+        if package_family():
+            s.add(Row("Updates", f"This is version {__version__}. The Microsoft Store keeps Zenith PDF up to date.",
+                      None, "update version latest store"))
+        else:
+            s.add(Row("Check for updates", "Once a day Zenith PDF asks GitHub whether a new version is out, and a "
+                      "card says so. Nothing about you or your files is sent.", self._switch("update_check"),
+                      "update new version upgrade github"))
+            s.add(Row("Install updates automatically", "New versions download in the background, checked against "
+                      "the release's fingerprints, and install when you close Zenith PDF.", self._switch("update_auto"),
+                      "update automatic install upgrade background"))
+            check = QPushButton(tr("Check now"))
+            check.clicked.connect(self._check_updates)
+            s.add(Row("Updates", f"This is version {__version__}.", check, "update version latest check"))
         s.add(Row("What's new after an update", "After each update a short tour shows what changed, with a Show me "
                   "for each part.", self._switch("whats_new_after_update"), "whats new tour changes release notes"))
         tour = QPushButton(tr("Show the tour"))

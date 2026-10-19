@@ -13,11 +13,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .platforms import package_family
+
 PROG_ID = "ZenithPDF.Document"  # the installer's name for "a PDF Zenith PDF opens"
 REGISTERED = "ZenithPDF"  # its entry under RegisteredApplications, which Settings > Default apps lists
 BUNDLE_ID = "io.github.andrealo20.zenithpdf"
 PDF_UTI = "com.adobe.pdf"
 DESKTOP_ID = "zenith-pdf.desktop"
+STORE_APP_ID = "ZenithPDF"  # the Application Id in the Store package's manifest
 PDF_MIME = "application/pdf"
 ICON = Path(__file__).resolve().parents[1] / "assets" / "zenith.ico"
 
@@ -96,8 +99,8 @@ def register_for_user(command: list[str]) -> bool:
     """For this user, what the installer writes for every one: Zenith PDF among the apps Windows suggests for
     PDF files, with its name and logo. A copy run from source does it at each start (where Python is can change);
     an installed one leaves it to the installer. True when written."""
-    if sys.platform != "win32" or (getattr(sys, "frozen", False) and installed()):
-        return False
+    if sys.platform != "win32" or (getattr(sys, "frozen", False) and installed()) or package_family():
+        return False  # the installer did it, or the Store's package declares it
     import ctypes
     import winreg
 
@@ -138,6 +141,13 @@ def windows_page(machine: bool, name: str = REGISTERED) -> str:
 
 def _make_default_windows(command: list[str]) -> str:
     """Windows' Default apps page at Zenith PDF: the way when its list of apps can't open."""
+    family = package_family()
+    if family:  # the Store's copy: its page by the id Windows gives the app in the package
+        try:
+            os.startfile(f"ms-settings:defaultapps?registeredAUMID={family}!{STORE_APP_ID}")
+        except OSError:
+            return FAILED
+        return CONFIRM
     machine = getattr(sys, "frozen", False) and installed()
     if not machine and not register_for_user(command):
         return FAILED
@@ -343,6 +353,8 @@ def is_default() -> bool | None:
     """Whether PDF files open with Zenith PDF; None when the system doesn't say."""
     try:
         if sys.platform == "win32":
+            if package_family():  # the Store's copy goes by a ProgId Windows makes up (AppX and letters)
+                return current_app_name() == "Zenith PDF"
             return is_ours(_windows_choice())
         if sys.platform == "darwin":
             handler = _mac_handler()

@@ -108,7 +108,9 @@ def register_scheme(command: list[str]) -> None:
 
     The installer registers them for every user; this covers a copy run from source.
     """
-    if sys.platform != "win32":
+    from ..core.platforms import package_family
+
+    if sys.platform != "win32" or package_family():  # the Store's package declares the links itself
         return
     import winreg
 

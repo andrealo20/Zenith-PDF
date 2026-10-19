@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QPushButton, QV
 
 from ..core import updates
 from ..core.i18n import tr
+from ..core.platforms import package_family
 from ..core.updates import Update, UpdateError
 from ..settings import Settings
 from ..theme import themes
@@ -65,6 +66,8 @@ class Updater(QObject):
     # Checking ---------------------------------------------------------------------------
 
     def due(self) -> bool:
+        if package_family():  # the Microsoft Store updates its copy
+            return False
         last = float(self._settings.get("update_last_check") or 0)
         return bool(self._settings.get("update_check")) and time.time() - last >= updates.CHECK_EVERY
 

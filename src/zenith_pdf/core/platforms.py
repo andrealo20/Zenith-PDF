@@ -97,3 +97,19 @@ def settings_place(what: str) -> str:
     return {"languages": "your package manager",
             "microphone": "your system's sound settings",
             "camera": "your system's settings"}[what]
+
+
+@cache
+def package_family() -> str:
+    """The package this copy was installed from on Windows, when it came from the Microsoft Store (an MSIX
+    package, which declares PDF files and links itself and gets its updates from the Store); "" otherwise."""
+    if not WINDOWS:
+        return ""
+    import ctypes
+
+    length = ctypes.c_uint32(0)
+    get = ctypes.windll.kernel32.GetCurrentPackageFamilyName
+    if get(ctypes.byref(length), None) != 122:  # ERROR_INSUFFICIENT_BUFFER; APPMODEL_ERROR_NO_PACKAGE when none
+        return ""
+    name = ctypes.create_unicode_buffer(length.value)
+    return name.value if get(ctypes.byref(length), name) == 0 else ""
