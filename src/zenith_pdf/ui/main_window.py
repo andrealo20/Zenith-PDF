@@ -59,6 +59,7 @@ APP_NAME = "Zenith PDF"
 PRINT_DPI = 300  # enough for print; more only makes huge spool files
 MIN_CONTENT_WIDTH = 360  # pixels: a window snapped to a third of a screen still shows a page
 FULL_TOP_BAR = 560  # narrower, save as, print and full screen leave the top bar for the More menu
+WIDE_ASSISTANT = 980  # px of window from which the assistant's button is a long field, not the icon alone
 REMEMBER_STYLES_MS = 300  # tool styles are written this long after the last change: a slider sends many
 
 
@@ -1280,6 +1281,7 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         for button in self._spare_buttons:
             button.setVisible(self.width() >= FULL_TOP_BAR)
+        self.assistant_button.set_wide(self.width() >= WIDE_ASSISTANT)
         if self.update_card is not None and self.update_card.isVisible():
             self.update_card.place()
 

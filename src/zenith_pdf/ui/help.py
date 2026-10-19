@@ -207,6 +207,8 @@ TOPICS: dict[str, Topic] = {
     "zoom_in": Topic("Zoom in", "Makes the pages larger.", "Ctrl and the mouse wheel zoom around the pointer.",
                      "Ctrl+="),
     "zoom_menu": Topic("Zoom level", "The current zoom. Click it for preset levels.", keys="Ctrl+1 is actual size"),
+    "zoom_compact": Topic("Only the zoom", "Folds this bar to the zoom alone, out of the way of the pages.",
+                          "The arrow opens it again. The bar of every tab follows, and it stays so next time."),
     "fit_width": Topic("Fit width", "Zooms so the page fills the width of the window.", keys="Ctrl+2"),
     "view_menu": Topic("View", "How the pages show: the annotations, lines over the pages, the PDF's layers, the "
                        "zoom, read only and touch mode.",

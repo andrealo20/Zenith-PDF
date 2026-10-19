@@ -10,8 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from PySide6.QtCore import QEvent, QPoint, QSize, Qt, QTimer
-from PySide6.QtGui import QTextDocument
+from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QPainter, QTextDocument
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -59,10 +59,64 @@ class Found:
 
 
 class AccentButton(IconButton):
-    """The assistant's button: an icon in the accent colour, so it can be found at a glance."""
+    """The assistant's button, its icon in the accent colour so it is found at a glance. Where the top bar has
+    room it is a long field (set_wide): what it is for and its key, and a click opens the assistant with the
+    cursor in its own field, to type at once."""
+
+    WIDE = 240  # px
+
+    def __init__(self, *args, **kwargs):
+        self.wide = False
+        super().__init__(*args, **kwargs)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
+        # Long only while there is room: a window made narrow is never held wide by it before it turns back
+        # into the sparkle alone.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, self.sizePolicy().verticalPolicy())
 
     def _refresh(self, *_):
         self.setIcon(cached_icon(self._icon_name, themes.current.accent))
+        self.update()
+
+    def set_wide(self, wide: bool) -> None:
+        if wide != self.wide:
+            self.wide = wide
+            self.updateGeometry()
+            self.update()
+
+    def sizeHint(self) -> QSize:
+        hint = super().sizeHint()
+        return QSize(self.WIDE, hint.height()) if self.wide else hint
+
+    def minimumSizeHint(self) -> QSize:
+        return super().sizeHint()  # the sparkle's: QToolButton would take the long one, and hold the window wide
+
+    def paintEvent(self, event) -> None:
+        if not self.wide:
+            super().paintEvent(event)
+            return
+        t = themes.current
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        frame = QRectF(self.rect()).adjusted(0.5, 1.5, -0.5, -1.5)
+        radius = frame.height() / 2
+        painter.setPen(QColor(t.text_muted if self.underMouse() else t.border))
+        painter.setBrush(QColor(t.field))
+        painter.drawRoundedRect(frame, radius, radius)
+        if self.isDown():
+            painter.setBrush(QColor(t.pressed))
+            painter.drawRoundedRect(frame, radius, radius)
+        side = 18
+        self.icon().paint(painter, QRect(12, (self.height() - side) // 2, side, side))
+        metrics = self.fontMetrics()
+        keys = native_keys("Ctrl+K")
+        right = self.width() - 14
+        keys_left = right - metrics.horizontalAdvance(keys)
+        painter.setPen(QColor(t.text_muted))
+        painter.drawText(QRect(keys_left, 0, right - keys_left, self.height()),
+                         Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, keys)
+        text = QRect(12 + side + 8, 0, keys_left - 8 - (12 + side + 8), self.height())
+        painter.drawText(text, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                         metrics.elidedText(tr("Ask the assistant"), Qt.TextElideMode.ElideRight, text.width()))
 
 
 # What there is to find ----------------------------------------------------------------------

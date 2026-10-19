@@ -32,6 +32,7 @@ DEFAULTS: dict[str, object] = {
     "default_tint": "normal",  # a key of document_view.TINTS
     "side_panel": "auto",  # auto (pages panel for multi-page documents), always or never
     "side_panel_width": 264,  # px: the panel's right edge drags it wider or narrower, in every tab
+    "zoom_bar_compact": False,  # the bar at the bottom right shows the zoom alone, in every tab
     "link_preview": True,  # pointing at a link to a page shows a card of the spot it goes to
     # Help
     "help_badges": "hover",  # hover (a card after pointing for a moment), badges (a ? on buttons too) or never

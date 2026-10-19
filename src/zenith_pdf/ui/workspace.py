@@ -109,7 +109,7 @@ class PageCounter(FloatingBar):
                           help="page_manager")
         grid.clicked.connect(open_manager)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 4, 4, 4)
+        layout.setContentsMargins(8, 4, 4, 4)  # the field as far from the end as from the top: concentric
         layout.setSpacing(4)
         for widget in (self.field, self.total, self.back_button, previous, following, separator(), grid):
             layout.addWidget(widget)
@@ -159,6 +159,10 @@ class ZoomBar(FloatingBar):
         zoom_out.clicked.connect(view.zoom_out)
         zoom_in = IconButton("plus", "Zoom in (Ctrl+=)", icon_size=18, help="zoom_in")
         zoom_in.clicked.connect(view.zoom_in)
+        # Folds the bar to the zoom alone and opens it again; every tab's bar follows (Settings keeps it).
+        self.compact = bool(view._pref("zoom_bar_compact"))
+        self.compact_button = IconButton("caret-right", "Show only the zoom", icon_size=16, help="zoom_compact")
+        self.compact_button.clicked.connect(self._toggle_compact)
         self.zoom_button = QToolButton()
         self.zoom_button.setObjectName("ZoomButton")
         self.zoom_button.setFixedWidth(58)
@@ -186,6 +190,7 @@ class ZoomBar(FloatingBar):
         self.snap_button.clicked.connect(self._show_snapping)
         if view.settings is not None:
             view.settings.changed.connect(self._sync_snapping)
+            view.settings.changed.connect(self._follow_compact)
         self._sync_snapping()
         fit_page.clicked.connect(view.fit_page)
         self.reading_button = IconButton("z-reading", "Reading mode: only the pages (Ctrl+H)", icon_size=18,
@@ -208,15 +213,22 @@ class ZoomBar(FloatingBar):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
-        for widget in (self.more_button, layout_button, tint_button, self.view_button, self.snap_button,
-                       view_separator, zoom_out,
-                       self.zoom_button, zoom_in, fit_separator, fit_width, fit_page, separator(),
-                       self.reading_button):
+        self._widgets = (self.compact_button, self.more_button, layout_button, tint_button, self.view_button,
+                         self.snap_button, view_separator, zoom_out, self.zoom_button, zoom_in, fit_separator,
+                         fit_width, fit_page, separator(), self.reading_button)
+        self._zoom_only = {self.compact_button, zoom_out, self.zoom_button, zoom_in}
+        for widget in self._widgets:
             layout.addWidget(widget)
+        self.set_compact(self.compact)
 
     def fit(self, max_width: int) -> None:
         """Fold the view options, then Fit width and Fit page, into the More button's menu until the bar is at
-        most `max_width` pixels wide (or nothing more can fold)."""
+        most `max_width` pixels wide (or nothing more can fold). Folded to the zoom alone, it shows only that."""
+        for widget in self._widgets:
+            widget.setVisible(widget in self._zoom_only if self.compact else widget is not self.more_button)
+        if self.compact:
+            self.adjustSize()
+            return
         folded = 0
         while True:
             for number, group in enumerate(self._folds):
@@ -229,6 +241,27 @@ class ZoomBar(FloatingBar):
             folded += 1
         self._folded = folded
         self.adjustSize()
+
+    def _toggle_compact(self) -> None:
+        if self._view.settings is not None:
+            self._view.settings.set("zoom_bar_compact", not self.compact)  # every tab's bar follows
+        else:
+            self.set_compact(not self.compact)
+
+    def _follow_compact(self, key: str) -> None:
+        if key == "zoom_bar_compact":
+            self.set_compact(bool(self._view.settings.get(key)))
+
+    def set_compact(self, compact: bool) -> None:
+        """The zoom alone, or every view control, then placed again at the new size."""
+        self.compact = compact
+        self.compact_button.set_icon_name("caret-left" if compact else "caret-right")
+        self.compact_button.setToolTip(tr("Show all the view controls" if compact else "Show only the zoom"))
+        canvas = self.parentWidget()
+        if canvas is not None and hasattr(canvas, "bars"):
+            canvas.resizeEvent(None)  # the canvas folds and places its bars
+        else:
+            self.fit(1 << 20)  # no canvas yet: room for everything
 
     def _fill_more(self, menu: QMenu) -> None:
         """The More button's menu: what fit() folded away, as menu entries."""

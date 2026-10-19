@@ -98,7 +98,7 @@ class SelectionBar(FloatingBar):
         self._recolour()
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
         for widget in (self.count, self.count_line, self.style_button, self.painter, self.duplicate, self.arrange,
                        self.lock, self.more, separator(), self.delete):

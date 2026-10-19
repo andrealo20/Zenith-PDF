@@ -142,7 +142,7 @@ class TextSelectionBar(FloatingBar):
         highlight.addWidget(self.markups["highlight"])
         highlight.addWidget(self.colour)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
         layout.addLayout(highlight)
         for widget in (self.markups["underline"], self.markups["strikeout"], self.markups["squiggly"], separator(),

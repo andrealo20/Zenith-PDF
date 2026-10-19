@@ -289,7 +289,9 @@ def _style_sheet(t: Theme) -> str:
     #Rail {{ background: {t.surface}; border-right: 1px solid {t.border}; }}
     #Panel {{ background: {t.surface}; border-right: 1px solid {t.border}; }}
     #PanelTitle {{ font-size: 11pt; font-weight: 600; }}
-    #FloatingBar QToolButton {{ border-radius: 10px; }}
+    /* Round, 4 px in from the capsule's ends: their curve, drawn again inside (concentric corners). */
+    #FloatingBar QToolButton {{ border-radius: 18px; }}
+    #FloatingBar QToolButton#ColourChip {{ border-radius: 12px; }}
     #FloatingBar QToolButton:hover {{ background: {t.glass_hover}; }}
     #FloatingBar QToolButton:pressed {{ background: {t.glass_pressed}; }}
     #FloatingBar QToolButton:checked {{ background: {t.glass_checked}; }}
@@ -549,7 +551,7 @@ def tone_sheet(t: Theme) -> str:
     }}
     {bar} QToolButton#BackChip:hover {{ background: {t.glass_pressed}; }}
     {bar} QLineEdit#PageField {{
-        color: {t.text}; border-color: {t.border}; selection-background-color: {t.selection};
+        color: {t.text}; border-color: {t.border}; selection-background-color: {t.selection}; border-radius: 13px;
     }}
     {bar} QLineEdit#PageField:hover {{ border-color: {t.text_muted}; }}
     {bar} #Separator {{ background: {t.border}; }}

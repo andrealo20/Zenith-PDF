@@ -122,7 +122,8 @@ class ToolButton(QToolButton):
         if fill is not None:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(token_color(fill))
-            painter.drawRoundedRect(QRectF(self.rect()), 10, 10)
+            radius = self.height() / 2  # round like the bar's ends, the same 4 px in from them
+            painter.drawRoundedRect(QRectF(self.rect()), radius, radius)
         # A tool with an ink shows it, made readable on the bar (on glass, on what shows through it); the others
         # take the colour of what they do, in the bar's own tone.
         hue = hue_colour(self.spec.icon, t.name) if not self.active else None
@@ -138,7 +139,7 @@ class ToolButton(QToolButton):
             if self.locked:
                 self._icon("z-lock-badge", t.accent).paint(painter, QRect(28, 4, 9, 9))
         if keyboard_focus(self):
-            focus_ring(painter, QRectF(self.rect()), 10)
+            focus_ring(painter, QRectF(self.rect()), self.height() / 2)
 
     def keyPressEvent(self, event) -> None:
         if not self._toolbar.key_on(self, event):
@@ -239,7 +240,7 @@ class AnnotationToolbar(FloatingBar):
         self._mark = _DropMark(self)
 
         self._row = QHBoxLayout(self)
-        self._row.setContentsMargins(8, 4, 8, 4)
+        self._row.setContentsMargins(4, 4, 4, 4)  # as far from the ends as from the top: concentric
         self._row.setSpacing(4)
         self.overflow = IconButton("caret-double-right", "More tools")
         self.overflow.setFixedSize(36, 36)
