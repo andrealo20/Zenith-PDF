@@ -6,28 +6,31 @@ import multiprocessing
 import os
 import sqlite3
 import sys
+import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtGui import QGuiApplication, QIcon
-from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QMenu, QProxyStyle, QStyleFactory, QWidget
+from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QDialog, QMenu, QProxyStyle, QStyleFactory, QWidget
 
+# Only what the splash needs is imported here: the windows, the icons and the renderer load behind it.
 from . import __version__
 from .core import default_app
 from .core.i18n import set_language
 from .core.platforms import MAC, native_keys
-from .core.render import RenderPool
-from .icons import icon, style as icon_style
 from .settings import Settings
+from .splash import show_splash
 from .theme import themes
-from .ui.help import badges
 from .ui.instance import Instance, forward, own_command, register_scheme
-from .ui.main_window import MainWindow
-from .ui.widgets import set_glass, set_glass_adaptive
+
+if TYPE_CHECKING:
+    from .ui.main_window import MainWindow
 
 DWMWA_WINDOW_CORNER_PREFERENCE = 33  # Windows 11 and later
 DWMWCP_ROUND = 2  # the 8 px corners Windows 11 gives its own menus; the style sheet rounds menus by as much
 SPIN_INSET = 12  # px before a spin box's text, as in a line edit
+REVEAL_WAIT_S = 3.0  # the longest the window stays out of sight for its first pages to be drawn
 
 
 def system_transparency() -> bool:
@@ -109,9 +112,11 @@ class MacEvents(QObject):
             text = action.text()
             if text and (native := native_keys(text)) != text:
                 action.setText(native)
-        elif kind == QEvent.Type.FileOpen and MainWindow.open_windows:
+        elif kind == QEvent.Type.FileOpen:
+            from .ui.main_window import MainWindow
+
             target = event.file() or event.url().toString()  # a PDF, or a zenith-pdf link
-            if target:
+            if target and MainWindow.open_windows:
                 MainWindow.open_windows[-1].open_targets([target])
                 return True
         return False
@@ -128,16 +133,28 @@ def taskbar_id() -> str | None:
     return None if getattr(sys, "frozen", False) else "ZenithPDF.ZenithPDF"
 
 
-def create_app(argv: list[str], settings: Settings | None = None) -> tuple[QApplication, MainWindow]:
+def named_app(argv: list[str]) -> QApplication:
+    """The Qt application, with the names its settings are stored under: before any Settings() is made. The
+    taskbar id too, before any window: a window stays under the button of the id it was made with."""
     if sys.platform == "win32" and taskbar_id():
         import ctypes
 
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(taskbar_id())
-
     app = QApplication.instance() or QApplication(argv)
     app.setApplicationName("Zenith PDF")
     app.setOrganizationName("Zenith PDF")
     app.setApplicationVersion(__version__)
+    return app
+
+
+def create_app(argv: list[str], settings: Settings | None = None) -> tuple[QApplication, MainWindow]:
+    from .core.render import RenderPool
+    from .icons import icon, style as icon_style
+    from .ui.help import badges
+    from .ui.main_window import MainWindow
+    from .ui.widgets import set_glass, set_glass_adaptive
+
+    app = named_app(argv)
     app.setStyle(ZenithStyle())
 
     settings = settings or Settings()
@@ -258,20 +275,27 @@ def main(argv: list[str] | None = None) -> int:
     if "--self-test" in argv:
         return self_test()
     targets = [arg for arg in argv[1:] if not arg.startswith("-")]
-    QApplication.instance() or QApplication(argv)
+    named_app(argv)
     if forward(targets):  # Zenith PDF is already running: it opens them, in its own window
         return 0
-    app, window = create_app(argv)
+    settings = Settings()
+    splash = show_splash(settings.theme)
+    app, window = create_app(argv, settings)
+    from .ui.main_window import MainWindow
+
     instance = Instance(app)
     instance.received.connect(lambda more: _bring_forward(more))
     register_scheme(own_command())
     default_app.register_for_user(own_command())  # on Windows, among the apps suggested for PDF files
+    # Shown out of sight, behind the splash, until its first screen is drawn: no window growing to its size,
+    # no Home before the documents that were open.
+    window.setWindowOpacity(0.0)
     window.show()
+    # Once the window is up: the tour after an update, or the first time, whether to open PDF files.
+    _Reveal(window, splash, lambda: QTimer.singleShot(700, lambda: window.after_update() or window.offer_default_app()))
     if not targets and window.settings.get("on_start") == "restore":
         window.restore_session()
     window.open_targets(targets)
-    # Once the window is up: the tour after an update, or the first time, whether to open PDF files.
-    QTimer.singleShot(700, lambda: window.after_update() or window.offer_default_app())
     try:
         indexer = MainWindow.make_indexer(window.settings)
     except (OSError, sqlite3.Error):  # an index that can't be opened costs the search inside documents, not the app
@@ -285,8 +309,43 @@ def main(argv: list[str] | None = None) -> int:
     return app.exec()
 
 
+class _Reveal(QObject):
+    """Brings the starting window into sight, and closes the splash, once the pages on screen are drawn: after
+    REVEAL_WAIT_S at the latest, and at once when a dialog needs the user (a password, a file that won't open)."""
+
+    def __init__(self, window: MainWindow, splash: QWidget, then):
+        super().__init__(window)
+        self._window, self._splash, self._then = window, splash, then
+        self._deadline = time.monotonic() + REVEAL_WAIT_S
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._check)
+        self._timer.start(30)
+        QApplication.instance().installEventFilter(self)
+
+    def _check(self) -> None:
+        workspace = self._window.current_workspace()
+        if workspace is None or workspace.view.missing_tiles() == 0 or time.monotonic() > self._deadline:
+            self._show()
+
+    def eventFilter(self, watched, event) -> bool:
+        if event.type() == QEvent.Type.Show and isinstance(watched, QDialog):
+            self._show()
+        return False
+
+    def _show(self) -> None:
+        if not self._timer.isActive():
+            return  # shown already
+        self._timer.stop()
+        QApplication.instance().removeEventFilter(self)
+        self._window.setWindowOpacity(1.0)
+        self._splash.close()
+        self._then()
+
+
 def _bring_forward(targets: list[str]) -> None:
     """A later start handed these over: open them in the window used last, and bring it to the front."""
+    from .ui.main_window import MainWindow
+
     if not MainWindow.open_windows:
         return
     window = MainWindow.open_windows[-1]

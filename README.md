@@ -212,7 +212,7 @@ every change, and publishes them with each new version.
 | Search in every PDF | SQLite's full-text index (FTS5), kept on the computer |
 | Comparing versions | the words of both versions, lined up with Python's difflib |
 | Updates | GitHub's releases API; each download checked against the release's SHA256SUMS |
-| Tests | pytest on Qt's offscreen platform: 674 tests, run on Windows, macOS and Linux |
+| Tests | pytest on Qt's offscreen platform: 678 tests, run on Windows, macOS and Linux |
 | Downloads | PyInstaller, then an NSIS installer, a .dmg or an AppImage (`tools/build.py`), built by GitHub Actions |
 
 ```
