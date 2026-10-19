@@ -49,9 +49,9 @@ BUNDLE_ID = "io.github.andrealo20.zenithpdf"
 TIMESTAMP = "http://timestamp.digicert.com"
 # The Store package's identity, from Partner Center > Product identity (public: every copy of the package has it).
 STORE_IDENTITY = {
-    "name": os.environ.get("STORE_IDENTITY_NAME", "ZenithPDF.Local"),
-    "publisher": os.environ.get("STORE_PUBLISHER", "CN=Andrea Loroni"),
-    "publisher_name": os.environ.get("STORE_PUBLISHER_NAME", "Andrea Loroni"),
+    "name": os.environ.get("STORE_IDENTITY_NAME", "andrealo.ZenithPDF"),
+    "publisher": os.environ.get("STORE_PUBLISHER", "CN=6324E174-874E-4AF4-BEFF-97AD455C0AFD"),
+    "publisher_name": os.environ.get("STORE_PUBLISHER_NAME", "andrealo"),
 }
 # The languages the Store package says it speaks, as Windows names them: the app's own (core.i18n.LANGUAGES).
 STORE_LANGUAGES = {"en": "en-US", "it": "it-IT", "fr": "fr-FR", "es": "es-ES", "de": "de-DE", "pt": "pt-BR",
