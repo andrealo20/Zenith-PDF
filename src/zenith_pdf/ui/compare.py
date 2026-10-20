@@ -78,7 +78,7 @@ class PageColumn(QGraphicsView):
         scene.setSceneRect(QRectF(0, 0, width + 2 * GAP, y))
         for word, kind in self._marks:
             self._mark(word, kind)
-        QTimer.singleShot(0, self._draw_visible)
+        QTimer.singleShot(0, self, self._draw_visible)  # with the view as context: dropped if it goes first
 
     def mark(self, words: list[Word], kind: str) -> None:
         for word in words:
@@ -118,7 +118,7 @@ class PageColumn(QGraphicsView):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        QTimer.singleShot(0, self.lay_out)
+        QTimer.singleShot(0, self, self.lay_out)
 
     def spot(self) -> tuple[int, float]:
         """The page at the top of the column, and how far down it the top is (0 to 1)."""
