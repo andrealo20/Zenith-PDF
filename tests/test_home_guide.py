@@ -78,7 +78,8 @@ def test_documents_reopen_where_they_were(window, pdf):
     window.open_file(pdf)
     wait(80)
     view = window.current_workspace().view
-    assert view.current_page == 2 and view.zoom == pytest.approx(2.0)
+    # At its page, and at the zoom documents open at (fitted to the width here), not the 2.0 it was left at.
+    assert view.current_page == 2 and view._fit == "width" and view.zoom != pytest.approx(2.0)
 
     window.close()  # writes the session
     session = window.settings.get("session")

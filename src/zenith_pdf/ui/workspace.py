@@ -941,19 +941,14 @@ class Workspace(QWidget):
                 "panel": self.side.current}
 
     def apply_view_state(self, state: dict) -> None:
-        """Go back to a view_state(). Runs once the view has its size, so fitting works."""
+        """Go back to a view_state(), at the zoom documents open at (default_zoom), not the one it was left at.
+        Runs once the view has its size."""
         def apply():
             view = self.view
             if state.get("layout") in LAYOUTS:
                 view.set_layout(state["layout"])
             if state.get("tint") in TINTS:
                 view.set_page_tint(state["tint"])
-            if state.get("fit") == "width":
-                view.fit_width()
-            elif state.get("fit") == "page":
-                view.fit_page()
-            elif isinstance(state.get("zoom"), (int, float)):
-                view.set_zoom(float(state["zoom"]))
             page = state.get("page")
             if isinstance(page, int) and 0 <= page < self.document.page_count:
                 view.goto_page(page)

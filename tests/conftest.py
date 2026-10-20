@@ -20,6 +20,13 @@ import pytest
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from zenith_pdf.settings import DEFAULTS
+
+# The app opens documents at 100%; the tests were written for pages fitted to the width and keep it (test_open_zoom.py
+# checks the app's own default).
+APP_DEFAULT_ZOOM = DEFAULTS["default_zoom"]
+DEFAULTS["default_zoom"] = "width"
+
 
 @pytest.fixture(scope="session")
 def qt_app():

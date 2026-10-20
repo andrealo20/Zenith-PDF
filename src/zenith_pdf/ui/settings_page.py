@@ -821,8 +821,8 @@ class SettingsWindow(QDialog):
                   self._combo("on_start", {"restore": "Reopen last time's documents",
                                            "home": "Start on the home page"}),
                   "restore session tabs startup reopen close windows"))
-        s.add(Row("Remember where I was", "Open each document at the page and zoom it had when you closed it.",
-                  self._switch("remember_position"), "last page position zoom resume"))
+        s.add(Row("Remember where I was", "Open each document at the page it was on when you closed it.",
+                  self._switch("remember_position"), "last page position resume"))
         recent = QWidget()
         recent.setFixedWidth(CONTROL_WIDTH)
         layout = QHBoxLayout(recent)

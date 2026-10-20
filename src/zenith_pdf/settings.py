@@ -27,7 +27,7 @@ DEFAULTS: dict[str, object] = {
     "icon_colours": False,  # icons coloured by what they do, as Acrobat's tools are; off: the text colour
     "glass_adaptive": True,  # the bars turn light over a bright page and dark over dark content
     "reading_full_screen": False,  # reading mode also fills the screen
-    "default_zoom": "width",  # width, page or actual
+    "default_zoom": "actual",  # how every document opens: actual (100%), width or page
     "default_layout": "single",  # a key of document_view.LAYOUTS
     "default_tint": "normal",  # a key of document_view.TINTS
     "side_panel": "auto",  # auto (pages panel for multi-page documents), always or never
@@ -79,7 +79,7 @@ DEFAULTS: dict[str, object] = {
     "autosave_minutes": 0,
     "on_start": "restore",  # restore: reopen last time's documents where they were; home: start with none
     "session": {},  # {"tabs": [view states], "active": index}, written when the app closes
-    "remember_position": True,  # reopen each file at the page and zoom it was left at
+    "remember_position": True,  # reopen each file at the page it was left at (the zoom is default_zoom's)
     "file_state": {},  # path -> view state, the most recent last
     "recent_limit": 40,
     "recent": [],
