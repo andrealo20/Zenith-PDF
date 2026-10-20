@@ -426,7 +426,16 @@ def circle(cx, cy, rx, ry, turns=1.08, wobble=2.0, start=-2.4):
 
 
 def pen_widths(stroke, base):
-    return tuple(base * (0.7 + 0.45 * math.sin(i / max(len(stroke) - 1, 1) * math.pi)) for i in range(len(stroke)))
+    """Widths as a Pro pen leaves them: full where the hand slows (the start, the turns), thin where it runs."""
+    widths = []
+    for i in range(len(stroke)):
+        t = i / max(len(stroke) - 1, 1)
+        speed = 0.5 + 0.5 * math.sin(2 * math.pi * 1.55 * t - 1.9)  # two fast runs, slow between them
+        width = base * (1.5 - 1.2 * speed)
+        width *= 0.55 + 0.45 * min(1.0, t / 0.05)  # the nib lands
+        width *= 1.0 - 0.6 * max(0.0, (t - 0.9) / 0.1)  # and lifts
+        widths.append(width)
+    return tuple(widths)
 
 
 def mark_up(workspace, mpp: QPointF) -> None:
@@ -441,15 +450,16 @@ def mark_up(workspace, mpp: QPointF) -> None:
         TextMarkup(page=1, style="Squiggly", quads=found(document, "about 0.4%", 1), color=blue, **author),
         TextMarkup(page=2, quads=found(document, "6.4 kWh", 2), color=yellow, **author),
     ]
-    # Page 1: a pen loop round a block of the diagram, a note on the key facts, a reminder in red.
-    controller = line_of(document, "Charge controller", 0)
-    cx, cy = controller[0] + controller[2] / 2, controller[1] + controller[3] / 2 + 6
-    loop = circle(cx, cy, 54, 36)
-    facts = line_of(document, "Key facts", 0)
+    # Page 1: a pen loop round the last block of the diagram, by the margin, a note by the heading, a reminder in red.
+    block = line_of(document, "AC loads", 0)
+    cx, cy = block[0] + block[2] / 2, block[1] + block[3] / 2 + 3
+    loop = circle(cx, cy, 54, 34)
     figure = line_of(document, "Figure 1.", 0)
     made += [
-        Ink(page=0, strokes=(loop,), widths=(pen_widths(loop, 2.4),), width=3.0, color=blue, **author),
-        Note(page=0, position=(W - RIGHT - 30, facts[1] - 2), contents="Know the five blocks of Figure 1 for the exam.",
+        Ink(page=0, strokes=(loop,), widths=(widths := pen_widths(loop, 3.0),), width=max(widths), color=blue,
+            **author),
+        Note(page=0, position=(W - RIGHT + 14, line_of(document, "How a solar cell works", 0)[1] - 2),
+             contents="Know the five blocks of Figure 1 for the exam.",
              color=(1.0, 0.82, 0.2), **author),
         FreeText(page=0, rect=(W - RIGHT - 190, figure[1] - 128, 190, 22), contents="Exam: draw this from memory",
                  font_size=11, color=(0.8, 0.1, 0.1), **author),
