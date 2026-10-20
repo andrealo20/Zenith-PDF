@@ -14,6 +14,8 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 
+from .i18n import tr
+
 LANGUAGES = ("en", "it", "fr", "es", "de", "pt", "ru", "uk", "pl", "cs", "nl", "tr", "zh", "ja", "ko")
 CJK_LANGUAGES = ("zh", "ja", "ko")
 # Chinese characters, Japanese kana and Korean hangul: scripts written without spaces between words.
@@ -342,12 +344,12 @@ def study_notes(marks: list[Marked], title: str, by: str = "page", link=None) ->
         for mark in ordered:
             groups.setdefault(colour_name(mark.color), []).append(mark)
         for name, members in groups.items():
-            lines += [f"## {name}", ""]
+            lines += [f"## {tr(name)}", ""]
             for mark in members:
                 kind = "" if mark.style == "Highlight" else f" ({MARK_NAMES.get(mark.style, mark.style.lower())})"
                 lines.append(f"- {page_ref(mark.page + 1, f'p. {mark.page + 1}')}{kind}: {_quoted(mark.text)}")
                 if mark.comment.strip():
-                    lines.append(f"  - Note: {mark.comment.strip()}")
+                    lines.append(f"  - {tr(f'Note: {mark.comment.strip()}')}")
             lines.append("")
     else:
         page = None
@@ -356,11 +358,11 @@ def study_notes(marks: list[Marked], title: str, by: str = "page", link=None) ->
                 if page is not None:
                     lines.append("")
                 page = mark.page
-                lines += [f"## {page_ref(page + 1, f'Page {page + 1}')}", ""]
+                lines += [f"## {page_ref(page + 1, tr(f'Page {page + 1}'))}", ""]
             kind = MARK_NAMES.get(mark.style, mark.style.lower())
-            lines.append(f"- **{colour_name(mark.color)} {kind}:** {_quoted(mark.text)}")
+            lines.append(f"- **{tr(f'{colour_name(mark.color)} {kind}')}:** {_quoted(mark.text)}")
             if mark.comment.strip():
-                lines.append(f"  - Note: {mark.comment.strip()}")
+                lines.append(f"  - {tr(f'Note: {mark.comment.strip()}')}")
         lines.append("")
     return "\n".join(lines)
 

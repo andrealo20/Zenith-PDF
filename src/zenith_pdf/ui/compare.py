@@ -213,9 +213,12 @@ class CompareWindow(QWidget):
         for change in changes:
             self.left.mark(change.old, change.kind)
             self.right.mark(change.new, change.kind)
-            item = QListWidgetItem(tr(f"{NAMES[change.kind]} · p. {change.page + 1}\n{change.summary()}"))
-            item.setForeground(QBrush(COLOURS[change.kind].darker(150) if themes.current.name == "light"
-                                      else COLOURS[change.kind].lighter(160)))
+            # Each part is translated on its own: the whole line, with the change's words in it, is no text the
+            # translations know.
+            item = QListWidgetItem(f"{tr(NAMES[change.kind])} · {tr(f'p. {change.page + 1}')}\n{change.summary()}")
+            colour = QColor(COLOURS[change.kind])
+            colour.setAlpha(255)  # the marks' see-through colour leaves the text faint
+            item.setForeground(QBrush(colour.darker(170) if themes.current.name == "light" else colour.lighter(150)))
             self.list.addItem(item)
         found = compare.counts(changes)
         if not has_text:  # scans and pictures: nothing to read, which is not reading the same
