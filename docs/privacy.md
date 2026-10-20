@@ -24,6 +24,8 @@ into a PDF.
   GitHub handles under its own privacy statement.
 - A link in a document opens in your browser only when you click it; Zenith PDF asks first, unless you
   told it not to.
+- Report a problem opens GitHub's page for a new issue in your browser, filled in with what you wrote, the
+  version of Zenith PDF, the system it runs on and its language. Nothing is sent unless you send it there.
 
 ## The microphone and the camera
 

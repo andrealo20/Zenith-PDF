@@ -6,8 +6,8 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QEventLoop, QPoint, QRect, Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QPainter
+from PySide6.QtCore import QEventLoop, QPoint, QRect, Qt, QTimer, QUrl
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence, QPainter
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
     QApplication,
@@ -230,6 +230,7 @@ class MainWindow(QMainWindow):
         ("gear-six", "Settings…", "open_settings"),
         ("graduation-cap", "Guide\tF1", "open_guide"),
         ("keyboard", "Keyboard shortcuts", "show_shortcuts"),
+        ("bug", "Report a problem…", "command_report_problem"),
     )
 
     def _build_menu(self) -> QMenu:
@@ -1162,6 +1163,19 @@ class MainWindow(QMainWindow):
 
     def command_assistant(self) -> None:
         self.show_assistant()
+
+    def command_report_problem(self) -> None:
+        """A problem to tell the author about: GitHub's page for a new issue opens in the browser, filled in with
+        what the user wrote and what this copy is. Nothing is sent from here."""
+        from ..core import feedback
+
+        about = feedback.details()
+        text = messages.get_multiline_text(
+            self, "Report a problem", tr(f"What went wrong, and what were you doing? The browser opens GitHub's page "
+                                         f"for a new issue with it, and with this: {about}. Sending it there needs a "
+                                         f"GitHub account."), action="Open on GitHub", required=True)
+        if text is not None:
+            QDesktopServices.openUrl(QUrl(feedback.issue_url(text, about)))
 
     def command_compare(self) -> None:
         """Compare the open document with another version of it, or two files when none is open."""

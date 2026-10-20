@@ -960,6 +960,10 @@ class SettingsWindow(QDialog):
         guide.clicked.connect(self._open_guide)
         s.add(Row("Guide", "A short guide to every part of Zenith PDF. F1 opens it from anywhere.", guide,
                   "manual help learn tutorial"))
+        report = QPushButton(tr("Report a problem"))
+        report.clicked.connect(self._report_problem)
+        s.add(Row("Report a problem", "Something not working as it should? Tell the author on GitHub, with what "
+                  "this copy of Zenith PDF is, so it gets fixed.", report, "bug issue feedback problem crash error"))
         if package_family():
             s.add(Row("Updates", f"This is version {__version__}. The Microsoft Store keeps Zenith PDF up to date.",
                       None, "update version latest store"))
@@ -991,6 +995,11 @@ class SettingsWindow(QDialog):
         window = self.parent()
         if hasattr(window, "open_guide"):
             window.open_guide("")
+
+    def _report_problem(self) -> None:
+        window = self.parent()
+        if hasattr(window, "command_report_problem"):
+            window.command_report_problem()
 
     def _check_updates(self) -> None:
         window = self.parent()

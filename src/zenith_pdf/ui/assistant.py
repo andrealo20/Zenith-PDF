@@ -189,6 +189,8 @@ def _commands(window, workspace) -> list[Found]:
         _command("guide", "Guide", "guide help manual", "graduation-cap", "F1", lambda: window.open_guide("")),
         _command("shortcuts", "Keyboard shortcuts", "shortcut keys keyboard", "keyboard", "", window.show_shortcuts),
         _command("about", "About Zenith PDF", "version about", "info", "", lambda: window.open_settings("about")),
+        _command("report", "Report a problem", "bug issue feedback problem crash error github", "bug", "",
+                 window.command_report_problem),
         _command("tips_again", "Show tool tips again", "tips hints first time tools", "lightbulb", "",
                  lambda: _tips_again(window)),
         _command("tools_panel", "PDF tools", "tools pdf", "wrench", "", window.show_tools_panel),
