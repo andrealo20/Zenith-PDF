@@ -95,6 +95,8 @@ class PageColumn(QGraphicsView):
         rect.setBrush(QBrush(COLOURS[kind]))
 
     def _draw_visible(self) -> None:
+        if self.document.closed:  # the window closed with a drawing still to come
+            return
         area = self.mapToScene(self.viewport().rect()).boundingRect()
         ratio = self.devicePixelRatioF()
         for index, item in enumerate(self._pages):
@@ -205,6 +207,8 @@ class CompareWindow(QWidget):
             self._worker.done.emit(compare.compare(old, new), bool(old or new))
 
     def _show(self, changes: list[Change], has_text: bool = True) -> None:
+        if self._stop:  # closed before the comparison was done: the window may be gone already
+            return
         self.changes = changes
         for change in changes:
             self.left.mark(change.old, change.kind)
@@ -245,6 +249,7 @@ class CompareWindow(QWidget):
 
     def closeEvent(self, event) -> None:
         self._stop = True
+        self._worker.done.disconnect(self._show)  # nothing more to show, whenever the comparison ends
         self._thread.join(5)  # it stops between pages: then the documents can go
         super().closeEvent(event)
         for document in (self.old, self.new):

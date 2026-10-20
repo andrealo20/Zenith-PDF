@@ -1,8 +1,10 @@
 """Comparing two versions of a PDF: words with their place, and what was added, removed or changed."""
 
 import pypdfium2 as pdfium
+from PySide6.QtCore import QEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
+from shiboken6 import isValid
 
 from conftest import _add_text
 from zenith_pdf.core import compare
@@ -129,3 +131,18 @@ def test_scans_are_not_said_to_read_the_same(qt_app, tmp_path):
         QTest.qWait(10)
     assert "no text" in window.status.text() or "Neither" in window.status.text()
     window.close()
+
+
+def test_closing_before_the_comparison_ends_leaves_nothing_to_run(qt_app, tmp_path):
+    """Closed before the comparison finished, the window could get its result once it was gone: a crash."""
+    old = Document(make_pdf(tmp_path / "old.pdf", [["One two."]]))
+    new = Document(make_pdf(tmp_path / "new.pdf", [["One three."]]))
+    window = CompareWindow(old, new)
+    window.show()
+    show = window._show
+    window.close()
+    window.deleteLater()
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+    assert not isValid(window)  # gone
+    show([], True)  # the result arriving late does nothing
+    window.right._draw_visible()  # nor does a drawing that was still to come
