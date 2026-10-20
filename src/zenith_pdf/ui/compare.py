@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QBrush, QColor, QPixmap
+from PySide6.QtGui import QBrush, QColor, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsRectItem,
@@ -24,10 +24,12 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import compare
+from ..core.annotations import Annotation
 from ..core.compare import Change, Word
 from ..core.document import Document
 from ..core.i18n import tr
 from ..theme import themes
+from .annotation_items import paint_annotation
 from .widgets import muted_label
 
 GAP = 16  # px between pages
@@ -36,11 +38,13 @@ NAMES = {"added": "Added", "removed": "Removed", "changed": "Changed"}
 
 
 class PageColumn(QGraphicsView):
-    """One version's pages, one under the other at the column's width, each drawn when it comes into sight."""
+    """One version's pages, one under the other at the column's width, each drawn when it comes into sight with
+    its annotations on it: PDFium draws the page alone, as the canvas paints annotations itself."""
 
-    def __init__(self, document: Document, parent=None):
+    def __init__(self, document: Document, annotations: list[Annotation] | None = None, parent=None):
         super().__init__(parent)
         self.document = document
+        self.annotations = list(document.annotations if annotations is None else annotations)
         self.setScene(QGraphicsScene(self))
         self.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -97,6 +101,14 @@ class PageColumn(QGraphicsView):
             if index in self._drawn or not item.sceneBoundingRect().intersects(area.adjusted(0, -400, 0, 400)):
                 continue
             picture = self.document.render(index, self.scale_ * ratio)
+            on_page = [a for a in self.annotations if a.page == index]
+            if on_page:
+                painter = QPainter(picture)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                painter.scale(self.scale_ * ratio, self.scale_ * ratio)
+                for annotation in on_page:
+                    paint_annotation(painter, annotation)
+                painter.end()
             pixmap = QPixmap.fromImage(picture)
             pixmap.setDevicePixelRatio(ratio)
             item.setPixmap(pixmap)
@@ -129,19 +141,21 @@ class PageColumn(QGraphicsView):
 
 
 class _Worker(QObject):
-    done = Signal(list)
+    done = Signal(list, bool)  # the changes, and whether either version has text at all
 
 
 class CompareWindow(QWidget):
     """The older version on the left, the newer on the right, the changes in a list beside them."""
 
-    def __init__(self, old: Document, new: Document, parent=None):
+    def __init__(self, old: Document, new: Document, parent=None, new_annotations: list[Annotation] | None = None):
+        """`new_annotations`: the newer version's annotations when they are not all in its file yet (an open
+        document's unsaved ones); else those its file has."""
         super().__init__(parent, Qt.WindowType.Window)
         self.setWindowTitle(tr(f"Compare: {old.path.name} and {new.path.name}"))
         self.resize(1400, 900)
         self.old, self.new = old, new
         self.changes: list[Change] = []
-        self.left, self.right = PageColumn(old), PageColumn(new)
+        self.left, self.right = PageColumn(old), PageColumn(new, new_annotations)
         heading = QHBoxLayout()
         for name, side in ((old.path.name, "Older"), (new.path.name, "Newer")):
             label = QLabel(f"{tr(side)}: {name}")
@@ -188,9 +202,9 @@ class CompareWindow(QWidget):
         old = compare.words(self.old, stop=lambda: self._stop)
         new = compare.words(self.new, stop=lambda: self._stop)
         if not self._stop:
-            self._worker.done.emit(compare.compare(old, new))
+            self._worker.done.emit(compare.compare(old, new), bool(old or new))
 
-    def _show(self, changes: list[Change]) -> None:
+    def _show(self, changes: list[Change], has_text: bool = True) -> None:
         self.changes = changes
         for change in changes:
             self.left.mark(change.old, change.kind)
@@ -200,8 +214,13 @@ class CompareWindow(QWidget):
                                       else COLOURS[change.kind].lighter(160)))
             self.list.addItem(item)
         found = compare.counts(changes)
-        self.status.setText(tr("The two versions read the same." if not changes else
-                            f"{found['added']} added, {found['removed']} removed, {found['changed']} changed"))
+        if not has_text:  # scans and pictures: nothing to read, which is not reading the same
+            self.status.setText(tr("Neither version has text to compare, only pictures or scans: look at them side "
+                                   "by side."))
+        else:
+            self.status.setText(tr("The two versions read the same." if not changes else
+                                f"{found['added']} added, {found['removed']} removed, {found['changed']} changed"))
+        self.status.setWordWrap(True)
 
     def step(self, by: int) -> None:
         if self.changes:
@@ -232,9 +251,10 @@ class CompareWindow(QWidget):
             document.close()
 
 
-def compare_files(parent, older: Path, newer: Document) -> CompareWindow:
-    """Open the comparison of `older` (a file) with `newer` (a copy of an open document's current bytes)."""
-    window = CompareWindow(Document(older), newer, parent)
+def compare_files(parent, older: Path, newer: Document, annotations: list[Annotation] | None = None) -> CompareWindow:
+    """Open the comparison of `older` (a file) with `newer` (a copy of an open document's current bytes, with
+    `annotations` as it has them now)."""
+    window = CompareWindow(Document(older), newer, parent, annotations)
     window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
     window.show()
     return window

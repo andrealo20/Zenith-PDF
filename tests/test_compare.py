@@ -6,6 +6,8 @@ from PySide6.QtWidgets import QApplication
 
 from conftest import _add_text
 from zenith_pdf.core import compare
+from zenith_pdf.core.annotations import Shape
+from zenith_pdf.core.i18n import tr
 from zenith_pdf.core.document import Document
 from zenith_pdf.ui.compare import CompareWindow
 
@@ -73,4 +75,57 @@ def test_the_window_lights_the_changes_on_both_sides(qt_app, tmp_path):
     window.right.verticalScrollBar().setValue(round(window.right.tops[1]))
     QApplication.processEvents()
     assert window.right.spot()[0] == 1 and window.left.spot()[0] == 1  # the older version follows to the same page
+    window.close()
+
+
+def shown_colour(column, page, point):
+    """The colour the column shows at a point of a page (display space), once the page is drawn."""
+    for _ in range(200):
+        QApplication.processEvents()
+        if page in column._drawn:
+            break
+        QTest.qWait(10)
+    image = column._pages[page].pixmap().toImage()
+    scale = column.scale_ * image.devicePixelRatio()
+    return image.pixelColor(round(point[0] * scale), round(point[1] * scale))
+
+
+def test_the_pages_show_their_annotations(qt_app, tmp_path):
+    """A note made of annotations on a blank page (pictures, text boxes, shapes) showed as a blank page."""
+    old = Document(make_pdf(tmp_path / "old.pdf", [["One two three."]]))
+    new = Document(make_pdf(tmp_path / "new.pdf", [[]]))
+    red = Shape(page=0, rect=(100.0, 100.0, 300.0, 200.0), color=(1.0, 0.0, 0.0), fill=(1.0, 0.0, 0.0))
+    new.annotations.append(red)  # as read from its file
+    window = CompareWindow(old, new)
+    window.resize(1400, 900)
+    window.show()
+    colour = shown_colour(window.right, 0, (200, 150))
+    assert colour.red() > 200 and colour.green() < 80, colour.name()
+    window.close()
+
+
+def test_the_open_document_shows_its_annotations_as_they_are_now(qt_app, tmp_path):
+    old = Document(make_pdf(tmp_path / "old.pdf", [["One."]]))
+    new = Document(make_pdf(tmp_path / "new.pdf", [["One."]]))
+    unsaved = Shape(page=0, rect=(100.0, 300.0, 300.0, 400.0), color=(0.0, 0.0, 1.0), fill=(0.0, 0.0, 1.0))
+    window = CompareWindow(old, new, new_annotations=[unsaved])
+    window.resize(1400, 900)
+    window.show()
+    colour = shown_colour(window.right, 0, (200, 350))
+    assert colour.blue() > 200 and colour.red() < 80, colour.name()
+    assert shown_colour(window.left, 0, (200, 350)).name() == "#ffffff"  # the older file never had it
+    window.close()
+
+
+def test_scans_are_not_said_to_read_the_same(qt_app, tmp_path):
+    old = Document(make_pdf(tmp_path / "old.pdf", [[]]))
+    new = Document(make_pdf(tmp_path / "new.pdf", [[]]))
+    window = CompareWindow(old, new)
+    window.show()
+    for _ in range(300):
+        QApplication.processEvents()
+        if window.status.text() != tr("Comparing…"):
+            break
+        QTest.qWait(10)
+    assert "no text" in window.status.text() or "Neither" in window.status.text()
     window.close()

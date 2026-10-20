@@ -1183,9 +1183,11 @@ class MainWindow(QMainWindow):
                 return
         else:
             current = workspace.document
-            document = Document(current.path, password=current.password, data=current.data)  # as it is now
+            document = Document(current.path, password=current.password, data=current.data)
+        # As it is now: the open document's annotations, saved or not.
+        annotations = workspace.store.all() if workspace is not None else None
         try:
-            self._compare_window = compare_files(self, Path(older), document)
+            self._compare_window = compare_files(self, Path(older), document, annotations)
         except Exception as error:
             document.close()
             messages.warn(self, "Can't compare", f"{Path(older).name} could not be opened.", detail=str(error))
