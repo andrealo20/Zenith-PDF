@@ -30,6 +30,14 @@ class Release:
 
 
 RELEASES = (
+    Release("0.6.2", (
+        Highlight("At 100%", "Documents open at their actual size, each at the page you left it on. Settings can fit "
+                  "them to the width instead.", "magnifying-glass-plus", "setting:view"),
+    ), (
+        "Study notes, flashcards, the tour and the comparison are in your language all through, and the pen's "
+        "captions fit in every language.",
+        "Closing the comparison window early no longer makes Zenith PDF crash.",
+    )),
     Release("0.6.1", (
         Highlight("Straight to your pages", "The logo shows the moment you start Zenith PDF, and the window opens on "
                   "the documents you had open, already drawn.", "rocket-launch"),
