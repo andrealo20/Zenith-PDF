@@ -97,17 +97,22 @@ def fake_players(made: list, length_ms: int = 1500):
 def clipped_text(dialog) -> list[str]:
     """Labels and buttons of a shown dialog whose one-line text doesn't fit their width."""
     dialog.show()
-    dialog.layout().activate()  # shown again after closing, macOS can keep the old geometry for a moment
-    QApplication.processEvents()
-    clipped = []
-    for label in dialog.findChildren(QLabel):
-        if (label.isVisible() and label.text() and not label.wordWrap() and label.textFormat() != Qt.TextFormat.RichText
-                and label.fontMetrics().horizontalAdvance(label.text()) > label.contentsRect().width() + 1):
-            clipped.append(label.text())
-    for button in dialog.findChildren(QPushButton):
-        room = button.width() - (button.iconSize().width() + 4 if not button.icon().isNull() else 0) - 8
-        if button.isVisible() and button.text() and button.fontMetrics().horizontalAdvance(button.text()) > room:
-            clipped.append(button.text())
+    for _ in range(50):  # shown again after closing, macOS can keep the old geometry for a while: measure once settled
+        dialog.layout().activate()
+        QApplication.processEvents()
+        clipped = []
+        for label in dialog.findChildren(QLabel):
+            if (label.isVisible() and label.text() and not label.wordWrap()
+                    and label.textFormat() != Qt.TextFormat.RichText
+                    and label.fontMetrics().horizontalAdvance(label.text()) > label.contentsRect().width() + 1):
+                clipped.append(label.text())
+        for button in dialog.findChildren(QPushButton):
+            room = button.width() - (button.iconSize().width() + 4 if not button.icon().isNull() else 0) - 8
+            if button.isVisible() and button.text() and button.fontMetrics().horizontalAdvance(button.text()) > room:
+                clipped.append(button.text())
+        if not clipped:
+            break
+        QTest.qWait(20)
     dialog.close()
     return clipped
 
