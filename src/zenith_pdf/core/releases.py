@@ -30,6 +30,31 @@ class Release:
 
 
 RELEASES = (
+    Release("0.6.1", (
+        Highlight("Straight to your pages", "The logo shows the moment you start Zenith PDF, and the window opens on "
+                  "the documents you had open, already drawn.", "rocket-launch"),
+        Highlight("Easier to read", "Icons are back in the text colour, grey text has more contrast, and the glass "
+                  "bars let less of the page show through.", "eye", "setting:view"),
+        Highlight("A wider side panel", "Drag the right edge of Pages, Bookmarks or Annotations to widen it: the "
+                  "page thumbnails grow with it.", "files"),
+        Highlight("Only the zoom", "The arrow at the left end of the bar at the bottom right folds it to the zoom "
+                  "alone.", "magnifying-glass-plus"),
+        Highlight("Ask from the top bar", "In a wide window the assistant is a field at the top: click it and type.",
+                  "sparkle", "command:assistant"),
+        Highlight("On the Microsoft Store", "Zenith PDF installs from the Microsoft Store too, which keeps it up to "
+                  "date.", "storefront"),
+        Highlight("Report a problem", "Something not working? Say what happened, in the More menu or in Settings, "
+                  "and GitHub's page for a new issue opens with it, ready to send.", "bug",
+                  "command:report_problem"),
+    ), (
+        "Links inside a PDF open web pages and email only, never files or places on the network.",
+        "Files moved or deleted since leave the search inside every PDF.",
+        "Compare two versions shows the annotations on the pages, also those not saved yet, and says when there is no "
+        "text to compare.",
+        "The PDF tools are listed in the home page's left column, which a narrow window opens from a menu.",
+        "More than forty fixes: annotations, pages, fit width, forms and dialogs in every language, printing and the "
+        "tool menus.",
+    )),
     Release("0.6.0", (
         Highlight("Text boxes your way", "Helvetica, Times or Courier, bold, italic or underlined, with the lines on "
                   "the left, centred or on the right. Other PDF viewers show them the same.", "text-t", "tool:text"),

@@ -11,6 +11,8 @@ and an assistant, in fifteen languages. Everything runs on your computer.
 Completely free and open source, with no account, no ads and no paid version.<br>
 In continuous development: new versions come out often.
 
+<a href="https://apps.microsoft.com/detail/9NJGJ107P1K6"><img src="https://img.shields.io/badge/Microsoft_Store-Get_it_free-0067B8?style=for-the-badge" alt="Get Zenith PDF from the Microsoft Store" height="38"></a>
+&nbsp;
 <a href="https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-Setup.exe"><img src="https://img.shields.io/badge/Windows-Download_the_installer-0078D4?style=for-the-badge" alt="Download the Windows installer" height="38"></a>
 &nbsp;
 <a href="https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-macOS.dmg"><img src="https://img.shields.io/badge/macOS-Download_the_.dmg-1D1D1F?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" height="38"></a>
@@ -23,7 +25,7 @@ In continuous development: new versions come out often.
 
 [![Build](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml/badge.svg)](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml)
 ![Windows, macOS, Linux](https://img.shields.io/badge/runs_on-Windows%20%7C%20macOS%20%7C%20Linux-555?style=flat-square)
-![Version 0.6.0](https://img.shields.io/badge/version-0.6.0-2E8BFF?style=flat-square)
+![Version 0.6.1](https://img.shields.io/badge/version-0.6.1-2E8BFF?style=flat-square)
 ![Free and open source](https://img.shields.io/badge/free-open_source-2EA44F?style=flat-square)
 ![In continuous development](https://img.shields.io/badge/development-active-2EA44F?style=flat-square)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)
@@ -136,6 +138,17 @@ PDFs side by side, with what was added, removed or changed marked on both and li
   </tr>
 </table>
 
+### New in 0.6.1
+
+- On the [Microsoft Store](https://apps.microsoft.com/detail/9NJGJ107P1K6), which keeps it up to date.
+- The logo shows the moment it starts, and the window opens on the documents you had open, already drawn.
+- Icons in the text colour again, more contrast in grey text, and glass that lets less of the page through.
+- The side panel widens from its right edge, with bigger page thumbnails; the zoom bar folds to the zoom alone;
+  the assistant is a field at the top, to click and type in.
+- Report a problem, in the More menu and in Settings: GitHub's page for a new issue opens, filled in.
+- Compare two versions shows the annotations on the pages; links inside a PDF open only web pages and email;
+  and more than forty fixes.
+
 ### New in 0.6
 
 - Text boxes in Helvetica, Times or Courier, bold, italic or underlined, aligned left, centred or right.
@@ -155,7 +168,8 @@ Zenith PDF is free to download, use, share and change, on every system: the whol
 GPL. It is in continuous development, and each version lists its changes on the
 [releases page](https://github.com/andrealo20/Zenith-PDF/releases).
 
-**Windows.** Download [Zenith-PDF-Setup.exe](https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-Setup.exe) and run
+**Windows.** Install it from the [Microsoft Store](https://apps.microsoft.com/detail/9NJGJ107P1K6): signed by
+Microsoft and kept up to date by the Store. Or download [Zenith-PDF-Setup.exe](https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-Setup.exe) and run
 it. The installer asks where to put Zenith PDF, whether you want a desktop shortcut and whether it should
 open your PDF files, then adds it to the Start menu and to Open with. Windows lets no program make itself the
 default: for that, its Default apps settings open at Zenith PDF, and Set default there finishes it. It uninstalls from Settings > Apps, like any other app. While the
@@ -212,7 +226,7 @@ every change, and publishes them with each new version.
 | Search in every PDF | SQLite's full-text index (FTS5), kept on the computer |
 | Comparing versions | the words of both versions, lined up with Python's difflib |
 | Updates | GitHub's releases API; each download checked against the release's SHA256SUMS |
-| Tests | pytest on Qt's offscreen platform: 684 tests, run on Windows, macOS and Linux |
+| Tests | pytest on Qt's offscreen platform: 689 tests, run on Windows, macOS and Linux |
 | Downloads | PyInstaller, then an NSIS installer, a .dmg or an AppImage (`tools/build.py`), built by GitHub Actions |
 
 ```
