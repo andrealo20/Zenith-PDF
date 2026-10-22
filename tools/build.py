@@ -34,6 +34,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # make_icon, also when this file is loaded by path
 
 from zenith_pdf import __version__  # noqa: E402
 
@@ -277,16 +278,55 @@ def store_manifest() -> str:
 
 
 def store_logos(folder: Path) -> None:
-    from PIL import Image
-
-    logo = Image.open(ASSETS / "zenith.png").convert("RGBA")
     folder.mkdir(parents=True, exist_ok=True)
     for name, size, share in STORE_LOGOS:
-        side = round(size * share)
-        picture = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        mark = logo.resize((side, side), Image.Resampling.LANCZOS)
-        picture.paste(mark, ((size - side) // 2, (size - side) // 2), mark)
-        picture.save(folder / name)
+        store_logo(size, share).save(folder / name)
+
+
+def store_logo(size: int, share: float):
+    """The logo drawn from zenith.svg at its final size, in zenith.png's frame and on whole pixels: 4 times larger,
+    then each pixel the mean of its 4 x 4 block in premultiplied alpha, so edges get no dark fringe."""
+    from make_icon import FRAME
+    from PIL import Image
+    from PySide6.QtCore import QByteArray, QRectF, Qt
+    from PySide6.QtGui import QImage, QPainter
+    from PySide6.QtSvg import QSvgRenderer
+
+    svg = (ASSETS / "zenith.svg").read_text(encoding="utf-8")
+    base = '<rect x="166" y="360" width="180" height="92"'
+    edited = ('fill="url(#drop)"', '<path d="M249 96', '<path d="M263 96', '<path d="M249 185', base, " 336 ", "329.1")
+    if not all(part in svg for part in edited):
+        raise SystemExit("zenith.svg has changed: update the small logo in store_logo")
+    side = round(size * share)
+    # the ink drop solid: its fade to transparent shows as a grey neck on a dark taskbar or Start menu
+    svg = svg.replace('fill="url(#drop)"', 'fill="#C2AEFF"')
+    # the flat edges on whole pixels (the base's top and bottom, the nib's bottom), so none leaves a faint row
+    unit = side / FRAME.height()
+
+    def snap(y: float) -> float:
+        return FRAME.y() + round((y - FRAME.y()) * unit) / unit
+
+    top, bottom, nib = snap(360), snap(452), snap(336)
+    svg = svg.replace(base, f'<rect x="166" y="{top:.4f}" width="180" height="{bottom - top:.4f}"')
+    svg = re.sub(r"(?<![\d.])336(?![\d.])", f"{nib:.4f}", svg).replace("329.1", f"{329.1 + nib - 336:.4f}")
+    if side <= 32:  # the slit, under 1.2 px wide, draws as a soft line: each half drawn again 7 units in closes it
+        svg = (svg.replace("<svg ", '<svg xmlns:xlink="http://www.w3.org/1999/xlink" ')
+               .replace('<path d="M249 96', '<path id="left" d="M249 96')
+               .replace('<path d="M263 96', '<path id="right" d="M263 96')
+               .replace('<path d="M249 185',
+                        '<use xlink:href="#left" x="7"/><use xlink:href="#right" x="-7"/><path d="M249 185'))
+    renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
+    renderer.setViewBox(FRAME)
+    big = QImage(size * 4, size * 4, QImage.Format.Format_RGBA8888_Premultiplied)
+    big.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(big)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    offset = (size - side) // 2 * 4
+    renderer.render(painter, QRectF(offset, offset, side * 4, side * 4))
+    painter.end()
+    picture = Image.frombuffer("RGBa", (size * 4, size * 4), bytes(big.constBits()), "raw", "RGBa",
+                               big.bytesPerLine(), 1)
+    return picture.reduce(4).convert("RGBA")
 
 
 def windows_kit(tool: str) -> Path:

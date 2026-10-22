@@ -37,6 +37,15 @@ def test_the_package_declares_what_the_app_registers_by_itself_elsewhere():
     assert len(manifest.getElementsByTagName("Resource")) == len(LANGUAGES)
 
 
+def test_the_package_logos_are_drawn_whole_on_a_clear_square():
+    build = build_script()
+    for name, size, share in build.STORE_LOGOS:
+        logo = build.store_logo(size, share)
+        assert (logo.size, logo.mode) == ((size, size), "RGBA"), name
+        assert logo.getchannel("A").getextrema() == (0, 255), name  # solid somewhere, clear somewhere
+        assert logo.getpixel((0, 0))[3] == logo.getpixel((size - 1, size - 1))[3] == 0, name
+
+
 def test_a_store_copy_leaves_registering_and_updating_to_the_store(monkeypatch, tmp_path):
     monkeypatch.setattr(default_app, "package_family", lambda: FAMILY)
     monkeypatch.setattr(updates, "package_family", lambda: FAMILY)
