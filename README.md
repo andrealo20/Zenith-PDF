@@ -25,7 +25,7 @@ In continuous development: new versions come out often.
 
 [![Build](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml/badge.svg)](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml)
 ![Windows, macOS, Linux](https://img.shields.io/badge/runs_on-Windows%20%7C%20macOS%20%7C%20Linux-555?style=flat-square)
-![Version 0.6.2](https://img.shields.io/badge/version-0.6.2-2E8BFF?style=flat-square)
+![Version 0.6.3](https://img.shields.io/badge/version-0.6.3-2E8BFF?style=flat-square)
 ![Free and open source](https://img.shields.io/badge/free-open_source-2EA44F?style=flat-square)
 ![In continuous development](https://img.shields.io/badge/development-active-2EA44F?style=flat-square)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)
@@ -226,7 +226,7 @@ every change, and publishes them with each new version.
 | Search in every PDF | SQLite's full-text index (FTS5), kept on the computer |
 | Comparing versions | the words of both versions, lined up with Python's difflib |
 | Updates | GitHub's releases API; each download checked against the release's SHA256SUMS |
-| Tests | pytest on Qt's offscreen platform: 693 tests, run on Windows, macOS and Linux |
+| Tests | pytest on Qt's offscreen platform: 699 tests, run on Windows, macOS and Linux |
 | Downloads | PyInstaller, then an NSIS installer, a .dmg or an AppImage (`tools/build.py`), built by GitHub Actions |
 
 ```

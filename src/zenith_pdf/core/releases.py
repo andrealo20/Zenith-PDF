@@ -30,6 +30,13 @@ class Release:
 
 
 RELEASES = (
+    Release("0.6.3", (
+        Highlight("Redact only what you mark", "Applying redactions takes out only what the marks cover: the rest of "
+                  "the page stays sharp, and its text can still be selected. Right-click a mark and choose Redact "
+                  "this area to black out that one alone.", "eye-slash", "tool:redact"),
+    ), (
+        "A cleaner icon on the taskbar and in the Start menu, in the copy from the Microsoft Store.",
+    )),
     Release("0.6.2", (
         Highlight("At 100%", "Documents open at their actual size, each at the page you left it on. Settings can fit "
                   "them to the width instead.", "magnifying-glass-plus", "setting:view"),
