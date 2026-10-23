@@ -357,9 +357,10 @@ the document can be undone like any other edit.</p>
 <h1>Redaction and security</h1>
 <h2>Redaction</h2>
 <p>Mark what must go with the Redaction tool, or every place a word appears with Find and redact. The marks can
-still be moved or deleted. Apply redactions blacks the areas out for good: those pages become pictures of
-themselves, so the text under the marks is gone from the file, not just covered. Text recognition can make the
-rest searchable again.</p>
+still be moved or deleted. Apply redactions blacks the areas out for good: what lies under the marks is removed from the file, not just
+covered, and the rest of the page stays as it was. To black out one mark alone, right-click it and choose
+Redact this area. A page that can't be redacted that way becomes a picture of itself, and text recognition
+makes the rest searchable again.</p>
 <h2>Passwords and permissions</h2>
 <p>Password and permissions encrypts the file with AES-256 when you save: a password to open it, and limits on
 printing, copying and editing. Keep the password safe: without it nobody can open the file.</p>

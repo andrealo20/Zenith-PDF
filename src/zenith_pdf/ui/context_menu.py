@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QHBoxLayout, QMenu, QWidget, QWidgetAction
 
-from ..core.annotations import Annotation, Attachment, Caret, FreeText, ImageStamp, Link, Note, Tape, TextStamp
+from ..core.annotations import (Annotation, Attachment, Caret, FreeText, ImageStamp, Link, Note, Redaction, Tape,
+                                TextStamp)
 from ..core.i18n import tr
 from ..core.pages import TEMPLATES
 from ..icons import icon
@@ -57,6 +58,12 @@ def _summarise_selection(view: DocumentView) -> None:
     summarise_selection(view)
 
 
+def _redact(view: DocumentView, mark: Redaction) -> None:
+    from .pdf_tools import apply_redactions
+
+    apply_redactions(view.window(), [mark])
+
+
 def _annotation_actions(menu: QMenu, view: DocumentView, annotation: Annotation | None, editable: bool) -> bool:
     """What can be done to the annotation under the pointer, besides the clipboard. False if nothing."""
     if isinstance(annotation, FreeText):
@@ -86,6 +93,8 @@ def _annotation_actions(menu: QMenu, view: DocumentView, annotation: Annotation 
         _action(menu, "pencil-simple", "Edit equation…", lambda: view.edit_equation(annotation), editable)
     elif isinstance(annotation, Link):
         _action(menu, "link", "Edit link…", lambda: view.edit_link(annotation), editable)
+    elif isinstance(annotation, Redaction):
+        _action(menu, "eye-slash", "Redact this area", lambda: _redact(view, annotation), editable)
     else:
         return False
     return True

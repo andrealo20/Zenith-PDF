@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from PySide6.QtCore import QEventLoop, QObject, QPoint, QRect, QSize, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QImage, QPainter, QUndoCommand
+from PySide6.QtCore import QEventLoop, QObject, QPoint, QSize, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QImage, QPainter, QUndoCommand
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -811,50 +811,36 @@ def find_and_redact(window: MainWindow) -> None:
     ws.notify(f"Marked {len(marks)} match{'es' if len(marks) != 1 else ''}. Apply redactions to black them out.")
 
 
-def apply_redactions(window: MainWindow) -> None:
+def apply_redactions(window: MainWindow, marks: list[Redaction] | None = None) -> None:
+    """Black out `marks`, or every redaction mark of the document."""
     ws = _workspace(window)
     if ws is None:
         return
-    marks = [a for a in ws.store.all() if isinstance(a, Redaction)]
+    marks = marks or [a for a in ws.store.all() if isinstance(a, Redaction)]
     if not marks:
         messages.inform(window, "Apply redactions", "There is nothing marked yet. Use the Redact tool "
                         "in the toolbar, or Find and redact.")
         return
     pages = sorted({a.page for a in marks})
     form = ToolForm("Apply redactions", f"Blacks out {len(marks)} marked area{'s' if len(marks) != 1 else ''} on "
-                    f"{_plural(len(pages), 'page')}. Those pages become pictures of themselves, "
-                    "so what was under the marks is gone from the file, not just covered.", window, "Redact")
+                    f"{_plural(len(pages), 'page')}. What lies under the marks is removed from the file, not just "
+                    "covered; the rest stays as it was.", window, "Redact")
     form.color("fill", "Fill colour", (0.0, 0.0, 0.0))
     form.choose("dpi", "Quality of the redacted pages", {150: "150 dpi, smaller file", 200: "200 dpi",
-                                                         300: "300 dpi, sharper"}, 200)
-    searchable = form.check("ocr", "Make the rest of the text searchable again (OCR)", True)
-    searchable.setEnabled(ws.actions.ocr_available())
-    searchable.setChecked(ws.actions.ocr_available())
+                                                         300: "300 dpi, sharper"}, 300)
     values = form.run()
     if values is None:
         return
-    document = ws.document
-    scale = values["dpi"] / 72
-    fill = QColor.fromRgbF(*values["fill"])
-    pictures = {}
-    progress = ProgressDialog(window, "Apply redactions", "Redacting…", len(pages))
-    for done, index in enumerate(pages):
-        if not progress.step(done, f"Redacting page {index + 1} ({done + 1} of {len(pages)})"):
-            progress.finish()
-            return
-        image = document.render(index, scale)
-        painter = QPainter(image)
-        for mark in marks:
-            if mark.page == index:
-                for x, y, w, h in mark.rects:
-                    painter.fillRect(QRect(int(x * scale) - 1, int(y * scale) - 1, int(w * scale) + 3,
-                                           int(h * scale) + 3), fill)
-        painter.end()
-        pictures[index] = images.encode(image)
-    progress.finish()
-    if ws.edit_structure("Apply redactions", lambda annotations: document.apply_redactions(annotations, pictures)):
-        if values["ocr"]:
-            ws.actions.recognize(pages)
+    pictured = set()
+    QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+    try:
+        done = ws.edit_structure("Apply redactions", lambda annotations: pictured.update(
+            ws.document.apply_redactions(annotations, marks, values["fill"], values["dpi"] / 72)))
+    finally:
+        QApplication.restoreOverrideCursor()
+    if done:
+        if pictured and ws.actions.ocr_available():  # those pages lost their text: it comes back searchable
+            ws.actions.recognize(sorted(pictured))
         ws.notify(f"Redacted {_plural(len(pages), 'page')}.")
 
 

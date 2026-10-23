@@ -25,6 +25,7 @@ from zenith_pdf.core.annotations import ImageStamp, Redaction, Shape
 from zenith_pdf.core.document import Document
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui import messages, pdf_tools
+from zenith_pdf.ui.context_menu import build_context_menu
 from zenith_pdf.ui.pdf_tools import ProgressDialog, PropertiesDialog, ToolForm, ToolsPanel, run_tool
 
 
@@ -174,11 +175,107 @@ def test_redaction_removes_the_text_underneath(pdf_copy):
     hit = next(document.iter_search("needle", False, False))
     mark = Redaction(page=hit.page, rects=hit.rects)
     keep = ImageStamp(page=hit.page, rect=(5, 5, 20, 10), data=picture())
-    image = document.render(hit.page, 1.0)
-    document.apply_redactions([mark, keep], {hit.page: images.encode(image)})
+    later = Redaction(page=hit.page, rects=((300, 300, 40, 10),))  # not applied yet: stays a mark
+    assert document.apply_redactions([mark, keep, later], [mark]) == set()
     assert "needle" not in document.page_text(hit.page)
     assert "needle" in document.page_text(1)  # other pages untouched
-    assert [type(a) for a in document.annotations] == [ImageStamp]
+    assert [type(a) for a in document.annotations] == [ImageStamp, Redaction]
+    document.close()
+
+
+def _two_lines(path):
+    from conftest import _add_text
+
+    pdf = pdfium.PdfDocument.new()
+    page = pdf.new_page(612, 792)
+    _add_text(pdf, page, "Nothing to hide here", 72, 700)
+    _add_text(pdf, page, "The code is needle", 72, 600)
+    page.gen_content()
+    page.close()
+    pdf.save(str(path))
+    pdf.close()
+    return path
+
+
+@pytest.mark.usefixtures("qt_app")
+def test_redaction_keeps_the_rest_of_the_page_as_it_was(tmp_path):
+    document = Document(_two_lines(tmp_path / "lines.pdf"))
+    hit = next(document.iter_search("needle", False, False))
+    assert document.apply_redactions([], [Redaction(page=0, rects=hit.rects)]) == set()
+    text = document.page_text(0)
+    assert "Nothing to hide here" in text  # the line the mark didn't touch is still text
+    assert "needle" not in text and "The code" not in text  # the redacted line is a picture now
+    with pikepdf.open(io.BytesIO(document.data)) as pdf:
+        page = pdf.pages[0]
+        assert b"needle" not in b"".join(s.read_bytes() for s in page.obj.Contents.wrap_in_array())
+        pictures = [x for x in page.Resources.XObject.values() if x.Subtype == Name.Image]
+        assert len(pictures) == 1 and pictures[0].Height < pictures[0].Width / 4  # one line, not the page
+    document.close()
+
+
+@pytest.mark.usefixtures("qt_app")
+def test_redaction_keeps_turned_and_cropped_pages(pdf_copy):
+    document = Document(pdf_copy)
+    marks = [Redaction(page=hit.page, rects=hit.rects) for hit in document.iter_search("needle", False, False)]
+    assert len(marks) == 4 and document.apply_redactions([], marks) == set()
+    assert all("needle" not in document.page_text(i) for i in range(4))
+    document.close()
+
+
+def _made(path, content: bytes, picture: bool = False):
+    """A page of Helvetica text (/F1), and a 64 x 64 picture (/Im1) when asked for."""
+    pdf = pikepdf.new()
+    page = pdf.add_blank_page(page_size=(612, 792))
+    font = pdf.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.Helvetica))
+    page.obj.Resources = Dictionary(Font=Dictionary(F1=font))
+    if picture:
+        rows = bytes(range(64)) * 3 * 64
+        page.obj.Resources.XObject = Dictionary(Im1=pdf.make_indirect(pikepdf.Stream(
+            pdf, zlib.compress(rows), Type=Name.XObject, Subtype=Name.Image, Width=64, Height=64,
+            ColorSpace=Name.DeviceRGB, BitsPerComponent=8, Filter=Name.FlateDecode)))
+    page.obj.Contents = pdf.make_stream(content)
+    pdf.save(path)
+    return path
+
+
+@pytest.mark.usefixtures("qt_app")
+def test_the_text_after_a_redacted_word_keeps_its_place(tmp_path):
+    path = _made(tmp_path / "run.pdf", b"BT /F1 18 Tf 72 700 Td [-200 (Secret )] TJ (visible) Tj ( still here) Tj ET")
+    document = Document(path)
+    before = next(document.iter_search("visible still", True, False)).rects
+    hit = next(document.iter_search("Secret", True, True))
+    assert document.apply_redactions([], [Redaction(page=0, rects=hit.rects)]) == set()
+    text = document.page_text(0)
+    assert "Secret" not in text and text.strip().startswith("visible still here")
+    after = next(document.iter_search("visible still", True, False)).rects
+    assert [v for r in after for v in r] == pytest.approx([v for r in before for v in r], abs=0.05)  # not moved
+    document.close()
+
+
+@pytest.mark.usefixtures("qt_app")
+def test_a_redacted_picture_leaves_the_file(tmp_path):
+    path = _made(tmp_path / "picture.pdf", b"BT /F1 18 Tf 72 700 Td (Kept) Tj ET q 200 0 0 200 72 300 cm /Im1 Do Q",
+                 picture=True)
+    document = Document(path)
+    # the bottom left corner of the picture: 72 to 112 across, 452 to 492 down, on the page as shown
+    assert document.apply_redactions([], [Redaction(page=0, rects=((72, 452, 40, 40),))]) == set()
+    assert "Kept" in document.page_text(0)
+    with pikepdf.open(io.BytesIO(document.data)) as pdf:
+        sizes = [(int(x.Width), int(x.Height)) for x in pdf.pages[0].Resources.XObject.values()]
+        assert (64, 64) not in sizes and len(sizes) == 1  # only the picture of what was there, the corner filled
+        assert all(o.get("/Width") != 64 for o in pdf.objects if isinstance(o, pikepdf.Stream))
+    document.close()
+
+
+@pytest.mark.usefixtures("qt_app")
+def test_a_page_that_fails_a_check_becomes_a_picture(tmp_path, monkeypatch):
+    from zenith_pdf.core import redaction
+
+    monkeypatch.setattr(redaction, "CHECK_PIXELS", -1)  # as if the rest of the page drew differently
+    document = Document(_two_lines(tmp_path / "lines.pdf"))
+    hit = next(document.iter_search("needle", False, False))
+    assert document.apply_redactions([], [Redaction(page=0, rects=hit.rects)]) == {0}
+    assert document.page_text(0).strip() == ""
     document.close()
 
 
@@ -481,9 +578,16 @@ def test_find_and_apply_redactions(window, workspace, answers):
     run_tool(window, "redact_find")
     marks = [a for a in workspace.store.all() if isinstance(a, Redaction)]
     assert len(marks) == 4
+    # right-clicking a mark blacks out that one alone, without going through PDF tools
+    menu = build_context_menu(workspace.view, marks[0].page, None, marks[0])
+    next(a for a in menu.actions() if a.text() == "Redact this area").trigger()
+    left = [a.id for a in workspace.store.all() if isinstance(a, Redaction)]
+    assert left == [m.id for m in marks[1:]]
+    assert "needle" not in workspace.document.page_text(marks[0].page)
     run_tool(window, "redact_apply")
     assert all("needle" not in workspace.document.page_text(i) for i in range(4))
     assert not any(isinstance(a, Redaction) for a in workspace.store.all())
+    workspace.undo_stack.undo()
     workspace.undo_stack.undo()
     assert "needle" in workspace.document.page_text(0)
 

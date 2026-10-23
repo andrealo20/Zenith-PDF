@@ -672,37 +672,43 @@ class Document:
 
         self.edit_pages(annotations, operation)
 
-    def apply_redactions(self, annotations, pictures: dict[int, bytes]) -> None:
-        """Replace pages by pictures of themselves, with the redacted areas already filled in.
+    def apply_redactions(self, annotations, marks, fill=(0.0, 0.0, 0.0), scale: float = 300 / 72) -> set[int]:
+        """Black out what the redaction `marks` cover, for good (core/redaction.py); other marks stay.
 
-        `pictures` maps page indices to PNG or JPEG bytes. The redaction marks on
-        those pages go, and so does any annotation or link touching a redacted area.
+        Annotations and links touching a redacted area go too. `scale` is the resolution, in pixels per point, of
+        what becomes a picture. Returns the pages that had to become pictures of themselves.
         """
+        from . import redaction
         from .annotations import Redaction, overlaps
-        from .images import xobject
 
-        areas = {page: [r for a in annotations if isinstance(a, Redaction) and a.page == page for r in a.rects]
-                 for page in pictures}
-        kept = [a for a in annotations if a.page not in pictures
-                or (not isinstance(a, Redaction) and not any(overlaps(a.bounds(), r) for r in areas[a.page]))]
+        applied = {m.id for m in marks}
+        areas: dict[int, list] = {}
+        for mark in marks:
+            areas.setdefault(mark.page, []).extend(mark.rects)
+        kept = [a for a in annotations if a.id not in applied and (
+                a.page not in areas or isinstance(a, Redaction)
+                or not any(overlaps(a.bounds(), r) for r in areas[a.page]))]
         kept_ids = {a.id for a in kept}
-        geometries = {i: self.geometry(i) for i in pictures}
+        geometries = {i: self.geometry(i) for i in areas}
+        pictured: set[int] = set()
 
-        def keep(annot, page):
+        def keep(annot, page, picture):
             if str(annot.get("/NM", "")) in kept_ids:
                 return True
-            if annot.get("/Subtype") != pikepdf.Name.Link or "/Rect" not in annot:
+            if "/Rect" not in annot:
+                return not picture
+            if picture and annot.get("/Subtype") != pikepdf.Name.Link:
                 return False  # form fields and the rest were drawn into the picture
             x0, y0, x1, y1 = (float(v) for v in annot.Rect)
             box = geometries[page].rect_to_display((min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)))
             return not any(overlaps(box, r) for r in areas[page])
 
         def operation(pdf):
-            for index, data in pictures.items():
-                pages.replace_with_picture(pdf, index, geometries[index], xobject(pdf, data),
-                                           lambda annot, i=index: keep(annot, i))
+            with PDFIUM_LOCK:
+                pictured.update(redaction.redact(pdf, areas, geometries, fill, scale, self.render, keep))
 
         self.edit_pages(kept, operation)
+        return pictured
 
     def add_text_layer(self, annotations, index: int, words) -> None:
         self.add_text_layers(annotations, {index: words})

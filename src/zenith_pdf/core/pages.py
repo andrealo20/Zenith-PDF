@@ -457,9 +457,14 @@ def replace_with_picture(pdf: pikepdf.Pdf, index: int, geometry: PageGeometry, p
     for key in ("/Group", "/Thumb", "/PieceInfo", "/StructParents"):
         if key in page:
             del page[key]
+    keep_annotations(page, keep_annots)
+
+
+def keep_annotations(page: Dictionary, keep) -> None:
+    """Leave on the page only the annotations `keep(annot)` says stay."""
     annots = page.get("/Annots")
     if isinstance(annots, Array):
-        kept = [a for a in annots if isinstance(a, Dictionary) and keep_annots(a)]
+        kept = [a for a in annots if isinstance(a, Dictionary) and keep(a)]
         if kept:
             page.Annots = Array(kept)
         else:

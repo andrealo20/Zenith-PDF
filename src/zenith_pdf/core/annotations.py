@@ -433,8 +433,8 @@ class ImageStamp(MovesByRect, Annotation):
 class Redaction(Annotation):
     """An area marked for redaction: still a mark, until the redactions are applied.
 
-    Applying replaces the page with a picture of itself in which these areas are
-    filled with `fill`, so the text and images under them are gone for good.
+    Applying takes what these areas touch out of the page and fills them with `fill`
+    (core/redaction.py), so the text and images under them are gone for good.
     """
 
     rects: tuple[Rect, ...] = ()
