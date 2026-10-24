@@ -30,6 +30,11 @@ class Release:
 
 
 RELEASES = (
+    Release("0.6.4", (
+        Highlight("A toolbar on any side", "Drag the handle at the start of the toolbar to the top, the bottom, the "
+                  "left or the right of the window. Right-click the handle to fix the toolbar to that edge, with the "
+                  "pages beside it instead of under it.", "arrows-out-cardinal", "setting:view"),
+    )),
     Release("0.6.3", (
         Highlight("Redact only what you mark", "Applying redactions takes out only what the marks cover: the rest of "
                   "the page stays sharp, and its text can still be selected. Right-click a mark and choose Redact "

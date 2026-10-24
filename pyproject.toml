@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zenith-pdf"
-version = "0.6.3"
+version = "0.6.4"
 description = "A PDF reader and markup app for Windows, macOS and Linux"
 readme = "README.md"
 license = "GPL-3.0-or-later"
