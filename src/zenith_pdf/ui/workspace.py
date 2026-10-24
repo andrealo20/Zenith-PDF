@@ -507,6 +507,8 @@ class _Canvas(QWidget):
         self.manager: QWidget | None = None
         self._floating: list[QWidget] = []  # cards added with add_floating
         self._band = 0
+        self._room = QRect()  # where the other bars go: the canvas less the toolbar's side
+        self._left = self._right = 0  # the edges the other bars keep to, inside the room
         self.reading = False  # reading mode: the bars are away, and nothing floats up over the pages
         self.exit_chip: FloatingBar | None = None  # reading mode's way back, at the top
         self._fades: dict[QWidget, Fade] = {}
@@ -529,6 +531,17 @@ class _Canvas(QWidget):
         view.glide.finished.connect(self.schedule_glass)
         view.scene().changed.connect(self._on_scene_changed)
         themes.changed.connect(self._on_theme)
+        reshaped = getattr(toolbar, "reshaped", None)
+        if reshaped is not None:
+            reshaped.connect(self._toolbar_reshaped)
+
+    def _toolbar_reshaped(self) -> None:
+        """The toolbar changed size, side or fixing: it and everything that keeps clear of it go in place again."""
+        if shiboken6.isValid(self):
+            self.resizeEvent(None)
+
+    def _area(self) -> QRect:
+        return self._room if self._room.isValid() else self.rect()
 
     def _glass(self) -> list[FloatingBar]:
         self._floating = [w for w in self._floating if shiboken6.isValid(w)]
@@ -564,6 +577,7 @@ class _Canvas(QWidget):
                     card.hide()
             for bar in chrome:
                 self._fade(bar).fade_out()  # they stay where they are while they fade
+            self.resizeEvent(None)  # a toolbar fixed to the edge gives its band to the pages
         else:
             self.resizeEvent(None)  # in place for the canvas as it is now
             for bar in chrome:
@@ -673,8 +687,9 @@ class _Canvas(QWidget):
         """Float `bar` over the middle of the bottom of the pages, above the zoom and undo bars where they leave
         no room beside them."""
         hint = bar.sizeHint()
-        x = (self.width() - hint.width()) // 2
-        y = self.height() - hint.height() - GAP
+        room = self._area()
+        x = room.left() + (room.width() - hint.width()) // 2
+        y = room.bottom() + 1 - hint.height() - GAP
         spot = QRect(x, y, hint.width(), hint.height())
         below = [self.bars[key].geometry() for key in ("zoom", "undo")]
         if any(spot.intersects(rect) for rect in below):
@@ -695,7 +710,7 @@ class _Canvas(QWidget):
         centred = area.center().x() - hint.width() // 2
         spot = None
         for y in (area.top() - hint.height() - 12, area.bottom() + 12):
-            if self._band <= y <= self.height() - GAP - hint.height():
+            if self._band <= y <= self._area().bottom() + 1 - GAP - hint.height():
                 x = self._clear_x(centred, y, hint)
                 if x is not None:
                     spot = QPoint(x, y)
@@ -717,7 +732,8 @@ class _Canvas(QWidget):
             bar.hide()
             return
         area = QRect(self.view.viewport().mapTo(self, area.topLeft()), area.size())
-        reading = QRect(0, self._band, self.width() - SCROLLBAR, self.height() - self._band)
+        room = self._area()
+        reading = QRect(room.left(), self._band, self._right + GAP - room.left(), room.bottom() + 1 - self._band)
         if not area.intersects(reading):
             bar.hide()
             return
@@ -725,7 +741,7 @@ class _Canvas(QWidget):
         centred = area.center().x() - size.width() // 2
         spot = None
         for y in (area.top() - TEXT_BAR_GAP - size.height(), area.bottom() + TEXT_BAR_GAP):
-            if self._band <= y <= self.height() - GAP - size.height():
+            if self._band <= y <= room.bottom() + 1 - GAP - size.height():
                 x = self._clear_x(centred, y, size)
                 if x is not None:
                     spot = QPoint(x, y)
@@ -740,7 +756,9 @@ class _Canvas(QWidget):
         self.schedule_glass([bar])
 
     def _clamped_x(self, x: int, size: QSize) -> int:
-        return max(min(x, self.width() - SCROLLBAR - size.width() - GAP), GAP)
+        if not self._room.isValid():
+            return max(min(x, self.width() - SCROLLBAR - size.width() - GAP), GAP)
+        return max(min(x, self._right - size.width()), self._left)
 
     def _clear_x(self, x: int, y: int, size: QSize) -> int | None:
         """An x near `x` where a bar of `size` at height `y` stays on the canvas and off the page counter, the zoom
@@ -780,37 +798,67 @@ class _Canvas(QWidget):
         if event is not None:
             super().resizeEvent(event)
         width, height = self.width(), self.height()
-        hint = self.toolbar.sizeHint()
-        # The pages run under the toolbar; the view only keeps room above the first one.
-        self._band = hint.height() + 2 * GAP
-        self.view.setGeometry(self.rect())
-        self.view.set_top_inset(self._band)
+        bar = self.toolbar
+        side, docked = getattr(bar, "side", "top"), getattr(bar, "docked", False) and not self.reading
+        vertical = side in ("left", "right")
+        if not self.reading:  # in reading mode the bars stay put while they fade, then wait hidden
+            # Along its side: clear of the scrollbar and the edges, or the whole edge when it is fixed there.
+            across, down = (width, height) if docked else (max(width - 2 * (GAP + 14), 220), max(height - 2 * GAP, 220))
+            bar.fit(down if vertical else across)
+        hint = bar.sizeHint()
+        thick = hint.width() if vertical else hint.height()
+        # Floating, the toolbar keeps GAP from its edge (and from the scrollbar on the right); fixed, it is the edge.
+        band = thick if docked else GAP + thick + (SCROLLBAR if side == "right" else 0)
+        room = QRect(self.rect())
+        if side == "top":
+            room.setTop(band)
+        elif side == "bottom":
+            room.setBottom(height - 1 - band)
+        elif side == "left":
+            room.setLeft(band)
+        else:
+            room.setRight(width - 1 - band)
+        self._room = room
+        self._band = room.top() + GAP  # the page counter, the selection's bar and the cards keep below this
+        # The pages run under a floating toolbar; the view only keeps room above the first one for one at the top.
+        page_area = room if docked else self.rect()
+        self.view.setGeometry(page_area)
+        self.view.set_top_inset(self._band - page_area.top())
+        scrollbar = SCROLLBAR if docked or side != "right" else 0  # the view's own, on the right of the room
+        self._left, self._right = room.left() + GAP, room.right() + 1 - GAP - scrollbar
         if self.manager is not None:
             self.manager.setGeometry(self.rect())
-        if not self.reading:  # in reading mode the bars stay put while they fade, then wait hidden
-            # The toolbar stays centred, clear of the scrollbar. The page counter sits below its band.
-            self.toolbar.fit(max(width - 2 * (GAP + 14), 220))
-            hint = self.toolbar.sizeHint()
-            self.toolbar.setGeometry((width - hint.width()) // 2, GAP, hint.width(), hint.height())
-            menu = getattr(self.toolbar, "tool_menu", None)
+        if not self.reading:
+            if docked:
+                bar.setGeometry({"top": QRect(0, 0, width, thick), "bottom": QRect(0, height - thick, width, thick),
+                                 "left": QRect(0, 0, thick, height),
+                                 "right": QRect(width - thick, 0, thick, height)}[side])
+            elif vertical:  # centred down its side
+                x = GAP if side == "left" else width - SCROLLBAR - GAP - hint.width()
+                bar.setGeometry(x, (height - hint.height()) // 2, hint.width(), hint.height())
+            else:  # centred along the top or the bottom
+                y = GAP if side == "top" else height - GAP - hint.height()
+                bar.setGeometry((width - hint.width()) // 2, y, hint.width(), hint.height())
+            menu = getattr(bar, "tool_menu", None)
             if menu is not None and menu.isVisible():
-                menu.reposition()  # under its button still, which moved with the canvas (the side panel opened)
-            right = width - GAP - 14  # clear of the scrollbar
+                menu.reposition()  # by its button still, which moved with the canvas (the side panel opened)
+            left, right, bottom = self._left, self._right, room.bottom() + 1 - GAP
             undo = self.bars["undo"].sizeHint()
             zoom_bar = self.bars["zoom"]
             if hasattr(zoom_bar, "fit"):  # beside the undo bar if it can be, folding what it must
-                zoom_bar.fit(right - 2 * GAP - undo.width())
+                zoom_bar.fit(right - left - GAP - undo.width())
             counter, zoom = (self.bars[k].sizeHint() for k in ("counter", "zoom"))
             self.bars["counter"].setGeometry(right - counter.width(), self._band, counter.width(), counter.height())
-            zoom_x, zoom_y = max(right - zoom.width(), GAP), height - zoom.height() - GAP
+            zoom_x, zoom_y = max(right - zoom.width(), left), bottom - zoom.height()
             zoom_bar.setGeometry(zoom_x, zoom_y, zoom.width(), zoom.height())
-            undo_y = height - undo.height() - GAP
-            if GAP + undo.width() + GAP > zoom_x:  # no room beside it even so: above it
+            undo_y = bottom - undo.height()
+            if left + undo.width() + GAP > zoom_x:  # no room beside it even so: above it
                 undo_y = zoom_y - GAP // 2 - undo.height()
-            self.bars["undo"].setGeometry(GAP, undo_y, undo.width(), undo.height())
+            self.bars["undo"].setGeometry(left, undo_y, undo.width(), undo.height())
         self.place_exit_chip()
         toast = self.toast.sizeHint()
-        self.toast.setGeometry((width - toast.width()) // 2, height - toast.height() - GAP - 50, toast.width(), toast.height())
+        self.toast.setGeometry(room.left() + (room.width() - toast.width()) // 2,
+                               room.bottom() + 1 - toast.height() - GAP - 50, toast.width(), toast.height())
         for widget in self._floating:
             if getattr(widget, "bottom_bar", False) and shiboken6.isValid(widget) and widget.isVisible():
                 self.place_bottom(widget)

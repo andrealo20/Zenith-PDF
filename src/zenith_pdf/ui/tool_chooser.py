@@ -379,11 +379,18 @@ class ToolChooser(QWidget):
             super().keyPressEvent(event)
 
     def show_under(self, anchor: QWidget) -> None:
-        """Centred under the toolbar, so the toolbar stays in view for dragging."""
-        top = anchor.mapToGlobal(QPoint(anchor.width() // 2, anchor.height() + 4))
+        """On the pages' side of the toolbar (under it, at the top), so the toolbar stays in view for dragging."""
+        bar = QRect(anchor.mapToGlobal(QPoint(0, 0)), anchor.size())
         screen = anchor.screen().availableGeometry()
-        x = centred_x(top.x(), self.width(), anchor.window().frameGeometry(), screen)
-        y = min(top.y(), screen.bottom() - self.height())
+        side = getattr(anchor, "side", "top")
+        if side in ("top", "bottom"):
+            x = centred_x(bar.center().x(), self.width(), anchor.window().frameGeometry(), screen)
+            y = bar.bottom() + 4 if side == "top" else bar.top() - 4 - self.height()
+        else:
+            x = bar.right() + 4 if side == "left" else bar.left() - 4 - self.width()
+            y = bar.center().y() - self.height() // 2
+        x = min(max(x, screen.left()), screen.right() - self.width())
+        y = min(max(y, screen.top()), screen.bottom() - self.height())
         self.move(x, y)
         self.show()
         self.raise_()

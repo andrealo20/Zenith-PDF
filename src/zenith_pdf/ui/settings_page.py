@@ -682,6 +682,14 @@ class SettingsWindow(QDialog):
                   self._combo("side_panel", {"auto": "Pages, for documents with several",
                                              "always": "Always pages", "never": "Closed"}),
                   "thumbnails sidebar"))
+        s.add(Row("Toolbar", "Where the tools sit. The handle at the start of the toolbar drags it to any side.",
+                  self._combo("toolbar_side", {side: tr_in("side", title) for side, title in
+                                               (("top", "Top"), ("bottom", "Bottom"), ("left", "Left"), ("right", "Right"))},
+                              translate=False),
+                  "toolbar position place side top bottom left right move"))
+        s.add(Row("Fix the toolbar to the edge", "A band along the edge of the window, the pages beside it, instead "
+                  "of floating over them.", self._switch("toolbar_docked"),
+                  "toolbar dock docked fixed pinned floating edge band"))
         s.add(Row("Link previews", "Point at a link to another page for a moment: a card shows the spot it goes to, "
                   "such as a figure or a reference. Off, a tooltip names the page.",
                   self._switch("link_preview"), "hover card citation reference figure tooltip"))

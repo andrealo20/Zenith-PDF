@@ -2796,7 +2796,11 @@ class ToolMenu(_Menu):
         if widget is None or not widget.isVisible():
             return
         anchor, bounds = self.rects_of(widget)
-        self.place(anchor, bounds, animate=animate)
+        side = getattr(self.toolbar, "side", "top")
+        if side in ("left", "right"):  # a column: beside its button, towards the pages
+            self.place(anchor, bounds, animate=animate, beside=anchor)
+        else:
+            self.place(anchor, bounds, animate=animate, prefer_above=side == "bottom")
 
     def _wants_pin(self) -> bool:
         if self.toolbar is None:

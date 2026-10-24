@@ -7,16 +7,20 @@ opens the tool's menu (tool_menu.ToolMenu): its style, its lock, and moving,
 duplicating or removing it. Tools are added from the tool chooser (its + buttons,
 or by dragging one onto the toolbar) and reordered by dragging along the toolbar.
 When the window is too narrow, the last tools move into a menu.
+
+The handle at its start drags the toolbar to any side of the window: top, bottom, left or right (a column there).
+Its right-click menu also fixes the toolbar to that edge, a band the pages sit beside instead of under. Both are
+settings ("toolbar_side", "toolbar_docked"); the canvas places the toolbar (workspace._Canvas).
 """
 
 from __future__ import annotations
 
 from PySide6.QtCore import QByteArray, QEvent, QMimeData, QPoint, QRect, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QCursor, QDrag, QIcon, QPainter
-from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QMenu, QToolButton, QWidget
+from PySide6.QtGui import QActionGroup, QColor, QCursor, QDrag, QIcon, QPainter
+from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QMenu, QToolButton, QWidget
 from shiboken6 import isValid
 
-from ..core.i18n import tr
+from ..core.i18n import tr, tr_in
 from ..icons import hue_colour, icon, readable
 from ..theme import qcolor as token_color, themes
 from .document_view import DocumentView
@@ -30,6 +34,7 @@ SHORTCUTS = {"select": "V", "hand": "H, or hold Space"}
 LONG_PRESS_MS = 500
 REPLAY_MS = 400  # what follows a press that closed a menu on its own button comes this soon after it
 VIEW_TOOLS = {"select", "hand", "lasso", "laser", "snapshot"}  # for documents that can only be viewed
+SIDES = {"top": "Top", "bottom": "Bottom", "left": "Left", "right": "Right"}
 
 
 def ink_colour(settings: ToolSettings, key: str) -> str | None:
@@ -191,12 +196,54 @@ class ToolButton(QToolButton):
         self._toolbar.toggle_menu(self.key)
 
 
+class _Grip(QToolButton):
+    """The handle at the start of the toolbar: dragged, the toolbar goes to the side of the window nearest the
+    pointer; right-clicked, a menu of the sides and of fixing it to the edge."""
+
+    LENGTH, BREADTH = 16, 36
+
+    def __init__(self, toolbar: AnnotationToolbar):
+        super().__init__(toolbar)
+        self._toolbar = toolbar
+        self._dragging = False
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setCursor(Qt.CursorShape.SizeAllCursor)
+        self.setToolTip(tr("Drag to move the toolbar to another side. Right-click for more."))
+        themes.changed.connect(self.update)
+
+    def orient(self, vertical: bool) -> None:
+        self.setFixedSize(QSize(self.BREADTH, self.LENGTH) if vertical else QSize(self.LENGTH, self.BREADTH))
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        name = "dots-six" if self.width() > self.height() else "dots-six-vertical"
+        side = min(self.width(), self.height(), 16)
+        box = QRect((self.width() - side) // 2, (self.height() - side) // 2, side, side)
+        cached_icon(name, self._toolbar.theme().text_muted).paint(painter, box)  # the bar's tone, on glass
+
+    def mousePressEvent(self, event) -> None:
+        self._dragging = event.button() == Qt.MouseButton.LeftButton
+        event.accept()
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._dragging:
+            self._toolbar.drag_to(event.globalPosition().toPoint())
+        event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._dragging = False
+        event.accept()
+
+    def contextMenuEvent(self, event) -> None:
+        event.accept()
+        self._toolbar.place_menu().exec(event.globalPos())
+
+
 class _DropMark(QFrame):
     """Where a dragged tool would land on the toolbar."""
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.setFixedWidth(3)
         self.hide()
 
     def paintEvent(self, event) -> None:
@@ -211,6 +258,7 @@ class AnnotationToolbar(FloatingBar):
     chooser_requested = Signal()
     action_used = Signal(str)  # an action tool (an image, a bookmark) was used from here
     menu_opened = Signal(str)  # the key of the tool whose menu just opened
+    reshaped = Signal()  # its size, side or fixing changed: the canvas places it, and what it leaves room for
     # Whether a pinned tool menu was up when its toolbar last went away (another tab, Home): the toolbar shown next
     # brings up a pinned menu of its own, for its tool. Every tab has its own toolbar and menu; the pin is one.
     pinned_menu_up = False
@@ -227,6 +275,7 @@ class AnnotationToolbar(FloatingBar):
         self._visiting: str | None = None  # the tool that is on without being on the toolbar (see fit)
         self._max_width: int | None = None
         self._unsaved_keys: list[str] | None = None  # the toolbar's tools when there are no settings to keep them
+        self._unsaved_place = {"toolbar_side": "top", "toolbar_docked": False}  # likewise its side and fixing
         self._menu: ToolMenu | None = None
         self._swallow: str | None = None  # the tool whose menu a click on its button just closed
         self._swallow_timer = QTimer(self)
@@ -239,9 +288,10 @@ class AnnotationToolbar(FloatingBar):
         self.setAcceptDrops(True)
         self._mark = _DropMark(self)
 
-        self._row = QHBoxLayout(self)
+        self._row = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
         self._row.setContentsMargins(4, 4, 4, 4)  # as far from the ends as from the top: concentric
         self._row.setSpacing(4)
+        self.grip = _Grip(self)
         self.overflow = IconButton("caret-double-right", "More tools")
         self.overflow.setFixedSize(36, 36)
         self.overflow.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -251,7 +301,8 @@ class AnnotationToolbar(FloatingBar):
         self.add_button.clicked.connect(self.chooser_requested.emit)
         for button in (self.overflow, self.add_button):
             button.installEventFilter(self)  # the arrow keys and Enter, as on the tools (see key_on)
-        self.rebuild()
+        self._docked = False
+        self.orient()
 
         # Bound methods, not lambdas: Qt drops these connections when the toolbar is
         # destroyed, while a lambda on these long-lived signals would outlive it.
@@ -284,6 +335,101 @@ class AnnotationToolbar(FloatingBar):
     def _on_setting(self, key: str) -> None:
         if key == "toolbar_tools":
             self.rebuild()
+        elif key in ("toolbar_side", "toolbar_docked"):
+            self.orient()
+
+    # Where it sits ---------------------------------------------------------
+
+    def _place_value(self, key: str):
+        prefs = self._view.settings
+        return prefs.get(key) if prefs is not None else self._unsaved_place[key]
+
+    def _set_place(self, key: str, value) -> None:
+        if self._view.settings is not None:
+            self._view.settings.set(key, value)  # every open toolbar moves
+        else:
+            self._unsaved_place[key] = value
+            self.orient()
+
+    @property
+    def side(self) -> str:
+        side = self._place_value("toolbar_side")
+        return side if side in SIDES else "top"
+
+    @property
+    def docked(self) -> bool:
+        return bool(self._place_value("toolbar_docked"))
+
+    @property
+    def vertical(self) -> bool:
+        return self.side in ("left", "right")
+
+    def orient(self) -> None:
+        """Lay the toolbar out for its side, a row or a column, floating or fixed to the edge."""
+        vertical = self.vertical
+        self._row.setDirection(QBoxLayout.Direction.TopToBottom if vertical else QBoxLayout.Direction.LeftToRight)
+        self.grip.orient(vertical)
+        docked = self.docked
+        if docked != self._docked:
+            self._docked = docked
+            self._solid = docked  # a band along the edge: solid, square, without a shadow
+            self.setProperty("glass", not docked)
+            self.style().unpolish(self)
+            self.style().polish(self)
+            if self._shadow is not None and isValid(self._shadow):
+                self._shadow.setVisible(not docked and self.isVisible())
+            self.refresh_backdrop()
+        self.rebuild()
+
+    def _cast_shadow(self):
+        return None if self._docked else super()._cast_shadow()
+
+    def sizeHint(self) -> QSize:
+        hint = super().sizeHint()
+        if self.vertical:  # as wide as the tool that is on, whichever it is: the column keeps its width
+            hint.setWidth(max(hint.width(), ToolButton.ACTIVE.width() + 8))
+        return hint
+
+    def drag_to(self, point: QPoint) -> None:
+        """The handle is dragged to `point` (global): the toolbar goes to the side of the window nearest it."""
+        canvas = self.parentWidget()
+        if canvas is None:
+            return
+        local = canvas.mapFromGlobal(point)
+        width, height = max(canvas.width(), 1), max(canvas.height(), 1)
+        nearest = {"left": local.x() / width, "right": 1 - local.x() / width,
+                   "top": local.y() / height, "bottom": 1 - local.y() / height}
+        side = min(nearest, key=nearest.get)
+        if side != self.side:
+            self._set_place("toolbar_side", side)
+
+    def place_menu(self) -> QMenu:
+        """The handle's menu: the four sides, and fixing the toolbar to the edge."""
+        menu = QMenu(self)
+        group = QActionGroup(menu)
+        for side, title in SIDES.items():
+            action = menu.addAction(tr_in("side", title), lambda s=side: self._set_place("toolbar_side", s))
+            action.setCheckable(True)
+            action.setChecked(side == self.side)
+            group.addAction(action)
+        menu.addSeparator()
+        fixed = menu.addAction(tr("Fixed to the edge"), lambda: self._set_place("toolbar_docked", not self.docked))
+        fixed.setCheckable(True)
+        fixed.setChecked(self.docked)
+        return menu
+
+    def paintEvent(self, event) -> None:
+        if not self._docked:
+            super().paintEvent(event)
+            return
+        t = themes.current
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(t.raised))
+        painter.setPen(QColor(t.border))
+        r = self.rect()
+        edge = {"top": (r.bottomLeft(), r.bottomRight()), "bottom": (r.topLeft(), r.topRight()),
+                "left": (r.topRight(), r.bottomRight()), "right": (r.topLeft(), r.bottomLeft())}[self.side]
+        painter.drawLine(*edge)  # the line between the band and the pages
 
     def set_read_only(self, read_only: bool) -> None:
         """Only the tools that change nothing work while the document is only read."""
@@ -295,29 +441,37 @@ class AnnotationToolbar(FloatingBar):
         while self._row.count():
             item = self._row.takeAt(0)
             widget = item.widget()
-            if widget is not None and widget not in (self.overflow, self.add_button):
+            if widget is not None and widget not in (self.overflow, self.add_button, self.grip):
                 widget.hide()  # off screen now: deleteLater only acts once the event loop gets to it
                 widget.setParent(None)
                 widget.deleteLater()
         self._buttons.clear()
         self._separators = []
         self._order = self.keys()
+        vertical, centre = self.vertical, Qt.AlignmentFlag.AlignCenter
+        if self._docked:
+            self._row.addStretch()  # the tools in the middle of the band
+        self._row.addWidget(self.grip, 0, centre)
         previous_group = None
         for key in self._order:
             spec = BY_KEY[base_of(key)]
             if previous_group is not None and spec.group != previous_group:
-                line = separator()
-                self._row.addWidget(line)
+                line = separator(vertical=not vertical)
+                if vertical:
+                    line.setFixedSize(20, 1)
+                self._row.addWidget(line, 0, centre)
                 self._separators.append((line, key))
             previous_group = spec.group
             button = ToolButton(key, self)
             button.clicked.connect(lambda _=False, k=key: self._clicked(k))
             if self._read_only and spec.key not in VIEW_TOOLS:
                 button.setEnabled(False)
-            self._row.addWidget(button)
+            self._row.addWidget(button, 0, centre)
             self._buttons[key] = button
         for widget in (self.overflow, self.add_button):
-            self._row.addWidget(widget)
+            self._row.addWidget(widget, 0, centre)
+        if self._docked:
+            self._row.addStretch()
         self._sync(relayout=False)
         self._relayout()
 
@@ -359,8 +513,12 @@ class AnnotationToolbar(FloatingBar):
 
     # Width -----------------------------------------------------------------
 
+    def _length(self, size: QSize) -> int:
+        return size.height() if self.vertical else size.width()
+
     def fit(self, max_width: int | None) -> None:
-        """Hide the last tools into the overflow menu until the toolbar fits in `max_width` pixels."""
+        """Hide the last tools into the overflow menu until the toolbar fits in `max_width` pixels (its height,
+        when it is a column)."""
         self._max_width = max_width
         for key, button in self._buttons.items():
             button.show()
@@ -386,7 +544,7 @@ class AnnotationToolbar(FloatingBar):
             return
         self._row.invalidate()
         visible = [k for k in self._order]
-        while self._row.sizeHint().width() > max_width and len(visible) > 2:
+        while self._length(self._row.sizeHint()) > max_width and len(visible) > 2:
             key = visible.pop()
             self._buttons[key].hide()
             self._hidden.insert(0, key)
@@ -414,13 +572,9 @@ class AnnotationToolbar(FloatingBar):
             self.use(key)
 
     def _relayout(self) -> None:
-        """Fit again and stay centred where the canvas put the toolbar: the active tool is wider."""
+        """Fit again, and the canvas places the toolbar again: the active tool is wider."""
         self.fit(self._max_width)
-        parent = self.parentWidget()
-        if parent is not None and self._max_width is not None:
-            hint = self.sizeHint()
-            self.setGeometry((parent.width() - hint.width()) // 2, self.y(), hint.width(), hint.height())
-            self.refresh_backdrop()
+        self.reshaped.emit()
         if self._menu is not None and self._menu.isVisible():
             self._menu.reposition()
 
@@ -475,8 +629,8 @@ class AnnotationToolbar(FloatingBar):
         if widget not in stops:
             return False
         key, index = event.key(), stops.index(widget)
-        moves = {Qt.Key.Key_Left: index - 1, Qt.Key.Key_Right: index + 1, Qt.Key.Key_Home: 0,
-                 Qt.Key.Key_End: len(stops) - 1}
+        moves = {Qt.Key.Key_Left: index - 1, Qt.Key.Key_Right: index + 1, Qt.Key.Key_Up: index - 1,
+                 Qt.Key.Key_Down: index + 1, Qt.Key.Key_Home: 0, Qt.Key.Key_End: len(stops) - 1}
         if key in moves:
             target = stops[max(0, min(moves[key], len(stops) - 1))]
             for other in stops:
@@ -695,12 +849,12 @@ class AnnotationToolbar(FloatingBar):
         drag.setPixmap(button.grab())
         drag.exec(Qt.DropAction.MoveAction)
 
-    def _drop_position(self, x: float) -> int:
-        """Where among the visible tool buttons a drop at `x` goes."""
+    def _drop_position(self, point) -> int:
+        """Where among the visible tool buttons a drop at `point` goes."""
         visible = [k for k in self._order if k not in self._hidden]
         for key in visible:
-            button = self._buttons[key]
-            if x < button.geometry().center().x():
+            centre = self._buttons[key].geometry().center()
+            if (point.y() < centre.y()) if self.vertical else (point.x() < centre.x()):
                 return self._order.index(key)
         return len(visible)
 
@@ -712,14 +866,18 @@ class AnnotationToolbar(FloatingBar):
         if not event.mimeData().hasFormat(TOOL_MIME):
             return
         event.acceptProposedAction()
-        position = self._drop_position(event.position().x())
+        position = self._drop_position(event.position())
         visible = [k for k in self._order if k not in self._hidden]
         if position < len(visible):
-            x = self._buttons[visible[position]].geometry().left() - 3
+            place = self._buttons[visible[position]].geometry()
+            at = (place.top() if self.vertical else place.left()) - 3
         else:
-            last = self._buttons[visible[-1]] if visible else self.add_button
-            x = last.geometry().right() + 1
-        self._mark.setGeometry(x, 8, 3, self.height() - 16)
+            last = (self._buttons[visible[-1]] if visible else self.add_button).geometry()
+            at = (last.bottom() if self.vertical else last.right()) + 1
+        if self.vertical:
+            self._mark.setGeometry(8, at, self.width() - 16, 3)
+        else:
+            self._mark.setGeometry(at, 8, 3, self.height() - 16)
         self._mark.show()
         self._mark.raise_()
 
@@ -731,7 +889,7 @@ class AnnotationToolbar(FloatingBar):
         key = bytes(event.mimeData().data(TOOL_MIME)).decode("ascii", "replace")
         if not is_valid_key(key):
             return
-        position = self._drop_position(event.position().x())
+        position = self._drop_position(event.position())
         if key in self._order and self._order.index(key) < position:
             position -= 1  # it leaves its old place first
         self.add_tool(key, position)

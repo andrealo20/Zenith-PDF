@@ -243,12 +243,19 @@ class ToolTips(QObject):
         canvas = self.workspace.canvas
         toolbar = self.workspace.toolbar
         anchor = toolbar.anchor_for(card.key) if card.key else toolbar
-        corner = anchor.mapTo(canvas, QPoint(anchor.width() // 2, 0))
-        x = corner.x() - card.width() // 2
-        y = toolbar.geometry().bottom() + GAP
+        middle = anchor.mapTo(canvas, QPoint(anchor.width() // 2, anchor.height() // 2))
+        bar, side = toolbar.geometry(), getattr(toolbar, "side", "top")
+        # On the pages' side of the toolbar, by the tool's button.
+        if side in ("top", "bottom"):
+            x = middle.x() - card.width() // 2
+            y = bar.bottom() + GAP if side == "top" else bar.top() - GAP - card.height()
+        else:
+            x = bar.right() + GAP if side == "left" else bar.left() - GAP - card.width()
+            y = middle.y() - card.height() // 2
         x = min(max(x, GAP), max(canvas.width() - card.width() - GAP, GAP))
+        y = min(max(y, GAP), max(canvas.height() - card.height() - GAP, GAP))
         counter = self.workspace.page_counter
-        if counter.isVisible() and counter.y() < y + card.height() and x + card.width() > counter.x() - GAP:
+        if counter.isVisible() and counter.geometry().intersects(QRect(x, y, card.width(), card.height())):
             x = max(counter.x() - GAP - card.width(), GAP)  # beside the page counter, not over it
         card.setGeometry(QRect(x, y, card.width(), card.height()))
         menu = toolbar.tool_menu

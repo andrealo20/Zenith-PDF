@@ -9,7 +9,7 @@ import weakref
 
 import pikepdf
 import pytest
-from PySide6.QtCore import QEvent, QPointF, QRectF, QSettings
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSettings
 from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QSpinBox
@@ -225,6 +225,46 @@ def test_the_default_toolbar_fits_a_1300_px_window(window, workspace):
     toolbar = workspace.toolbar
     assert [key for key in DEFAULT_TOOLBAR if key in toolbar.keys()] == list(DEFAULT_TOOLBAR)
     assert toolbar._hidden == []  # none in the overflow menu: the page counter sits below the toolbar
+
+
+def test_the_toolbar_goes_to_any_side_and_can_be_fixed_to_it(window, workspace):
+    window.resize(1300, 900)
+    settle(60)
+    canvas, toolbar, prefs = workspace.canvas, workspace.toolbar, window.settings
+    try:
+        prefs.set("toolbar_side", "left")
+        settle(20)
+        bar = toolbar.geometry()
+        assert bar.height() > bar.width() and bar.left() < 30  # a column down the left
+        assert canvas.bars["undo"].geometry().left() > bar.right()  # the other bars keep clear of it
+        prefs.set("toolbar_side", "bottom")
+        settle(20)
+        bar = toolbar.geometry()
+        assert bar.width() > bar.height() and bar.bottom() > canvas.height() - 30
+        assert canvas.bars["zoom"].geometry().bottom() < bar.top()
+        prefs.set("toolbar_docked", True)
+        settle(20)
+        bar = toolbar.geometry()
+        assert (bar.width(), bar.bottom()) == (canvas.width(), canvas.height() - 1)  # the whole edge
+        assert workspace.view.geometry().bottom() < bar.top()  # the pages beside it, not under it
+        toolbar.drag_to(canvas.mapToGlobal(QPoint(canvas.width() - 5, canvas.height() // 2)))  # the handle
+        settle(20)
+        assert prefs.get("toolbar_side") == "right"
+        bar = toolbar.geometry()
+        assert (bar.right(), bar.height()) == (canvas.width() - 1, canvas.height())
+        assert workspace.view.geometry().right() < bar.left()
+        toolbar.open_menu("highlight")
+        settle(20)
+        panel, button = toolbar.tool_menu.panel, toolbar.anchor_for("highlight")
+        # beside its button, on the pages' side
+        assert panel.mapToGlobal(QPoint(panel.width(), 0)).x() <= button.mapToGlobal(QPoint(0, 0)).x()
+    finally:
+        if toolbar.tool_menu is not None:
+            toolbar.tool_menu.close_menu()
+        prefs.set("toolbar_side", "top")
+        prefs.set("toolbar_docked", False)
+    settle(20)
+    assert toolbar.geometry().top() < 30 and workspace.view.geometry() == canvas.rect()
 
 
 # Shared widgets and dialogs ----------------------------------------------------------------------

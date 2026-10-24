@@ -61,6 +61,8 @@ DEFAULTS: dict[str, object] = {
     "remember_styles": True,
     "tool_styles": {},  # tool or copy key ("pen#2") -> {"style", "subject", "locked"}, and "measure"
     "toolbar_tools": [],  # the toolbar's tools and tool copies in order; empty means the default set
+    "toolbar_side": "top",  # where the tools sit: top, bottom, left or right
+    "toolbar_docked": False,  # fixed to that edge, the pages beside it, instead of floating over them
     "after_drawing": "select",  # where unlocked tools go after one use: "select" or "pan"
     "after_drawing_moved": False,  # 0.5.0 moved the old default, Pan, to Select once
     "tool_menu_pinned": False,  # the tool menu stays open while drawing
@@ -110,7 +112,8 @@ FILE_STATES = 300  # documents whose last position is remembered
 RECENT_KEEP = 200  # recent files stored; "recent_limit" only says how many are shown, so lowering it loses none
 # Stored values of older versions, and what they mean now. Anything else not in CHOICES reads as the default.
 MIGRATIONS = {"after_drawing": {"keep": "pan"}, "glass": {"true": "clear", "false": "solid"}}
-CHOICES = {"after_drawing": ("select", "pan"), "glass": ("clear", "balanced", "solid")}
+CHOICES = {"after_drawing": ("select", "pan"), "glass": ("clear", "balanced", "solid"),
+           "toolbar_side": ("top", "bottom", "left", "right")}
 
 
 class Settings(QObject):
