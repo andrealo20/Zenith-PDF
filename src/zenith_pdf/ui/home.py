@@ -406,6 +406,7 @@ class FileDelegate(QStyledItemDelegate):
             x = rect.x() + 4
             painter.setFont(option.font)
             metrics = painter.fontMetrics()
+            round_ = 11 if t.look.chip >= 5 else t.look.chip  # pills, while the style rounds chips as Zenith does
             for tag in entry.tags:
                 width = metrics.horizontalAdvance(tag) + 16
                 if x + width > rect.right() - 4:
@@ -416,7 +417,7 @@ class FileDelegate(QStyledItemDelegate):
                 fill.setAlpha(46)
                 painter.setPen(QPen(colour, 1))
                 painter.setBrush(fill)
-                painter.drawRoundedRect(chip, 11, 11)
+                painter.drawRoundedRect(chip, round_, round_)
                 painter.setPen(QColor(t.text))
                 painter.drawText(chip, Qt.AlignmentFlag.AlignCenter, tag)
                 x += width + 4
@@ -467,13 +468,15 @@ class NavButton(QPushButton):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(self.colour))
             painter.drawEllipse(QRectF(14, rect.center().y() - 5, 10, 10))
-        else:
-            icon(self.icon_name, t.accent if self.isChecked() else t.text).paint(
+        # On the accent's tint, the accent; a style that selects with a neutral fill keeps the text colour.
+        tinted = t.look.tint[0 if t.name == "dark" else 1] and t.look.checked_icon == "accent"
+        if not self.colour:
+            icon(self.icon_name, t.accent if self.isChecked() and tinted else t.text).paint(
                 painter, QRect(10, rect.center().y() - 9, 18, 18))
         font = QFont(self.font())
         font.setWeight(QFont.Weight.DemiBold if self.isChecked() else QFont.Weight.Normal)
         painter.setFont(font)
-        painter.setPen(QColor(t.accent_ink if self.isChecked() else t.text))  # text on the tinted fill
+        painter.setPen(QColor(t.accent_ink if self.isChecked() and tinted else t.text))
         metrics = painter.fontMetrics()
         room = rect.width() - (80 if self.count else 44)  # a row with no count lends its space to the name
         painter.drawText(QRect(38, 0, room, rect.height()), Qt.AlignmentFlag.AlignVCenter,
@@ -626,6 +629,7 @@ class HomePage(QWidget):
         attach_help(self.open_button, "home_open")
         self.new_button = IconButton("plus", "New document", icon_size=20, help="new")
         self.new_button.setObjectName("RoundAccent")
+        self.new_button._refresh()  # its icon in the colour of text on the accent
         self.new_button.setFixedSize(BUTTON_HEIGHT, BUTTON_HEIGHT)
         self.new_button.clicked.connect(self.new_requested.emit)
         top = QHBoxLayout()
@@ -730,8 +734,7 @@ class HomePage(QWidget):
         pitch = muted_label("A short guide to everything in Zenith PDF: reading, marking up, pages, tools and "
                             "shortcuts.")
         pitch.setWordWrap(True)
-        open_guide = QPushButton(tr("Open the guide"))
-        open_guide.setObjectName("Primary")
+        open_guide = QPushButton(tr("Open the guide"))  # secondary: Open, at the top, is the page's main action
         open_guide.setFixedHeight(BUTTON_HEIGHT)
         open_guide.clicked.connect(lambda: self.guide_requested.emit(""))
         whats_new = QPushButton(tr("What's new"))
@@ -983,8 +986,8 @@ class HomePage(QWidget):
         row = QWidget()
         layout = QHBoxLayout(row)
         layout.setContentsMargins(10, 0, 4, 2)
-        label = QLabel(tr(text).upper())
-        label.setObjectName("HomeNavHeading")
+        label = QLabel(tr(text))
+        label.setObjectName("HomeNavHeading")  # in capitals by the style sheet, where the style wants them
         layout.addWidget(label)
         layout.addStretch()
         if icon_name:

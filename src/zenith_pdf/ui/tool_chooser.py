@@ -29,6 +29,7 @@ from ..icons import icon
 from ..theme import themes
 from .help import TOPICS
 from .tool_catalog import ALWAYS, CATALOG, GROUPS, TOOL_MIME, ToolSpec, base_of
+from .toolbar import tool_colour
 from .widgets import FloatingBar, IconButton, muted_label
 
 COLUMNS = 5
@@ -41,10 +42,11 @@ class ToolTile(QWidget):
     used = Signal(str)
     toggled = Signal(str)
 
-    def __init__(self, spec: ToolSpec, on_toolbar, parent=None):
+    def __init__(self, spec: ToolSpec, on_toolbar, colour=None, parent=None):
         super().__init__(parent)
         self.spec = spec
         self._on_toolbar = on_toolbar  # callable: is it on the toolbar now?
+        self._colour = colour  # callable: the colour of a tool's icon; the catalog's without it
         self._press: QPoint | None = None
         self.setFixedSize(TILE)
         self.setMouseTracking(True)
@@ -53,6 +55,9 @@ class ToolTile(QWidget):
         topic = TOPICS.get(spec.help)
         self.setToolTip(tr(topic.what if topic else spec.title))
         themes.changed.connect(self.update)
+
+    def colour(self) -> str:
+        return (self._colour(self.spec.key) if self._colour is not None else "") or self.spec.color
 
     def _circle(self) -> QRectF:
         return QRectF((self.width() - CIRCLE) / 2, 8, CIRCLE, CIRCLE)
@@ -78,7 +83,7 @@ class ToolTile(QWidget):
         painter.setBrush(well)
         painter.drawEllipse(circle)
         size = 38
-        icon(self.spec.icon, self.spec.color).paint(
+        icon(self.spec.icon, self.colour()).paint(
             painter, circle.adjusted((CIRCLE - size) / 2, (CIRCLE - size) / 2, -(CIRCLE - size) / 2,
                                      -(CIRCLE - size) / 2).toRect())
         badge = self._badge()
@@ -138,7 +143,7 @@ class ToolTile(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(themes.current.raised))
         painter.drawEllipse(QRectF(0, 0, CIRCLE, CIRCLE))
-        icon(self.spec.icon, self.spec.color).paint(painter, QRectF(20, 20, CIRCLE - 40, CIRCLE - 40).toRect())
+        icon(self.spec.icon, self.colour()).paint(painter, QRectF(20, 20, CIRCLE - 40, CIRCLE - 40).toRect())
         painter.end()
         drag.setPixmap(pixmap)
         drag.setHotSpot(QPoint(CIRCLE // 2, CIRCLE // 2))
@@ -308,7 +313,7 @@ class ToolChooser(QWidget):
                 widget.setParent(None)
                 widget.deleteLater()
         for position, spec in enumerate(specs):
-            tile = ToolTile(spec, lambda key: self.toolbar().has_tool(key))
+            tile = ToolTile(spec, lambda key: self.toolbar().has_tool(key), self._colour)
             tile.used.connect(self._use)
             tile.toggled.connect(self._toggle)
             grid.addWidget(tile, position // COLUMNS, position % COLUMNS)
@@ -343,6 +348,10 @@ class ToolChooser(QWidget):
         for tab in self.tabs:
             tab.setChecked(False)
         self.dots.hide()
+
+    def _colour(self, key: str) -> str | None:
+        """A tool's icon in its ink, made readable, as the toolbar shows it: None for tools without one."""
+        return tool_colour(self.toolbar()._settings, key)
 
     def toolbar(self):
         """The toolbar of the document on screen now: the tab that opened the chooser may not be it any more."""

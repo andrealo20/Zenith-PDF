@@ -7,9 +7,10 @@ import sys
 from pathlib import Path
 
 from PySide6 import __version__ as PYSIDE_VERSION
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal, qVersion
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, QTimer, Signal, qVersion
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QAbstractSpinBox,
     QApplication,
     QComboBox,
@@ -38,14 +39,14 @@ from ..core.i18n import LANGUAGES, system_language, tr, tr_in
 from ..core.platforms import SYSTEM_NAME, native_keys, package_family
 from ..icons import icon, readable
 from ..settings import DEFAULTS, Settings
-from ..theme import ACCENTS, THEME_NAMES, themes
+from ..theme import ACCENTS, THEME_NAMES, Style, accent_shade, outline, themes, with_accent
 from . import messages
 from .dialogs import SHORTCUTS, delete_template, edit_template, template_summary
 from .document_view import LAYOUTS, TINTS
 from .tool_catalog import BY_KEY, CATALOG, base_of, instance_title
 from .tool_menu import IconPushButton
 from .tools import LOCKABLE, OPTIONS, SETTING_OPTIONS, ToolSettings
-from .widgets import IconButton, Segmented, Switch, glass_style, muted_label, say_copied
+from .widgets import IconButton, Segmented, Switch, glass_style, keyboard_focus, muted_label, say_copied
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 GLASS_CHOICES = (("clear", "Clear"), ("balanced", "Balanced"), ("solid", "Solid"))
@@ -212,22 +213,25 @@ class AccentPicker(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         self._buttons = {}
-        for key, (label, dark, light) in ACCENTS.items():
+        for key, (label, _dark, _light) in ACCENTS.items():
             button = QToolButton()
             button.setFixedSize(26, 26)
             button.setToolTip(tr(label))
             button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.clicked.connect(lambda _=False, k=key: settings.set("accent", k))
+            button.clicked.connect(lambda _=False, k=key: self._pick(k))
             layout.addWidget(button)
-            self._buttons[key] = (button, dark, light)
+            self._buttons[key] = button
         settings.changed.connect(self._refresh)
         themes.changed.connect(self._refresh)
         self._refresh()
 
+    def _pick(self, key: str) -> None:
+        self._settings.set("style_accent", "")  # the user's own choice now
+        self._settings.set("accent", key)
+
     def _refresh(self, *_) -> None:
         chosen = self._settings.get("accent")
-        dark = themes.current.name == "dark"
-        for key, (button, on_dark, on_light) in self._buttons.items():
+        for key, button in self._buttons.items():
             size = 26
             ratio = 2
             pixmap = QPixmap(size * ratio, size * ratio)
@@ -236,7 +240,7 @@ class AccentPicker(QWidget):
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(on_dark if dark else on_light))
+            painter.setBrush(QColor(accent_shade(themes.current, key)))  # the style's own shade
             painter.drawEllipse(5, 5, size - 10, size - 10)
             if key == chosen:
                 painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -245,6 +249,140 @@ class AccentPicker(QWidget):
             painter.end()
             button.setIcon(QIcon(pixmap))
             button.setIconSize(QSize(size, size))
+
+
+class StyleTile(QAbstractButton):
+    """A style to choose: a small picture of a window in it, in the scheme and accent in use, and its name."""
+
+    WIDTH, PICTURE = 148, 88
+
+    def __init__(self, style: Style, accent, parent=None):
+        super().__init__(parent)
+        self.style_ = style
+        self._accent = accent  # the accent key in use, asked for when drawn
+        self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setToolTip(tr(style.summary))
+        self.setAccessibleName(style.name)
+        self.setAccessibleDescription(tr(style.summary))
+        self.setFixedSize(self.WIDTH, self.PICTURE + 28)
+
+    def paintEvent(self, event) -> None:
+        app = themes.current
+        t = with_accent(self.style_.palette(app.name), self._accent())
+        k = t.look
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        frame = QRectF(3, 3, self.WIDTH - 6, self.PICTURE - 6)
+        corner = min(k.card, 10)
+        painter.setPen(QPen(QColor(t.border), 1))
+        painter.setBrush(QColor(t.window))
+        painter.drawPath(outline(frame.adjusted(0.5, 0.5, -0.5, -0.5), corner, k))
+        # The side panel, a page on the canvas, the toolbar over it and a main button.
+        side = QRectF(frame.left() + 1, frame.top() + 1 + corner / 2, 30, frame.height() - 2 - corner)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(t.surface))
+        painter.drawRect(side)
+        painter.setBrush(QColor(t.text_muted))
+        for row in range(3):
+            painter.drawRoundedRect(QRectF(side.left() + 6, side.top() + 20 + row * 9, 16 - row * 3, 3), 1.5, 1.5)
+        canvas = QRectF(side.right(), side.top(), frame.right() - side.right() - 1 - corner / 2, side.height())
+        painter.setBrush(QColor(t.canvas))
+        painter.drawRect(canvas)
+        if k.canvas == "dots":
+            painter.setBrush(QColor(t.border))
+            for x in range(int(canvas.left()) + 5, int(canvas.right()) - 2, 6):
+                for y in range(int(canvas.top()) + 5, int(canvas.bottom()) - 2, 6):
+                    painter.drawEllipse(QPointF(x, y), 0.8, 0.8)
+        elif k.canvas == "grid":
+            painter.setPen(QPen(QColor(t.border), 1))
+            for x in range(int(canvas.left()) + 6, int(canvas.right()), 10):
+                painter.drawLine(QPointF(x, canvas.top()), QPointF(x, canvas.bottom()))
+            for y in range(int(canvas.top()) + 6, int(canvas.bottom()), 10):
+                painter.drawLine(QPointF(canvas.left(), y), QPointF(canvas.right(), y))
+            painter.setPen(Qt.PenStyle.NoPen)
+        page = QRectF(canvas.center().x() - 24, canvas.top() + 20, 48, canvas.bottom() - canvas.top() - 20)
+        painter.setBrush(QColor(t.paper))
+        painter.drawRect(page)
+        painter.setBrush(QColor(0, 0, 0, 60))
+        for row in range(4):
+            painter.drawRect(QRectF(page.left() + 7, page.top() + 8 + row * 7, 34 - (row % 2) * 10, 2))
+        bar = QRectF(canvas.center().x() - 34, canvas.top() + 4, 68, 14)
+        bar_corner = 7 if k.capsules else min(k.panel, 4)
+        if k.shadow == "glow":
+            glow = QColor(t.accent)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            for spread, alpha in ((6, 40), (3, 80)):
+                glow.setAlpha(alpha)
+                painter.setPen(QPen(glow, spread))
+                painter.drawPath(outline(bar, bar_corner, k))
+        painter.setPen(QPen(QColor(t.border), 1))
+        painter.setBrush(QColor(t.raised))
+        painter.drawPath(outline(bar, bar_corner, k))
+        painter.setPen(Qt.PenStyle.NoPen)
+        for index in range(4):
+            spot = QRectF(bar.left() + 6 + index * 15, bar.top() + 3, 10, 8)
+            if index == 1:
+                painter.setBrush(QColor(t.accent))
+                rounding = min(k.item, 4)
+                painter.drawRoundedRect(spot.adjusted(-2, -1, 2, 1), rounding, rounding)
+            painter.setBrush(QColor(t.accent_text if index == 1 else t.text))
+            painter.drawEllipse(spot.center(), 2, 2)
+        button = QRectF(canvas.right() - 30, canvas.bottom() - 15, 24, 10)
+        painter.setBrush(QColor(t.accent_fill))
+        rounding = 5 if k.pill_buttons else min(k.control, 3)
+        painter.drawRoundedRect(button, rounding, rounding)
+        if self.isChecked() or keyboard_focus(self):
+            painter.setPen(QPen(QColor(app.accent if self.isChecked() else app.text_muted), 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(outline(QRectF(1, 1, self.WIDTH - 2, self.PICTURE - 2), corner + 2, k))
+        font = QFont(k.title_font())
+        font.setWeight(QFont.Weight.DemiBold if self.isChecked() else QFont.Weight.Normal)
+        painter.setFont(font)
+        painter.setPen(QColor(app.text if self.isChecked() else app.text_muted))
+        painter.drawText(QRectF(0, self.PICTURE, self.WIDTH, 26), Qt.AlignmentFlag.AlignCenter, self.style_.name)
+
+
+class StylePicker(QWidget):
+    """The styles side by side, each as a small picture; the chosen one has a ring."""
+
+    def __init__(self, settings: Settings, parent=None):
+        super().__init__(parent)
+        from ..styles import STYLES
+
+        self._settings = settings
+        grid = QGridLayout(self)
+        grid.setContentsMargins(0, 4, 0, 0)
+        grid.setSpacing(8)
+        self._tiles: dict[str, StyleTile] = {}
+        for index, style in enumerate(STYLES.values()):
+            tile = StyleTile(style, lambda: settings.get("accent"))
+            tile.clicked.connect(lambda _=False, chosen=style: self._choose(chosen))
+            grid.addWidget(tile, 0, index)
+            self._tiles[style.key] = tile
+        grid.setColumnStretch(len(STYLES), 1)
+        settings.changed.connect(self._refresh)
+        themes.changed.connect(self._refresh)
+        self._refresh()
+
+    def _choose(self, style: Style) -> None:
+        # A style made around one accent (Dot's red) brings it over the default blue, and takes it away again.
+        settings = self._settings
+        brought = settings.get("style_accent")
+        if brought and settings.get("accent") == brought:
+            settings.set("accent", "blue")
+        settings.set("style_accent", "")
+        if style.accent and settings.get("accent") == "blue":
+            settings.set("style_accent", style.accent)
+            settings.set("accent", style.accent)
+        settings.set("style", style.key)
+
+    def _refresh(self, *_) -> None:
+        chosen = self._settings.get("style")
+        for key, tile in self._tiles.items():
+            tile.setChecked(key == chosen)
+            tile.update()
 
 
 class _ToolRow(QFrame):
@@ -647,13 +785,27 @@ class SettingsWindow(QDialog):
 
     # The sections -------------------------------------------------------
 
+    def _by_style(self, *_) -> None:
+        """A style with one palette, or with solid bars, leaves nothing to choose in these rows."""
+        one, glass = len(themes.style.schemes) == 1, themes.current.look.glass
+        self._theme_box.setEnabled(not one)
+        self._theme_box.setToolTip(tr("This style is always dark.") if one else "")
+        self._glass.setEnabled(glass)
+        self._glass.setToolTip("" if glass else tr("This style draws the bars solid."))
+        self._adaptive.setEnabled(glass and not one)  # it turns the bars between a light and a dark palette
+
     def _build_view(self) -> None:
         s = self._section("view")
-        s.add(Row("Theme", f"Dark, light, or the same as {SYSTEM_NAME}.", self._combo("theme", THEME_NAMES),
+        s.add(Row("Style", "How the whole app looks: its colours, shapes and type. Every feature stays the same.",
+                  StylePicker(self._settings), "style look design skin theme appearance minimal neon material dot "
+                  "android pixel nothing", below=True))
+        self._theme_box = theme = self._combo("theme", THEME_NAMES)
+        s.add(Row("Theme", f"Dark, light, or the same as {SYSTEM_NAME}.", theme,
                   "dark mode light mode colours appearance"))
         s.add(Row("Accent colour", "Used for selections, the active tool and buttons.", AccentPicker(self._settings),
                   "colour color highlight"))
-        glass = Segmented([(value, tr_in("glass", label)) for value, label in GLASS_CHOICES], GLASS_TIPS)
+        self._glass = glass = Segmented([(value, tr_in("glass", label)) for value, label in GLASS_CHOICES],
+                                        GLASS_TIPS)
         glass.setFixedWidth(CONTROL_WIDTH)
         self._watch("glass", glass, lambda: glass.set_value(glass_style(self._settings.get("glass"))))
         glass.chosen.connect(lambda value: self._settings.set("glass", value))
@@ -668,9 +820,12 @@ class SettingsWindow(QDialog):
         s.add(Row("Coloured icons", "Icons take a colour by what they do, as in Acrobat's list of tools: blue for "
                   "files, purple for pens, red for making and removing, green for pages, orange for comments. Off, "
                   "they take the text colour.", self._switch("icon_colours"), "icons colours colorful monochrome"))
+        self._adaptive = adaptive = self._switch("glass_adaptive")
         s.add(Row("Glass follows the page", "The bars turn light over a bright page and dark over dark content, "
                   "whatever the theme, so they stay clear: as Apple's Liquid Glass does.",
-                  self._switch("glass_adaptive"), "liquid glass adaptive tone light dark bars"))
+                  adaptive, "liquid glass adaptive tone light dark bars"))
+        themes.changed.connect(self._by_style)
+        self._by_style()
         s.add(Row("Open documents at", "The zoom a document opens with.",
                   self._combo("default_zoom", {"width": "Fit width", "page": "Fit page", "actual": "Actual size"}),
                   "zoom"))
@@ -960,9 +1115,9 @@ class SettingsWindow(QDialog):
         assistant = QPushButton(tr("Open the assistant"))
         assistant.clicked.connect(self._open_assistant)
         s.add(Row("Assistant", f"{native_keys('Ctrl+K')}, or the sparkle at the top right, finds any tool, command, setting, shortcut "
-                  "or guide chapter from a few words or a question, in English, Italian, French, Spanish, German or "
-                  "Portuguese. It also checks spelling, picks the key points of a text and turns highlights into "
-                  "study notes, all on this computer.", assistant,
+                  "or guide chapter from a few words or a question, in any of Zenith PDF's languages. It also checks "
+                  "spelling, picks the key points of a text and turns highlights into study notes, all on this computer.",
+                  assistant,
                   "assistant ai search command palette find ask spelling summary study notes"))
         guide = QPushButton(tr("Open the guide"))
         guide.clicked.connect(self._open_guide)

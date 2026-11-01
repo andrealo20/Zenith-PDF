@@ -173,14 +173,18 @@ class ThumbnailDelegate(QStyledItemDelegate):
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
         if selected or hovered:
-            painter.setPen(QPen(QColor(t.accent if selected else t.text_muted), 2))
+            painter.setPen(QPen(QColor((t.focus or t.accent) if selected else t.text_muted), 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(thumb.adjusted(-4, -4, 4, 4), 5, 5)
+            ring = max(t.look.item - 1, 0)  # 1 px nearer the page than the page manager's ring, so 1 px less round
+            painter.drawRoundedRect(thumb.adjusted(-4, -4, 4, 4), ring, ring)
 
         painter.fillRect(thumb, Qt.GlobalColor.white)
         pixmap = index.data(Qt.ItemDataRole.DecorationRole)
         if pixmap is not None:
             painter.drawPixmap(thumb, pixmap, QRectF(pixmap.rect()))
+        painter.setPen(QPen(QColor(t.border), 1))  # the page's edge: a white page on the light panel has none
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(thumb.adjusted(-0.5, -0.5, 0.5, 0.5))
 
         label_rect = QRect(rect.x(), round(thumb.bottom()) + 4, rect.width(), LABEL_HEIGHT)
         painter.setPen(QColor(t.accent if selected else t.text_muted))

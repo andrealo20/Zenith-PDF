@@ -27,7 +27,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QUndoCommand, QUndoStack
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QUndoCommand, QUndoStack
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -51,7 +51,7 @@ from ..core.document import Document, PdfiumError
 from ..core.i18n import tr
 from ..core.render import RenderPool
 from ..icons import icon
-from ..theme import themes
+from ..theme import outline, themes
 from . import messages
 from .help import attach_help
 from .widgets import IconButton, icon_pixmap, muted_label, separator
@@ -163,6 +163,8 @@ class CardDelegate(QStyledItemDelegate):
         colour = QColor(source.colour if source else themes.current.text_muted)
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         card = option.rect.adjusted(6, 6, -6, -6)
+        look = themes.current.look
+        round_ = max(look.card - 2, 0)
 
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -171,7 +173,7 @@ class CardDelegate(QStyledItemDelegate):
         background.setAlpha(70 if selected else 42)
         painter.setPen(QPen(colour, 2.5) if selected else Qt.PenStyle.NoPen)
         painter.setBrush(background)
-        painter.drawRoundedRect(card, 10, 10)
+        painter.drawPath(outline(QRectF(card), round_, look))
 
         # The page, kept upright within the card and turned by the entry's rotation.
         width, height = builder.page_size(entry)
@@ -210,15 +212,14 @@ class CardDelegate(QStyledItemDelegate):
         pill = QRectF(card.right() - text_width - 8, card.y() + 8, text_width, 18)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(255, 255, 255, 220))
-        painter.drawRoundedRect(pill, 9, 9)
+        pill_round = 9 if look.chip >= 5 else look.chip  # a pill, while the style rounds chips as Zenith does
+        painter.drawRoundedRect(pill, pill_round, pill_round)
         painter.setPen(colour.darker(150))
         painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, tr(label))
 
         if row.group and source is not None:
             strip = QRectF(card.x(), card.bottom() - 28, card.width(), 28)
-            path = QPainterPath()
-            path.addRoundedRect(strip, 10, 10)
-            painter.fillPath(path, QColor(20, 20, 24, 200))
+            painter.fillPath(outline(strip, round_, look), QColor(20, 20, 24, 200))
             painter.setPen(QColor("white"))
             painter.setFont(option.font)
             name = painter.fontMetrics().elidedText(source.path.name, Qt.TextElideMode.ElideMiddle, round(strip.width()) - 16)

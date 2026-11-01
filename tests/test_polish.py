@@ -263,6 +263,9 @@ def test_an_off_switch_reads_and_accent_text_reads_on_tinted_fills(qt_app, theme
                                           zip((under.redF(), under.greenF(), under.blueF()),
                                               (fill.redF(), fill.greenF(), fill.blueF()))))
                 assert ratio(QColor(tinted.accent_ink), mixed) >= 4.5, (theme, accent, back)
+            # White text on the accent (a primary button, selected text) reads too, hovered or not.
+            for fill in (tinted.accent_fill, tinted.accent_fill_hover):
+                assert ratio(QColor(tinted.accent_text), QColor(fill)) >= 4.5, (theme, accent, fill)
     finally:
         themes.choose(previous, "blue")
 

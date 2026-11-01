@@ -14,6 +14,7 @@ note icons, drawn from the same geometry as the annotations themselves.
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 
 import qtawesome as qta
 from PySide6.QtCore import QPointF, QRect, QRectF, QSize, Qt
@@ -358,7 +359,7 @@ class _DrawnIcon(QIconEngine):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(rect.topLeft())
         painter.scale(rect.width() / 24, rect.height() / 24)
-        pen = QPen(QColor(color), 1.5)
+        pen = QPen(QColor(color), themes.current.look.stroke)  # as heavy as the style's Phosphor weight
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
@@ -438,19 +439,41 @@ def hue_colour(name: str, theme: str | None = None) -> str | None:
     return dark if (theme or themes.current.name) == "dark" else light
 
 
+WEIGHTS = ("thin", "light", "bold", "fill")
+
+
+@lru_cache(maxsize=None)
+def _phosphor() -> frozenset[str]:
+    """The names in qtawesome's Phosphor font, from its character map (not public: none when it moves)."""
+    qta.icon("ph.file")  # loads the fonts
+    try:
+        return frozenset(qta._resource["iconic"].charmap["ph"])
+    except (AttributeError, KeyError, TypeError):
+        return frozenset()
+
+
+def _weighted(name: str) -> str:
+    """`name` in the style's Phosphor weight, where the font has it and `name` asks for no weight of its own."""
+    weight = themes.current.look.icon_weight
+    if not weight or name.rsplit("-", 1)[-1] in WEIGHTS or f"{name}-{weight}" not in _phosphor():
+        return name
+    return f"{name}-{weight}"
+
+
 def icon(name: str, color: str | None = None) -> QIcon:
     """The icon `name` (Phosphor, or one drawn here), in `color`, else the colour of what it does when coloured
-    icons are on (hue_colour), else the theme's text colour."""
+    icons are on (hue_colour), else the theme's text colour. In the style's weight: thin, light, regular or bold."""
     t = themes.current
     color = color or hue_colour(name) or t.text
+    on = t.text if t.look.checked_icon == "text" else t.accent
     if name in CUSTOM:
-        return QIcon(_DrawnIcon(CUSTOM[name], color, t.accent, t.text_disabled))
+        return QIcon(_DrawnIcon(CUSTOM[name], color, on, t.text_disabled))
     # qtawesome derives the hover colour from the checked one unless both are given.
     return qta.icon(
-        name if "." in name else f"ph.{name}",
+        name if "." in name else f"ph.{_weighted(name)}",
         color=color,
         color_active=color,
-        color_on=t.accent,
-        color_on_active=t.accent,
+        color_on=on,
+        color_on_active=on,
         color_disabled=t.text_disabled,
     )

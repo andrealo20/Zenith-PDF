@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.i18n import tr
-from ..core.platforms import MAC, SYSTEM_NAME, WINDOWS, mono_font, native_keys, settings_place, ui_font
+from ..core.platforms import MAC, SYSTEM_NAME, WINDOWS, mono_font, native_keys, settings_place
 from ..core.releases import EARLIER, RELEASES
 from ..icons import icon
 from ..theme import themes
@@ -371,8 +371,8 @@ printing, copying and editing. Keep the password safe: without it nobody can ope
 <p>Settings (the gear at the foot of the side panel, or the menu at the top right) apply as soon as you change
 them. The search box finds a setting by name.</p>
 <ul>
-<li><b>View &amp; Layout</b>: theme, accent colour, the glass of the bars (Clear, Balanced or Solid), how
-documents open, whether reading mode fills the screen.</li>
+<li><b>View &amp; Layout</b>: style (Zenith, Dot, Neon or Material), theme, accent colour, the glass
+of the bars (Clear, Balanced or Solid), how documents open, whether reading mode fills the screen.</li>
 <li><b>Templates</b>: new-document templates, and where new documents go.</li>
 <li><b>Annotation</b>: your name, where unlocked tools go back to, locks, snapping, and every tool's menu.</li>
 <li><b>Canvas Navigation</b>: what the mouse wheel does and how fast it scrolls.</li>
@@ -444,9 +444,9 @@ class GuideWindow(QDialog):
     def _style(self) -> str:
         t = themes.current
         # Pixels, not points: a Mac counts 72 points to the inch and the text would come out smaller there.
-        return (f"body {{ color: {t.text}; font-family: '{ui_font()}'; font-size: 14px; line-height: 135%; }}"
-                f"h1 {{ font-size: 27px; font-weight: 600; margin-bottom: 12px; }}"
-                f"h2 {{ font-size: 18px; font-weight: 600; margin-top: 22px; }}"
+        return (f"body {{ color: {t.text}; font-family: '{t.look.font()}'; font-size: 14px; line-height: 135%; }}"
+                f"h1 {{ font-family: '{t.look.title_font()}'; font-size: 27px; font-weight: 600; margin-bottom: 12px; }}"
+                f"h2 {{ font-family: '{t.look.title_font()}'; font-size: 18px; font-weight: 600; margin-top: 22px; }}"
                 f"h3 {{ font-size: 15px; font-weight: 600; margin-top: 18px; color: {t.accent_ink}; }}"
                 f".muted {{ color: {t.text_muted}; }}"
                 f".key {{ background-color: {t.raised}; color: {t.text}; font-family: '{mono_font()}'; }}"

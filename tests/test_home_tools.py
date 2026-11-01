@@ -44,7 +44,7 @@ def test_every_tool_is_listed_open_in_the_left_column_under_the_tags(window):
     layout = rows[0].parentWidget().layout()
     tags = next(i for i in range(layout.count()) if (w := layout.itemAt(i).widget()) is not None
                 and w.findChild(QLabel) is not None
-                and w.findChild(QLabel).text() == "TAGS")
+                and w.findChild(QLabel).text() == "Tags")  # in capitals by the style sheet
     assert layout.indexOf(rows[0]) > tags
 
 

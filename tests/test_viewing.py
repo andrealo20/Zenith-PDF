@@ -2,17 +2,20 @@
 touch mode."""
 
 import shutil
+from dataclasses import replace
 
 import pikepdf
 import pytest
 from PySide6.QtCore import QPointF, QSettings
+from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
 
 from zenith_pdf.app import create_app
 from zenith_pdf.core.annotations import Shape
 from zenith_pdf.core.document import Document
 from zenith_pdf.settings import Settings
-from zenith_pdf.ui.document_view import ZOOM_GLIDE_MS
+from zenith_pdf.theme import themes
+from zenith_pdf.ui.document_view import CANVAS_STEPS, ZOOM_GLIDE_MS
 
 pytestmark = pytest.mark.usefixtures("qt_app")
 
@@ -98,6 +101,31 @@ def test_lines_over_the_pages_are_on_screen_only(workspace):
     image = view.area_image(0, (0, 0, 100, 100), 2.0, annotations=True)
     assert all(image.pixelColor(x, 40).blue() > 240 for x in range(0, 200, 7))  # the PDF's own picture: no lines
     view.set_overlay("none")
+
+
+def test_a_style_s_pattern_behind_the_pages_is_as_fine_at_every_zoom(workspace):
+    view = workspace.view
+    zenith = themes.current
+
+    def marked_columns() -> list[int]:
+        """Columns of the canvas left of the page with more off-canvas pixels than the plainest one: dots or lines."""
+        image = view.viewport().grab().toImage()
+        canvas = QColor(zenith.canvas).rgb()
+        counts = [sum(image.pixelColor(x, y).rgb() != canvas for y in range(96)) for x in range(150)]
+        return [x for x in range(150) if counts[x] > min(counts)]
+
+    view.set_zoom(0.5)
+    assert marked_columns() == []  # Zenith's canvas is plain
+    try:
+        for kind, step in CANVAS_STEPS.items():
+            view._apply_theme(replace(zenith, look=replace(zenith.look, canvas=kind)))
+            for zoom in (0.25, 0.5):
+                view.set_zoom(zoom)
+                columns = marked_columns()
+                starts = [x for x in columns if x - 1 not in columns and x > 0]  # a dot cut at the edge is narrower
+                assert len(starts) > 4 and {b - a for a, b in zip(starts, starts[1:])} == {step}
+    finally:
+        view._apply_theme(zenith)
 
 
 def test_a_locked_zoom_stays_and_fit_height_fits_the_page(workspace):

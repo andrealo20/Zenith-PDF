@@ -72,9 +72,9 @@ def test_the_settings_read_at_start_are_the_apps_own(qt_app, monkeypatch):
 
     def settings():
         names.append((qt_app.organizationName(), qt_app.applicationName()))
-        return SimpleNamespace(theme="dark")
+        return SimpleNamespace(theme="dark", get={"style": "zenith"}.get)
 
-    def stop(theme_name):
+    def stop(theme_name, style):
         raise SystemExit(0)
 
     before = qt_app.organizationName(), qt_app.applicationName()

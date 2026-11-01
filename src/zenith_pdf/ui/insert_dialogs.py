@@ -45,7 +45,7 @@ from ..core.annotations import REAL_UNITS, UNITS
 from ..core.i18n import tr
 from ..core.platforms import WINDOWS, math_font, mono_font, settings_place, ui_font
 from ..icons import icon
-from ..theme import themes
+from ..theme import outline, themes
 from .page_actions import IMAGE_FILES
 from .widgets import Segmented, Switch, muted_label
 
@@ -443,7 +443,7 @@ class _DrawPad(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(QColor(t.border), 1.0))
         painter.setBrush(QColor(t.paper))
-        painter.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 10, 10)
+        painter.drawPath(outline(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), max(t.look.card - 2, 0), t.look))
         painter.setPen(QPen(QColor(200, 200, 205), 1, Qt.PenStyle.DashLine))
         painter.drawLine(20, self.height() - 40, self.width() - 20, self.height() - 40)
         if not self.strokes:

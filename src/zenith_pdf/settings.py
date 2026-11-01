@@ -23,6 +23,8 @@ DEFAULTS: dict[str, object] = {
     "theme": "dark",  # dark, light or system
     "language": "auto",  # "auto" for the system's, else a key of core.i18n.LANGUAGES
     "accent": "blue",  # a key of theme.ACCENTS
+    "style": "zenith",  # how the whole app looks: a key of styles.STYLES
+    "style_accent": "",  # the accent the style brought in place of the default, until the user picks one
     "glass": "clear",  # the floating bars: "clear" or "balanced" frosted glass, or "solid"
     "icon_colours": False,  # icons coloured by what they do, as Acrobat's tools are; off: the text colour
     "glass_adaptive": True,  # the bars turn light over a bright page and dark over dark content
@@ -113,6 +115,7 @@ RECENT_KEEP = 200  # recent files stored; "recent_limit" only says how many are 
 # Stored values of older versions, and what they mean now. Anything else not in CHOICES reads as the default.
 MIGRATIONS = {"after_drawing": {"keep": "pan"}, "glass": {"true": "clear", "false": "solid"}}
 CHOICES = {"after_drawing": ("select", "pan"), "glass": ("clear", "balanced", "solid"),
+           "style": ("zenith", "dot", "neon", "material"),
            "toolbar_side": ("top", "bottom", "left", "right")}
 
 

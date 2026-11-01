@@ -27,10 +27,11 @@ from ..core.annotations import FreeText, Note, TextMarkup
 from ..core.finder import Entry, Finder
 from ..core.i18n import tr
 from ..core.platforms import native_keys
-from ..theme import THEME_NAMES, themes
+from ..theme import THEME_NAMES, qcolor, themes
 from .dialogs import SHORTCUTS
 from .help import TOPICS
 from .tool_catalog import BY_KEY, CATALOG
+from .toolbar import tool_colour
 from .widgets import FloatingBar, IconButton, cached_icon, icon_pixmap, muted_label
 
 if TYPE_CHECKING:
@@ -98,12 +99,12 @@ class AccentButton(IconButton):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         frame = QRectF(self.rect()).adjusted(0.5, 1.5, -0.5, -1.5)
-        radius = frame.height() / 2
+        radius = frame.height() / 2 if t.look.control >= 8 else t.look.control  # round, as the settings search
         painter.setPen(QColor(t.text_muted if self.underMouse() else t.border))
         painter.setBrush(QColor(t.field))
         painter.drawRoundedRect(frame, radius, radius)
         if self.isDown():
-            painter.setBrush(QColor(t.pressed))
+            painter.setBrush(qcolor(t.pressed))  # an rgba() token
             painter.drawRoundedRect(frame, radius, radius)
         side = 18
         self.icon().paint(painter, QRect(12, (self.height() - side) // 2, side, side))
@@ -141,8 +142,10 @@ def _tools(window, workspace) -> list[Found]:
         topic = TOPICS.get(spec.help)
         note = NO_DOCUMENT if workspace is None else (READ_ONLY if read_only and spec.key not in VIEW_ONLY else "")
         keys = {"select": "V", "hand": "H"}.get(spec.key, "")
+        # In its ink, as the toolbar shows it; the catalog's colour for a tool that has none
+        colour = (tool_colour(workspace.tool_settings, spec.key) if workspace is not None else None) or spec.color
         entry = Entry(f"tool:{spec.key}", "tool", spec.title, f"Tool · {spec.group}", "tool",
-                      f"{topic.what} {topic.how}" if topic else "", keys, spec.icon, spec.color, not note, note)
+                      f"{topic.what} {topic.how}" if topic else "", keys, spec.icon, colour, not note, note)
 
         def run(key=spec.key):
             ws = window.current_workspace()

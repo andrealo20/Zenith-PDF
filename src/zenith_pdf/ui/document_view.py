@@ -95,7 +95,7 @@ from ..core.render import RenderPool, render_scale
 from ..core.store import AnnotationStore
 from ..icons import icon
 from ..settings import DEFAULTS, Settings
-from ..theme import themes
+from ..theme import qcolor, themes
 from . import clipboard
 from . import annotation_items
 from . import messages
@@ -128,6 +128,7 @@ OVERLAYS = {"none": "No lines", "grid": "Grid", "lines": "Lines", "dots": "Dots"
 OVERLAY_STEPS = {"grid": 72 / 2.54, "lines": 72 / 2.54 * 0.8, "dots": 72 / 2.54 * 0.5}  # 1 cm, 8 mm, 5 mm
 # Opaque, so a line painted twice, where two repainted areas meet, looks the same as once.
 OVERLAY_INK = {"normal": QColor(200, 218, 244), "sepia": QColor(196, 208, 222), "dark": QColor(52, 70, 100)}  # they change nothing: on for view-only files
+CANVAS_STEPS = {"dots": 16, "grid": 24}  # screen pixels between the dots or lines a style draws behind the pages
 Z_STEP = 1e-4  # z-value between annotations, in drawing order
 LANDING = 48  # pixels below the toolbar band where the spot a link or bookmark goes to lands
 PEN_FRESH = 0.25  # seconds a pen's pressure counts after its last event: then the mouse is drawing
@@ -228,10 +229,15 @@ class PageItem(QGraphicsItem):
         # One device pixel in points, capped so the shadow stays inside boundingRect.
         step = min(1.0 / max(painter.worldTransform().m11(), 1e-6), SHADOW / 4)
         painter.setPen(Qt.PenStyle.NoPen)
-        for spread, alpha in ((3, 14), (2, 24), (1, 40)):
-            painter.setBrush(QColor(0, 0, 0, alpha))
-            d = spread * step
-            painter.drawRect(self.rect.adjusted(-d, -d + step, d, d + step))
+        t = themes.current
+        if t.look.shadow == "soft":  # flat and glowing styles lift the page by its edge alone
+            for spread, alpha in ((3, 14), (2, 24), (1, 40)):
+                painter.setBrush(QColor(0, 0, 0, alpha))
+                d = spread * step
+                painter.drawRect(self.rect.adjusted(-d, -d + step, d, d + step))
+        if t.page_edge:
+            painter.setBrush(qcolor(t.page_edge))
+            painter.drawRect(self.rect.adjusted(-step, -step, step, step))
         painter.fillRect(self.rect, Qt.GlobalColor.white)
         exposed = option.exposedRect.intersected(self.rect)
         if exposed.isEmpty():
@@ -277,6 +283,28 @@ def paint_overlay(painter: QPainter, page: QRectF, exposed: QRectF, kind: str, i
             for column in range(first_column, last_column + 1):
                 painter.drawLine(QPointF(column * step, page.top()), QPointF(column * step, page.bottom()))
     painter.restore()
+
+
+def canvas_tile(kind: str, back: QColor, ink: QColor, ratio: float) -> QPixmap:
+    """One cell of the pattern a style draws behind the pages (theme.Look.canvas), at `ratio` device pixels a
+    pixel: a dot in its middle, or a line along its top and its left, on the canvas colour `back`."""
+    size = round(CANVAS_STEPS[kind] * ratio)
+    tile = QPixmap(size, size)
+    tile.fill(back)  # opaque, so tiling it copies pixels instead of blending them
+    painter = QPainter(tile)
+    if kind == "dots":
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(ink)
+        centre = size // 2 + 0.5  # on a pixel's centre: a round dot, not four grey pixels
+        painter.drawEllipse(QPointF(centre, centre), 1.2 * ratio, 1.2 * ratio)
+    else:
+        line = max(1, round(ratio))
+        painter.fillRect(0, 0, size, line, ink)
+        painter.fillRect(0, line, line, size - line, ink)
+    painter.end()
+    tile.setDevicePixelRatio(ratio)
+    return tile
 
 
 class DocumentView(QGraphicsView):
@@ -466,9 +494,32 @@ class DocumentView(QGraphicsView):
             self._update_scene_rect()
 
     def _apply_theme(self, theme) -> None:
+        # The style's pattern behind the pages, (kind, canvas, ink) or None; its tile is drawn when first painted.
+        canvas = theme.look.canvas
+        ink = qcolor(theme.canvas_mark or theme.border)
+        self._canvas = (canvas, QColor(theme.canvas), ink) if canvas in CANVAS_STEPS else None
+        self._canvas_tile: QPixmap | None = None
         self.setBackgroundBrush(QColor(theme.canvas))
         if getattr(self, "forms", None) is not None:
             self.forms.recolour()
+
+    def drawBackground(self, painter: QPainter, rect: QRectF) -> None:
+        if self._canvas is None:
+            super().drawBackground(painter, rect)  # the canvas colour, the background brush
+            return
+        ratio = painter.device().devicePixelRatio()
+        if self._canvas_tile is None or self._canvas_tile.devicePixelRatio() != ratio:
+            self._canvas_tile = canvas_tile(*self._canvas, ratio)
+        # In screen pixels, so it is as fine at every zoom, and tiled from the scene's origin: a scroll moves what
+        # is drawn already (QGraphicsView blits it), and the strip painted fresh lines up with it.
+        world = painter.worldTransform()
+        area = QRectF(QTransform.fromScale(world.m11(), world.m22()).mapRect(rect).toAlignedRect())
+        step = self._canvas_tile.width() / ratio  # the pattern's step, to the whole device pixel
+        painter.save()
+        painter.setWorldTransform(QTransform.fromTranslate(world.dx(), world.dy()))
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        painter.drawTiledPixmap(area, self._canvas_tile, QPointF(area.left() % step, area.top() % step))
+        painter.restore()
 
     def _page_at(self, view_pos: QPointF) -> tuple[PageItem | None, QPointF | None]:
         scene_pos = self.mapToScene(view_pos.toPoint())

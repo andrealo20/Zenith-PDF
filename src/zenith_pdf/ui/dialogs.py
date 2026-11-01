@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 from ..core.annotations import ENDINGS
 from ..core.i18n import tr
 from ..core.pages import PAPER_SIZES, TEMPLATES
-from ..theme import qcolor, themes
+from ..theme import outline, qcolor, themes
 from . import messages
 from .widgets import muted_label
 
@@ -282,7 +282,7 @@ class WatermarkPreview(QWidget):
         page = QRectF((self.width() - height * 0.75) / 2, 1, height * 0.75, height)  # about A4 upright
         painter.setPen(QPen(QColor(t.border), 1.0))
         painter.setBrush(QColor(t.paper))
-        painter.drawRoundedRect(page, 4, 4)
+        painter.drawPath(outline(page, min(4, t.look.item), t.look))
         painter.setPen(QPen(QColor(200, 200, 206), 1.0))
         for i in range(9):  # a few grey lines of text
             y = page.top() + 16 + i * 14
@@ -701,7 +701,7 @@ class PaperCard(QAbstractButton):
         else:
             painter.setPen(QPen(QColor(t.border), 1.0))
             painter.setBrush(qcolor(t.hover) if self.underMouse() else Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(frame, 10, 10)
+        painter.drawPath(outline(frame, max(t.look.card - 2, 0), t.look))
 
         label_height = self.fontMetrics().height() + 12
         room = frame.adjusted(14, 12, -14, -label_height)

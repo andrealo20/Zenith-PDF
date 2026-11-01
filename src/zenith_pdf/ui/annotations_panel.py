@@ -110,11 +110,11 @@ class AnnotationDelegate(QStyledItemDelegate):
         if option.state & QStyle.StateFlag.State_Selected:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(qcolor(t.selection))
-            painter.drawRoundedRect(rect, 6, 6)
+            painter.drawRoundedRect(rect, t.look.item, t.look.item)
         elif option.state & QStyle.StateFlag.State_MouseOver:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(qcolor(t.hover))
-            painter.drawRoundedRect(rect, 6, 6)
+            painter.drawRoundedRect(rect, t.look.item, t.look.item)
 
         icon(icon_name(a), icon_color(a)).paint(painter, QRect(rect.x() + 8, rect.y() + 8, 18, 18))
 
@@ -170,7 +170,7 @@ class AnnotationsPanel(QWidget):
         self.list.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.itemClicked.connect(self._clicked)
-        self.empty = muted_label("No annotations yet. Pick a tool in the toolbar above the page.")
+        self.empty = muted_label("No annotations yet. Pick a tool in the toolbar.")
         self.empty.setWordWrap(True)
 
         layout = QVBoxLayout(self)
@@ -195,9 +195,11 @@ class AnnotationsPanel(QWidget):
 
     def _style_chip(self, *_) -> None:
         t = themes.current
+        round_ = 12 if t.look.chip >= 5 else t.look.chip  # a pill, while the style rounds chips as Zenith does
         self.links_chip.setIcon(icon("link", t.text_muted))
         self.links_chip.setStyleSheet(
-            f"QToolButton {{ border: 1px solid {t.border}; border-radius: 12px; padding: 3px 10px; color: {t.text_muted}; }}"
+            f"QToolButton {{ border: 1px solid {t.border}; border-radius: {round_:g}px; padding: 3px 10px; "
+            f"color: {t.text_muted}; }}"
             f"QToolButton:hover {{ background: {t.hover}; color: {t.text}; }}"
             f"QToolButton:checked {{ background: {t.selection}; border-color: {t.accent}; color: {t.text}; }}")
 

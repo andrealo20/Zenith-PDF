@@ -15,14 +15,14 @@ settings ("toolbar_side", "toolbar_docked"); the canvas places the toolbar (work
 
 from __future__ import annotations
 
-from PySide6.QtCore import QByteArray, QEvent, QMimeData, QPoint, QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QByteArray, QEvent, QMimeData, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QActionGroup, QColor, QCursor, QDrag, QIcon, QPainter
 from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QMenu, QToolButton, QWidget
 from shiboken6 import isValid
 
 from ..core.i18n import tr, tr_in
 from ..icons import hue_colour, icon, readable
-from ..theme import qcolor as token_color, themes
+from ..theme import outline, qcolor as token_color, themes
 from .document_view import DocumentView
 from .help import attach_help
 from .tool_catalog import ALWAYS, BY_KEY, DEFAULT_TOOLBAR, TOOL_MIME, base_of, instance_title, is_valid_key, toolbar_keys
@@ -117,6 +117,8 @@ class ToolButton(QToolButton):
         t = bar.theme() if bar is not None else themes.current
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # Round like the bar's ends, the same 4 px in from them; on a bar with corners, its corners 4 px in.
+        radius = self.height() / 2 if t.look.capsules else max(t.look.panel - 4, 0)
         fill = None
         if self.active:
             fill = t.glass_checked
@@ -127,12 +129,19 @@ class ToolButton(QToolButton):
         if fill is not None:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(token_color(fill))
-            radius = self.height() / 2  # round like the bar's ends, the same 4 px in from them
-            painter.drawRoundedRect(QRectF(self.rect()), radius, radius)
+            painter.drawPath(outline(QRectF(self.rect()), radius, t.look))
+        if self.active and t.look.on_mark:  # the style's own sign of the tool that is on
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(t.accent))
+            if t.look.on_mark == "dot":
+                painter.drawEllipse(QPointF(self.width() / 2, self.height() - 5), 2, 2)
+            else:
+                painter.drawRect(QRectF(8, self.height() - 3, self.width() - 16, 2))
         # A tool with an ink shows it, made readable on the bar (on glass, on what shows through it); the others
         # take the colour of what they do, in the bar's own tone.
+        on = t.text if t.look.checked_icon == "text" else t.accent
         hue = hue_colour(self.spec.icon, t.name) if not self.active else None
-        color = self.tint or hue or (t.accent if self.active else t.text)
+        color = self.tint or hue or (on if self.active else t.text)
         if self.tint:
             surface = bar.surface().name() if bar is not None else t.raised
             color = readable(QColor(self.tint).getRgbF()[:3], surface, t.text)
@@ -140,11 +149,11 @@ class ToolButton(QToolButton):
         self._icon(self.spec.icon, color).paint(painter, QRect(8, 8, self.ICON, self.ICON),
                                                 Qt.AlignmentFlag.AlignCenter, mode)
         if self.active:
-            self._icon("caret-down-bold", t.accent).paint(painter, QRect(35, 13, 10, 10))
+            self._icon("caret-down-bold", on).paint(painter, QRect(35, 13, 10, 10))
             if self.locked:
-                self._icon("z-lock-badge", t.accent).paint(painter, QRect(28, 4, 9, 9))
+                self._icon("z-lock-badge", on).paint(painter, QRect(28, 4, 9, 9))
         if keyboard_focus(self):
-            focus_ring(painter, QRectF(self.rect()), self.height() / 2)
+            focus_ring(painter, QRectF(self.rect()), radius)
 
     def keyPressEvent(self, event) -> None:
         if not self._toolbar.key_on(self, event):
@@ -251,7 +260,8 @@ class _DropMark(QFrame):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(themes.current.accent))
-        painter.drawRoundedRect(QRectF(self.rect()), 1.5, 1.5)
+        radius = min(1.5, themes.current.look.item)  # round ends, or square with square items
+        painter.drawRoundedRect(QRectF(self.rect()), radius, radius)
 
 
 class AnnotationToolbar(FloatingBar):
@@ -377,7 +387,7 @@ class AnnotationToolbar(FloatingBar):
             self.style().unpolish(self)
             self.style().polish(self)
             if self._shadow is not None and isValid(self._shadow):
-                self._shadow.setVisible(not docked and self.isVisible())
+                self._shadow.setVisible(not docked and self.isVisible() and themes.current.look.shadow != "none")
             self.refresh_backdrop()
         self.rebuild()
 

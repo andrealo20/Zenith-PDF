@@ -195,8 +195,9 @@ class UpdateCard(FloatingBar):
     def _restyle(self, *_) -> None:
         t = themes.current
         self.glyph.setPixmap(icon_pixmap("arrow-circle-up", 20, t.accent))
-        self.bar.setStyleSheet(f"QProgressBar {{ background: {t.border}; border: none; border-radius: 3px; }}"
-                               f"QProgressBar::chunk {{ background: {t.accent}; border-radius: 3px; }}")
+        rounding = min(3, t.look.item)
+        self.bar.setStyleSheet(f"QProgressBar {{ background: {t.border}; border: none; border-radius: {rounding}px; }}"
+                               f"QProgressBar::chunk {{ background: {t.accent}; border-radius: {rounding}px; }}")
 
     def _set(self, title: str, text: str, buttons: list[tuple[str, object, bool]], progress: bool = False) -> None:
         self.title.setText(tr(title))

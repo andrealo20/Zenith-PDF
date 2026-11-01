@@ -65,9 +65,8 @@ def _dot(color, chosen: bool = False) -> QIcon:
     return QIcon(pixmap)
 
 
-def _chip(color) -> QIcon:
-    """The dot of the highlight's colour and a small caret: the button that opens the colours."""
-    t = themes.current
+def _chip(color, caret: str) -> QIcon:
+    """The dot of the highlight's colour and a small caret in `caret`: the button that opens the colours."""
     ratio = _ratio()
     pixmap = QPixmap(round(CHIP.width() * ratio), round(CHIP.height() * ratio))
     pixmap.setDevicePixelRatio(ratio)
@@ -77,7 +76,7 @@ def _chip(color) -> QIcon:
     painter.setPen(QPen(QColor(128, 128, 128, 140), 1.0))
     painter.setBrush(QColor.fromRgbF(*color))
     painter.drawEllipse(QPointF(7, 8), 6, 6)
-    icon("caret-down-bold", t.text).paint(painter, QRect(15, 4, 8, 8))
+    icon("caret-down-bold", caret).paint(painter, QRect(15, 4, 8, 8))
     painter.end()
     return QIcon(pixmap)
 
@@ -160,15 +159,21 @@ class TextSelectionBar(FloatingBar):
         if key in self.markups:
             self._recolour()
 
+    def tone_changed(self) -> None:
+        super().tone_changed()
+        self._recolour()  # light glass over a bright page: a yellow made for the dark bar would vanish
+
     def _recolour(self, *_) -> None:
-        """Each markup's icon in its tool's colour, made readable on the bar, as the toolbar shows them."""
-        t = themes.current
+        """Each markup's icon in its tool's colour, made readable on what the bar shows (the glass over the page,
+        in its tone), as the toolbar shows them."""
+        t = self.theme()
+        surface = self.surface().name()
         settings = self._workspace.tool_settings
         for key, button in self.markups.items():
-            button._color = readable(settings.style(key).color, t.raised, t.text)
+            button._color = readable(settings.style(key).color, surface, t.text)
             button._refresh()
         color = settings.style("highlight").color
-        self.colour.setIcon(_chip(color))
+        self.colour.setIcon(_chip(color, t.text))
         name = colour_name(color)
         self.markups["highlight"].setProperty("help_detail", f"Highlights in {name.lower()}.")
         self.markups["highlight"].setToolTip(tr(f"Highlight ({name.lower()})"))

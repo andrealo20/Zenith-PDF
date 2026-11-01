@@ -15,12 +15,12 @@ from PySide6.QtGui import (
     QColor,
     QFont,
     QFontMetrics,
+    QFontMetricsF,
     QIcon,
     QIconEngine,
     QImage,
     QLinearGradient,
     QPainter,
-    QPainterPath,
     QPen,
     QPixmap,
     QTransform,
@@ -44,10 +44,9 @@ from PySide6.QtWidgets import (
 from ..core.i18n import tr
 from ..core.platforms import native_keys
 from ..icons import hue_colour, icon
-from ..theme import Theme, qcolor, themes, tone_sheet
+from ..theme import Look, Theme, outline, qcolor, themes, tone_sheet
 
 GLASS_BLEED = 24  # logical px of backdrop sampled beyond the bar: the blur reaches its edges from what is there
-GLASS_RADIUS = 14  # corner radius of tall glass panels, as the tool menu's; bars are capsules
 CAPSULE_MAX = 48  # px: a floating bar this tall or less is a capsule, its ends half circles
 BLUR_STEP = 2  # logical px per texel of the blurred backdrop, which the painter stretches smoothly
 BLUR_SIGMA = 6.0  # logical px: lines of text behind melt into an even wash, never strokes to read
@@ -93,7 +92,7 @@ class _Glass:
 
     @property
     def enabled(self) -> bool:
-        return self.style != "solid"
+        return self.style != "solid" and themes.current.look.glass  # some styles draw every bar solid
 
 
 glass = _Glass()
@@ -442,7 +441,9 @@ class IconButton(QToolButton):
         self._refresh()
 
     def _refresh(self, *_):
-        self.setIcon(cached_icon(self._icon_name, self._color or self._tone_text()))
+        filled = self.objectName() == "RoundAccent" and themes.current.look.sheet is None  # on the accent fill
+        on_accent = themes.current.accent_text if filled else None
+        self.setIcon(cached_icon(self._icon_name, self._color or on_accent or self._tone_text()))
 
     def _tone_text(self) -> str | None:
         """The icon's colour on the glass bar the button is on, when that bar changed tone (its hue, or the text
@@ -494,8 +495,8 @@ def _blurred(image: QImage, radius: float) -> QImage:
 
 
 @lru_cache(maxsize=32)
-def _shadow_picture(radius: int, scale: int, rgba: int) -> QPixmap:
-    """A blurred rounded square: the nine slices of every shadow with this corner radius.
+def _shadow_picture(radius: int, scale: int, rgba: int, look: Look) -> QPixmap:
+    """A blurred square in the shape of `look`'s surfaces: the nine slices of every shadow with this corner radius.
 
     `scale` is the screen ratio in hundredths, so the cache keeps one picture per screen.
     """
@@ -508,8 +509,8 @@ def _shadow_picture(radius: int, scale: int, rgba: int) -> QPixmap:
     painter.scale(ratio, ratio)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(QColor.fromRgba(rgba))
-    painter.drawRoundedRect(QRectF(SHADOW_BLUR, SHADOW_BLUR, side - 2 * SHADOW_BLUR, side - 2 * SHADOW_BLUR),
-                            radius, radius)
+    painter.drawPath(outline(QRectF(SHADOW_BLUR, SHADOW_BLUR, side - 2 * SHADOW_BLUR, side - 2 * SHADOW_BLUR),
+                             radius, look))
     painter.end()
     pixmap = QPixmap.fromImage(_blurred(image, SHADOW_BLUR * ratio))
     pixmap.setDevicePixelRatio(ratio)
@@ -534,6 +535,15 @@ def _nine_slice(painter: QPainter, target: QRect, pixmap: QPixmap, edge: int) ->
             painter.drawPixmap(into, pixmap, source)
 
 
+def shadow_colour(theme: Theme) -> QColor:
+    """What floating bars cast: the theme's shadow, or in a style that glows, the accent."""
+    if theme.look.shadow != "glow":
+        return theme.shadow
+    glow = QColor(theme.accent)
+    glow.setAlpha(theme.shadow.alpha())  # the palette's shadow says how strong the glow is
+    return glow
+
+
 class _BarShadow(QWidget):
     """The soft shadow of a floating bar: a sibling stacked just under it.
 
@@ -550,25 +560,32 @@ class _BarShadow(QWidget):
         self.strength = 1.0  # less while its bar fades in or out
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        themes.changed.connect(self.update)
+        themes.changed.connect(self._restyle)
+
+    def _restyle(self, *_) -> None:
+        if self._bar._cast_shadow() is self:
+            self.follow()  # a style may drop the shadow, or make it a glow
+        self.update()
 
     def follow(self) -> None:
         bar = self._bar
-        self.setGeometry(bar.geometry().adjusted(-SHADOW_BLUR, SHADOW_OFFSET - SHADOW_BLUR, SHADOW_BLUR,
-                                                 SHADOW_OFFSET + SHADOW_BLUR))
-        self.setVisible(bar.isVisibleTo(bar.parentWidget()))
+        drop = 0 if themes.current.look.shadow == "glow" else SHADOW_OFFSET  # a glow spreads evenly all round
+        self.setGeometry(bar.geometry().adjusted(-SHADOW_BLUR, drop - SHADOW_BLUR, SHADOW_BLUR, drop + SHADOW_BLUR))
+        self.setVisible(bar.isVisibleTo(bar.parentWidget()) and themes.current.look.shadow != "none")
 
     def _composed(self) -> QPixmap:
         ratio = self.devicePixelRatioF()
         radius = round(self._bar.radius())
-        key = (self.width(), self.height(), round(ratio * 100), radius, themes.current.shadow.rgba())
+        look = themes.current.look
+        key = (self.width(), self.height(), round(ratio * 100), radius, shadow_colour(themes.current).rgba(),
+               look.chamfer)
         if key != self._key or self._picture is None:
             picture = QPixmap(max(1, round(self.width() * ratio)), max(1, round(self.height() * ratio)))
             picture.setDevicePixelRatio(ratio)
             picture.fill(Qt.GlobalColor.transparent)
             painter = QPainter(picture)
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-            _nine_slice(painter, self.rect(), _shadow_picture(radius, key[2], key[4]), SHADOW_BLUR + radius)
+            _nine_slice(painter, self.rect(), _shadow_picture(radius, key[2], key[4], look), SHADOW_BLUR + radius)
             painter.end()
             self._key, self._picture = key, picture
         return self._picture
@@ -754,7 +771,8 @@ class FloatingBar(QFrame):
         return max(self._alpha, self.min_tint_alpha / 255)
 
     def radius(self) -> float:
-        return (self.height() - 1) / 2 if self.height() <= CAPSULE_MAX else GLASS_RADIUS
+        look = themes.current.look
+        return (self.height() - 1) / 2 if look.capsules and self.height() <= CAPSULE_MAX else look.panel
 
     def surface(self) -> QColor:
         """The colour coloured icons stand on: the glass over the part of what is behind it hardest to read on
@@ -938,9 +956,9 @@ class FloatingBar(QFrame):
         # render() moves the bar with the painter's own transform rather than the backing store's offset.
         painter.setWorldTransform(QTransform.fromTranslate(x, y) * device.inverted()[0] * painter.worldTransform())
         rect = QRectF(left - x, top - y, right - left, bottom - top)
-        radius = rect.height() / 2 if self.height() <= CAPSULE_MAX else GLASS_RADIUS * ratio
-        shape = QPainterPath()
-        shape.addRoundedRect(rect, radius, radius)
+        look = self.theme().look
+        radius = rect.height() / 2 if look.capsules and self.height() <= CAPSULE_MAX else look.panel * ratio
+        shape = outline(rect, radius, look)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         textured = False
@@ -977,7 +995,9 @@ class FloatingBar(QFrame):
         t = self.theme()
         width = max(1, int(ratio + 0.5))
         colours = (t.raised, t.border) if self._solid else (t.glass_highlight.rgba(), t.glass_border.rgba())
-        key = (size.width(), size.height(), radius, width, grain, self._solid, colours, glass.style)
+        lit = not self._solid or t.look.rail  # a style with a lit rail keeps it on solid bars too
+        colours += (t.glass_highlight.rgba(),) if lit else ()
+        key = (size.width(), size.height(), radius, width, grain, self._solid, colours, glass.style, t.look.key)
         if self._overlay is not None and self._overlay[0] == key:
             return self._overlay[1]
         picture = QPixmap(size)
@@ -985,14 +1005,14 @@ class FloatingBar(QFrame):
         painter = QPainter(picture)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(0, 0, size.width(), size.height())
+        look = t.look
         if grain:
-            shape = QPainterPath()
-            shape.addRoundedRect(rect, radius, radius)
+            shape = outline(rect, radius, look)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(_noise_tile()))
             painter.drawPath(shape)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        if not self._solid:
+        if lit:
             # Light along the top edge, fading down the corners: the second ring of pixels in. The Clear glass
             # catches some along the bottom too, as the rim of a lens does.
             light = QLinearGradient(QPointF(0, width), QPointF(0, rect.height() - width))
@@ -1009,12 +1029,10 @@ class FloatingBar(QFrame):
                 light.setColorAt(1.0, clear)
             inset = width * 1.5
             painter.setPen(QPen(QBrush(light), width))
-            painter.drawRoundedRect(rect.adjusted(inset, inset, -inset, -inset), max(radius - inset, 0),
-                                    max(radius - inset, 0))
+            painter.drawPath(outline(rect.adjusted(inset, inset, -inset, -inset), max(radius - inset, 0), look))
         inset = width / 2
         painter.setPen(QPen(QColor(t.border) if self._solid else t.glass_border, width))
-        painter.drawRoundedRect(rect.adjusted(inset, inset, -inset, -inset), max(radius - inset, 0),
-                                max(radius - inset, 0))
+        painter.drawPath(outline(rect.adjusted(inset, inset, -inset, -inset), max(radius - inset, 0), look))
         painter.end()
         self._overlay = (key, picture)
         return picture
@@ -1063,6 +1081,11 @@ class Switch(QAbstractButton):
         mix = self._position if running else (1.0 if self.isChecked() else 0.0)
         self._position = mix
         faded = 1.0 if self.isEnabled() else 0.45
+        draw = {"material": self._material, "dot": self._dot, "neon": self._neon}.get(t.look.switch)
+        if draw is not None:
+            painter.setOpacity(faded)
+            draw(painter, t, track, mix)
+            return
         # Off, as Windows 11 draws it: an outline and a small knob in the muted text colour, which read on
         # any panel (a track in the border colour was 1.44:1 on light). On: the accent, with a white knob.
         radius = track.height() / 2
@@ -1078,7 +1101,7 @@ class Switch(QAbstractButton):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(on)
             painter.drawRoundedRect(track, radius, radius)
-        white = QColor("#ffffff")
+        white = QColor(t.accent_text)  # white on Zenith's accents; dark on a light accent
         knob_colour = QColor.fromRgbF(
             muted.redF() + (white.redF() - muted.redF()) * mix,
             muted.greenF() + (white.greenF() - muted.greenF()) * mix,
@@ -1090,6 +1113,79 @@ class Switch(QAbstractButton):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(knob_colour)
         painter.drawEllipse(knob, size, size)
+
+    @staticmethod
+    def _knob(painter: QPainter, track: QRectF, mix: float, colour: QColor, size: float) -> QPointF:
+        """A round knob `size` px in radius, from the left end of `track` (off) to the right one (on); its centre."""
+        radius = track.height() / 2
+        centre = QPointF(track.left() + radius + mix * (track.width() - 2 * radius), track.center().y())
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(colour)
+        painter.drawEllipse(centre, size, size)
+        return centre
+
+    def _material(self, painter: QPainter, t: Theme, track: QRectF, mix: float) -> None:
+        """Material 3: off, a 2 px outline and a small knob in the muted text colour; on, the accent, with a knob
+        grown to 16 px in the colour of text on the accent and a check on it, as Android's settings show."""
+        radius = track.height() / 2
+        muted = QColor(t.text_muted)
+        if mix < 1.0:
+            edge = QColor(muted)
+            edge.setAlphaF(1.0 - mix)
+            painter.setPen(QPen(edge, 2.0))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(track.adjusted(1, 1, -1, -1), radius - 1, radius - 1)
+        if mix > 0.0:
+            fill = QColor(t.accent)
+            fill.setAlphaF(mix)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(fill)
+            painter.drawRoundedRect(track, radius, radius)
+        small = min(5.0, radius - 3)
+        size = small + (radius - 2 - small) * mix
+        centre = self._knob(painter, track, mix, _mixed(muted, QColor(t.accent_text), mix), size)
+        if mix > 0.0:
+            tick = QColor(t.accent)
+            tick.setAlphaF(mix)
+            pen = QPen(tick, t.look.stroke)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            painter.drawPolyline([centre + QPointF(-0.5 * size, 0.05 * size),
+                                  centre + QPointF(-0.15 * size, 0.4 * size),
+                                  centre + QPointF(0.5 * size, -0.35 * size)])
+
+    def _neon(self, painter: QPainter, t: Theme, track: QRectF, mix: float) -> None:
+        """Neon's: a cut track and a square knob; off in the muted text colour, on lit with the accent."""
+        muted, accent = QColor(t.text_muted), QColor(t.accent)
+        edge = _mixed(muted, accent, mix)
+        glow = QColor(accent)
+        glow.setAlpha(round(46 * mix))
+        painter.setPen(QPen(edge, 1.0))
+        painter.setBrush(glow)
+        painter.drawPath(outline(track.adjusted(0.5, 0.5, -0.5, -0.5), 4, t.look))
+        side = track.height() - 8
+        left = track.left() + 4 + mix * (track.width() - 8 - side)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(edge)
+        painter.drawRect(QRectF(left, track.top() + 4, side, side))
+
+    def _dot(self, painter: QPainter, t: Theme, track: QRectF, mix: float) -> None:
+        """Nothing's, in the text colour alone: off, a 1 px outline and a dot at the left; on, the track filled
+        and the dot in the window colour at the right."""
+        radius = track.height() / 2
+        ink = QColor(t.text)
+        painter.setPen(QPen(ink, 1.0))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(track.adjusted(0.5, 0.5, -0.5, -0.5), radius - 0.5, radius - 0.5)
+        if mix > 0.0:
+            fill = QColor(ink)
+            fill.setAlphaF(mix)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(fill)
+            painter.drawRoundedRect(track, radius, radius)
+        # The dot turns at half way: blended, it would match the half-filled track and vanish mid-slide.
+        self._knob(painter, track, mix, QColor(t.window) if mix >= 0.5 else ink, min(5.0, radius - 3))
 
 
 # Keyboard focus ----------------------------------------------------------------------
@@ -1105,10 +1201,10 @@ def keyboard_focus(widget: QWidget) -> bool:
 
 
 def focus_ring(painter: QPainter, rect: QRectF, radius: float) -> None:
-    """The keyboard focus ring: two pixels of the accent just inside `rect`, the same in both themes."""
+    """The keyboard focus ring: two pixels of the style's focus colour (the accent) just inside `rect`."""
     painter.save()
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(QPen(QColor(themes.current.accent), 2.0))
+    painter.setPen(QPen(QColor(themes.current.focus or themes.current.accent), 2.0))
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), max(radius - 1, 0.0), max(radius - 1, 0.0))
     painter.restore()
@@ -1185,7 +1281,7 @@ def segment_colours(t: Theme) -> tuple[QColor, QColor, QColor]:
     On a dark surface the theme's segment colour is hardly lighter than the track, so the
     track sinks a little and the picked segment rises, until it reads at a glance.
     """
-    if luminance(QColor(t.raised)) < 0.2:
+    if t.look.key == "zenith" and luminance(QColor(t.raised)) < 0.2:  # the other styles pick their own
         return (QColor(0, 0, 0, 56), _mixed(QColor(t.segment), QColor(t.text), 0.10),
                 _mixed(QColor(t.segment), QColor(t.text), 0.22))
     return qcolor(t.track), QColor(t.segment), QColor(t.border)
@@ -1216,25 +1312,26 @@ class _Segment(QAbstractButton):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(self.rect())
+        radius = t.look.item
         font = QFont(self.font())
         hot = self.underMouse() and self.isEnabled()
         if self.isChecked():
             painter.setPen(QPen(edge, 1.0))
             painter.setBrush(fill)
-            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
+            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
             font.setWeight(QFont.Weight.DemiBold)
-            color = QColor(t.text)
+            color = QColor(t.segment_text or t.text)
         else:
             if hot:
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(qcolor(t.hover))
-                painter.drawRoundedRect(rect, 6, 6)
+                painter.drawRoundedRect(rect, radius, radius)
             color = QColor(t.text if hot else t.text_muted)
         if not self.isEnabled():
-            color = QColor(t.text_muted)
-            color.setAlpha(140)
+            color = QColor(t.segment_text or t.text) if self.isChecked() else QColor(t.text_muted)
+            color.setAlpha(140)  # on the chosen segment's fill, which may be the text colour itself
         if self._control.ring_on(self):
-            focus_ring(painter, rect, 6)
+            focus_ring(painter, rect, radius)
         painter.setFont(font)
         painter.setPen(color)
         text = QFontMetrics(font).elidedText(self.text(), Qt.TextElideMode.ElideRight, self.width() - 12)
@@ -1378,12 +1475,13 @@ class Segmented(QWidget):
             button.update()
 
     def paintEvent(self, event) -> None:
-        track, _, _ = segment_colours(themes.current)
+        t = themes.current
+        track, _, _ = segment_colours(t)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(track)
-        painter.drawRoundedRect(QRectF(self.rect()), 8, 8)
+        painter.drawRoundedRect(QRectF(self.rect()), t.look.control, t.look.control)
 
 
 def separator(vertical: bool = True) -> QFrame:
@@ -1422,3 +1520,88 @@ def panel_title(text: str) -> QLabel:
     label = QLabel(tr(text))
     label.setObjectName("PanelTitle")
     return label
+
+
+# Dot-matrix titles -------------------------------------------------------------------
+
+DOT_TITLES = {"SettingsTitle", "ChooserTitle", "HomeSection", "SettingsSection", "AboutName", "HomeBrand"}
+DOT_ROWS = 8  # a capital letter is this many dots tall
+
+
+@lru_cache(maxsize=64)
+def _dot_picture(text: str, font: QFont, width: int, height: int, rgba: int, flags: int, scale: int) -> QPixmap:
+    """`text` as a dot matrix over a `width` x `height` box: drawn small, one pixel a cell, and a dot in each cell
+    the glyphs cover more than half of. `scale` is the screen ratio in hundredths."""
+    cell = max(QFontMetricsF(font).capHeight() / DOT_ROWS, 1.0)
+    columns, rows = max(1, math.ceil(width / cell)), max(1, math.ceil(height / cell))
+    small = QImage(columns, rows, QImage.Format.Format_ARGB32_Premultiplied)
+    small.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(small)
+    painter.scale(1 / cell, 1 / cell)
+    painter.setFont(font)
+    painter.setPen(QColor(0, 0, 0))
+    painter.drawText(QRectF(0, 0, width, height), flags, text)
+    painter.end()
+    ratio = scale / 100
+    picture = QPixmap(max(1, round(width * ratio)), max(1, round(height * ratio)))
+    picture.setDevicePixelRatio(ratio)
+    picture.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(picture)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor.fromRgba(rgba))
+    dot = 0.35 * cell  # 70% of the cell wide
+    for y in range(rows):
+        for x in range(columns):
+            if small.pixelColor(x, y).alpha() > 127:
+                painter.drawEllipse(QPointF((x + 0.5) * cell, (y + 0.5) * cell), dot, dot)
+    painter.end()
+    return picture
+
+
+class _DotTitles(QObject):
+    """Paints the text of the large titles (DOT_TITLES) as a dot matrix, in the label's own font, colour and
+    place, and keeps the label from painting it again. It watches the whole application, so it is installed
+    only while the style asks for it."""
+
+    def eventFilter(self, watched, event) -> bool:
+        if (event.type() != QEvent.Type.Paint or not isinstance(watched, QLabel)
+                or watched.objectName() not in DOT_TITLES or not watched.text()):
+            return False
+        margin = watched.margin()
+        box = watched.contentsRect().adjusted(margin, margin, -margin, -margin)
+        align = watched.alignment()
+        indent = watched.indent()
+        if indent < 0 and watched.frameWidth():  # as QLabel does: half an "x" in from a frame
+            indent = watched.fontMetrics().horizontalAdvance("x") // 2 - margin
+        if indent > 0:
+            box.adjust(indent if align & Qt.AlignmentFlag.AlignLeft else 0,
+                       indent if align & Qt.AlignmentFlag.AlignTop else 0,
+                       -indent if align & Qt.AlignmentFlag.AlignRight else 0,
+                       -indent if align & Qt.AlignmentFlag.AlignBottom else 0)
+        flags = align.value | (Qt.TextFlag.TextWordWrap.value if watched.wordWrap() else 0)
+        colour = watched.palette().color(watched.foregroundRole())
+        picture = _dot_picture(watched.text(), watched.font(), box.width(), box.height(), colour.rgba(), flags,
+                               round(watched.devicePixelRatioF() * 100))
+        painter = QPainter(watched)
+        painter.drawPixmap(box.topLeft(), picture)
+        painter.end()
+        return True
+
+
+_dot_titles: _DotTitles | None = None
+
+
+def _follow_dot_titles(theme: Theme) -> None:
+    """Watch the titles while the style draws them as dots (Look.dot_titles), and only then."""
+    global _dot_titles
+    app = QApplication.instance()
+    if _dot_titles is None:
+        _dot_titles = _DotTitles(app)
+    if theme.look.dot_titles:
+        app.installEventFilter(_dot_titles)  # once: installing it again only moves it to the front
+    else:
+        app.removeEventFilter(_dot_titles)
+
+
+themes.changed.connect(_follow_dot_titles)

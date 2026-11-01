@@ -51,11 +51,11 @@ class ResultDelegate(QStyledItemDelegate):
         if option.state & QStyle.StateFlag.State_Selected:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(qcolor(t.selection))
-            painter.drawRoundedRect(rect, 6, 6)
+            painter.drawRoundedRect(rect, t.look.item, t.look.item)
         elif option.state & QStyle.StateFlag.State_MouseOver:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(qcolor(t.hover))
-            painter.drawRoundedRect(rect, 6, 6)
+            painter.drawRoundedRect(rect, t.look.item, t.look.item)
 
         metrics = option.fontMetrics
         inner = rect.adjusted(8, 5, -8, -5)

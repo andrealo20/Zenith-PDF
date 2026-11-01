@@ -11,10 +11,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QRectF, Qt
-from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QWidget
 
-from ..theme import themes
+from ..theme import outline, themes
 
 if TYPE_CHECKING:
     from .main_window import MainWindow
@@ -45,8 +45,7 @@ class TabGhost(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         frame = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        path = QPainterPath()
-        path.addRoundedRect(frame, 10, 10)
+        path = outline(frame, max(t.look.card - 2, 0), t.look)
         painter.fillPath(path, QColor(t.raised))
         painter.setPen(QPen(QColor(t.border), 1))
         painter.drawPath(path)
@@ -54,10 +53,8 @@ class TabGhost(QWidget):
         text = QRectF(12, 6, self.width() - 24, 24)
         painter.drawText(text, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                          painter.fontMetrics().elidedText(self.title, Qt.TextElideMode.ElideRight, int(text.width())))
-        clip = QPainterPath()
         target = QRectF(6, 34, self.width() - 12, self.height() - 40)
-        clip.addRoundedRect(target, 6, 6)
-        painter.setClipPath(clip)
+        painter.setClipPath(outline(target, t.look.item, t.look))
         painter.drawPixmap(target.topLeft(), self.picture)
 
 

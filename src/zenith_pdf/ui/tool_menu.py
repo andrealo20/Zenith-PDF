@@ -67,7 +67,7 @@ from ..core.annotations import (
 )
 from ..icons import icon, readable
 from ..settings import DEFAULTS
-from ..theme import qcolor as token_color, themes
+from ..theme import outline, qcolor as token_color, themes
 from .annotation_items import paint_annotation
 from .help import explain_menu
 from .tool_catalog import ALWAYS, BY_KEY, DUPLICABLE, base_of, instance_title
@@ -92,6 +92,7 @@ from .widgets import (
     keyboard_focus,
     moved_cursor,
     ring_on_keyboard_focus,
+    shadow_colour,
 )
 
 MENU_WIDTH = 320
@@ -101,7 +102,6 @@ GUTTER = 12  # room for the body's scroll bar, inside the right padding
 ROW_GAP = 12 if WINDOWS else 11  # between the options; other systems' fonts set taller lines
 SECTION_GAP = 4  # between one open section's last option and the next section's heading, which has air of its own
 SLIDER_ROW = 40  # a slider with its value box, and the tick values tucked under the slider
-RADIUS = 14
 SHADOW = (24, 16, 24, 32)  # transparent margin left, top, right, bottom: the shadow falls 8 px down
 # A pinned menu lets clicks through to the page and the toolbar round it, but its window still takes
 # those on its transparent margin: it keeps the margin narrower than GAP, and its shadow tight.
@@ -333,61 +333,77 @@ def _number(text: str) -> float | None:
 # Style sheet and shadow ----------------------------------------------------------------------
 
 
-def menu_style(t) -> str:
-    """The menu's own rules, on top of the app's style sheet."""
+def _slider_rules(t) -> str:
+    """Zenith's sliders in the tool menu: a white knob on an accent track."""
     accent = QColor(t.accent)
-    danger = QColor(t.danger)
+    k = t.look
     return f"""
-    #ToolMenuPanel {{ background: transparent; }}
-    #ToolMenuPanel QLabel {{ background: transparent; }}
-    #MenuTitle {{ font-size: 12pt; font-weight: 600; }}
-    #MenuSection {{ font-size: 10pt; font-weight: 600; }}
-    #MenuLabel {{ font-size: 10pt; }}
-    #MenuCaption {{ color: {t.text_muted}; font-size: 9pt; }}
-    #MenuCaption:disabled, #MenuLabel:disabled {{ color: {t.text_muted}; }}
-    QToolButton#MenuButton, QToolButton#MenuRemove {{
-        border: 2px solid transparent; border-radius: 8px; padding: 0; background: transparent;
-    }}
-    QToolButton#MenuButton:hover {{ background: {t.hover}; }}
-    QToolButton#MenuButton:pressed {{ background: {t.pressed}; }}
-    QToolButton#MenuButton:checked {{ background: {t.selection}; }}
-    QToolButton#MenuRemove:hover {{ background: rgba({danger.red()}, {danger.green()}, {danger.blue()}, 34); }}
-    QToolButton#MenuPencil {{ border: 2px solid transparent; border-radius: 6px; padding: 0; background: transparent; }}
-    QToolButton#MenuPencil:hover {{ background: {t.hover}; }}
-    QToolButton#MenuButton:focus, QToolButton#MenuRemove:focus, QToolButton#MenuPencil:focus {{
-        border-color: {t.accent};
-    }}
-    QLineEdit#SubjectEdit {{ background: {t.field}; border-radius: 6px; padding: 2px 6px; }}
-    QComboBox#ValueBox {{ background: {t.field}; border-radius: 8px; padding: 0 2px 0 8px; min-height: 30px; }}
-    QComboBox#ValueBox::drop-down {{ width: 18px; }}
-    QPushButton#MenuButtonWide {{ background: {t.field}; border-radius: 8px; padding: 0 12px; min-height: 30px;
-                                  text-align: left; }}
-    QPushButton#MenuButtonWide:focus {{ border: 2px solid {t.accent}; padding: 0 11px; }}
-    QPushButton#Primary:focus {{ border: 2px solid {t.text}; padding: 6px 15px 5px 15px; }}  /* the accent is its fill */
-    QSlider {{ background: transparent; min-height: 22px; }}
-    QSlider::groove:horizontal {{ height: 4px; border-radius: 2px; background: {t.border}; }}
-    QSlider::sub-page:horizontal {{ height: 4px; border-radius: 2px; background: {t.accent}; }}
+    QSlider::groove:horizontal {{ height: 4px; border-radius: {min(2, k.item)}px; background: {t.border}; }}
+    QSlider::sub-page:horizontal {{ height: 4px; border-radius: {min(2, k.item)}px; background: {t.accent}; }}
     QSlider::handle:horizontal {{
         width: 16px; height: 16px; margin: -6px 0; border-radius: 8px;
         background: #ffffff; border: 1px solid rgba(0, 0, 0, 60);
     }}
     QSlider::handle:horizontal:hover {{ border: 1px solid rgba({accent.red()}, {accent.green()}, {accent.blue()}, 200); }}
     QSlider[ring="true"]::handle:horizontal {{ width: 14px; height: 14px; border: 2px solid {t.accent}; }}
+    """
+
+
+def menu_style(t) -> str:
+    """The menu's own rules, on top of the app's style sheet."""
+    danger = QColor(t.danger)
+    k = t.look
+    primary_ring = t.accent if k.key == "dot" else t.text  # off the main button's fill: Dot's is the text colour
+    focus = t.focus or t.accent
+    return f"""
+    #ToolMenuPanel {{ background: transparent; }}
+    #ToolMenuPanel QLabel {{ background: transparent; }}
+    #MenuTitle {{ font-family: "{k.title_font()}"; font-size: 12pt; font-weight: {k.title_weight}; }}
+    #MenuSection {{ font-family: "{k.title_font()}"; font-size: 10pt; font-weight: {k.title_weight}; }}
+    #MenuLabel {{ font-size: 10pt; }}
+    #MenuCaption {{ color: {t.text_muted}; font-size: 9pt; }}
+    #MenuCaption:disabled, #MenuLabel:disabled {{ color: {t.text_muted}; }}
+    QToolButton#MenuButton, QToolButton#MenuRemove {{
+        border: 2px solid transparent; border-radius: {k.control}px; padding: 0; background: transparent;
+    }}
+    QToolButton#MenuButton:hover {{ background: {t.hover}; }}
+    QToolButton#MenuButton:pressed {{ background: {t.pressed}; }}
+    QToolButton#MenuButton:checked {{ background: {t.selection}; }}
+    QToolButton#MenuRemove:hover {{ background: rgba({danger.red()}, {danger.green()}, {danger.blue()}, 34); }}
+    QToolButton#MenuPencil {{
+        border: 2px solid transparent; border-radius: {min(k.item, 11)}px; padding: 0; background: transparent;
+    }}
+    QToolButton#MenuPencil:hover {{ background: {t.hover}; }}
+    QToolButton#MenuButton:focus, QToolButton#MenuRemove:focus, QToolButton#MenuPencil:focus {{
+        border-color: {focus};
+    }}
+    QLineEdit#SubjectEdit {{ background: {t.field}; border-radius: {k.item}px; padding: 2px 6px; }}
+    QComboBox#ValueBox {{
+        background: {t.field}; border-radius: {k.control}px; padding: 0 2px 0 8px; min-height: 30px;
+    }}
+    QComboBox#ValueBox::drop-down {{ width: 18px; }}
+    QPushButton#MenuButtonWide {{
+        background: {t.field}; border-radius: {k.control}px; padding: 0 12px; min-height: 30px; text-align: left;
+    }}
+    QPushButton#MenuButtonWide:focus {{ border: 2px solid {focus}; padding: 0 11px; }}
+    QPushButton#Primary:focus {{ border: 2px solid {primary_ring}; padding: 6px 15px 5px 15px; }}
+    QSlider {{ background: transparent; min-height: 22px; }}
     QScrollArea#MenuBody, QWidget#MenuBodyInner {{ background: transparent; border: none; }}
     QScrollArea#MenuBody QScrollBar:vertical {{ background: transparent; width: 8px; margin: 2px 0 2px 2px; }}
     QScrollArea#MenuBody QScrollBar::handle:vertical {{
-        background: {t.scrollbar}; border-radius: 3px; min-height: 32px; margin: 0;
+        background: {t.scrollbar}; border-radius: {min(3, k.item)}px; min-height: 32px; margin: 0;
     }}
     QScrollArea#MenuBody QScrollBar::handle:vertical:hover {{ background: {t.text_muted}; }}
     QScrollArea#MenuBody QScrollBar::add-line, QScrollArea#MenuBody QScrollBar::sub-line {{ height: 0; width: 0; }}
     QScrollArea#MenuBody QScrollBar::add-page, QScrollArea#MenuBody QScrollBar::sub-page {{ background: transparent; }}
-    """
+    """ + ("" if k.sheet else _slider_rules(t))  # a style with rules of its own draws its sliders here too
 
 
-def _shadow_image(size: QSize, ratio: float, color: QColor, margins: tuple = SHADOW) -> QImage:
-    """A soft shadow under a rounded panel of `size`: drawn sharp, then blurred by shrinking and growing.
+def _shadow_image(size: QSize, ratio: float, color: QColor, margins: tuple, look) -> QImage:
+    """A soft shadow under a panel of `size` shaped as `look` shapes it: drawn sharp, then blurred by shrinking and
+    growing.
 
-    With the narrow margins of a pinned menu the shadow is tighter and falls less far.
+    With the narrow margins of a pinned menu the shadow is tighter and falls less far. A glow falls nowhere.
     """
     left, top, right, bottom = margins
     width, height = size.width() + left + right, size.height() + top + bottom
@@ -399,9 +415,12 @@ def _shadow_image(size: QSize, ratio: float, color: QColor, margins: tuple = SHA
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(color)
     wide = margins == SHADOW
-    drop = 8 if wide else 3
-    painter.drawRoundedRect(QRectF(left + 2, top + drop, size.width() - 4, size.height() - 6 if wide else size.height()),
-                            RADIUS, RADIUS)
+    if look.shadow == "glow":  # spreads evenly all round
+        rect = QRectF(left + 2, top + 2, size.width() - 4, size.height() - 4)
+    else:
+        drop = 8 if wide else 3
+        rect = QRectF(left + 2, top + drop, size.width() - 4, size.height() - 6 if wide else size.height())
+    painter.drawPath(outline(rect, look.panel, look))
     painter.end()
     full = (image.width(), image.height())
     for factor in ((6, 10) if wide else (3, 4)):
@@ -606,19 +625,22 @@ class Popover(QWidget):
 
     def paintEvent(self, event) -> None:
         t = themes.current
+        look = t.look
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         panel = QRectF(self.panel.geometry())
-        ratio = self.devicePixelRatioF()
-        margins = self.margins()
-        key = (self.panel.size().width(), self.panel.size().height(), ratio, t.name, t.shadow.rgba(), margins)
-        if self._shadow is None or self._shadow[0] != key:
-            self._shadow = (key, _shadow_image(self.panel.size(), ratio, t.shadow, margins))
-        painter.drawImage(QPointF(panel.left() - margins[0], panel.top() - margins[1]), self._shadow[1])
-        shape = panel.adjusted(0.5, 0.5, -0.5, -0.5)
+        if look.shadow != "none":
+            ratio = self.devicePixelRatioF()
+            margins = self.margins()
+            color = shadow_colour(t)
+            key = (self.panel.size().width(), self.panel.size().height(), ratio, t.name, color.rgba(), margins,
+                   look.key)
+            if self._shadow is None or self._shadow[0] != key:
+                self._shadow = (key, _shadow_image(self.panel.size(), ratio, color, margins, look))
+            painter.drawImage(QPointF(panel.left() - margins[0], panel.top() - margins[1]), self._shadow[1])
         painter.setPen(QPen(QColor(t.border), 1.0))
         painter.setBrush(QColor(t.raised))
-        painter.drawRoundedRect(shape, RADIUS, RADIUS)
+        painter.drawPath(outline(panel.adjusted(0.5, 0.5, -0.5, -0.5), look.panel, look))
 
 
 # Small parts ----------------------------------------------------------------------------------
@@ -734,7 +756,7 @@ class Swatches(QWidget):
                 index_of_colour += 1
             self.paint_slot(painter, i, kind, value, centre, selected)
         if keyboard_focus(self) and 0 <= self._cursor < len(self.slots()):
-            focus_ring(painter, self.slot_rect(self._cursor), 8)
+            focus_ring(painter, self.slot_rect(self._cursor), themes.current.look.control)
 
     def paint_slot(self, painter: QPainter, index: int, kind: str, value, centre: QPointF, selected: bool) -> None:
         t = themes.current
@@ -1105,6 +1127,7 @@ class OptionGrid(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         accent = QColor(t.accent)
+        radius = t.look.control
         for i, (value, glyph, text, _tip) in enumerate(self.items):
             rect = self.cell_rect(i)
             on = value in self.selected
@@ -1113,11 +1136,11 @@ class OptionGrid(QWidget):
                 fill.setAlpha(41)
                 painter.setPen(QPen(accent, 2.0))
                 painter.setBrush(fill)
-                painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 8, 8)
+                painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius)
             else:
                 painter.setPen(QPen(QColor(t.border), 1.0))
                 painter.setBrush(token_color(t.hover) if i == self._hover else Qt.BrushStyle.NoBrush)
-                painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8)
+                painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
             color = t.accent_ink if on else t.text  # on the tinted fill: the ring keeps the accent itself
             font = _font(self, 9.5, QFont.Weight.DemiBold if on else QFont.Weight.Normal)
             metrics = QFontMetricsF(font)
@@ -1134,7 +1157,7 @@ class OptionGrid(QWidget):
                 painter.setPen(QColor(color))
                 painter.drawText(QRectF(x, rect.top(), rect.right() - x, rect.height()),
                                  Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tr(words))
-        self.paint_focus(painter, 8)
+        self.paint_focus(painter, radius)
 
     def paint_focus(self, painter: QPainter, radius: float) -> None:
         """The keyboard's ring, inside the cell's own border, so it reads apart from the chosen look."""
@@ -1202,6 +1225,7 @@ class OptionCards(OptionGrid):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         accent = QColor(t.accent)
+        radius = max(t.look.card - 2, 0)
         for i, (value, glyph, title, caption) in enumerate(self.items):
             rect = self.cell_rect(i)
             on = value in self.selected
@@ -1210,11 +1234,11 @@ class OptionCards(OptionGrid):
                 fill.setAlpha(41)
                 painter.setPen(QPen(accent, 2.0))
                 painter.setBrush(fill)
-                painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 10, 10)
+                painter.drawPath(outline(rect.adjusted(1, 1, -1, -1), radius, t.look))
             else:
                 painter.setPen(QPen(QColor(t.border), 1.0))
                 painter.setBrush(token_color(t.hover) if i == self._hover else Qt.BrushStyle.NoBrush)
-                painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), 10, 10)
+                painter.drawPath(outline(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, t.look))
             icon(glyph, t.accent if on else t.text).paint(painter, QRect(round(rect.center().x() - 12), 10, 24, 24))
             font = _font(self, 9.5, QFont.Weight.DemiBold)
             painter.setFont(font)
@@ -1226,7 +1250,7 @@ class OptionCards(OptionGrid):
             painter.setPen(QColor(t.text_muted))
             painter.drawText(QRectF(rect.left() + 3, 57, rect.width() - 6, 18), Qt.AlignmentFlag.AlignCenter,
                              QFontMetricsF(font).elidedText(tr(caption), Qt.TextElideMode.ElideRight, rect.width() - 6))
-        self.paint_focus(painter, 10)
+        self.paint_focus(painter, radius)
 
 
 class ValueBox(QComboBox):
@@ -1452,14 +1476,16 @@ class _SectionHeader(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if self.divider:
             painter.fillRect(QRectF(0, 0, self.width(), 1), QColor(t.border))
-        painter.setFont(_font(self, 10, QFont.Weight.DemiBold))
+        font = _font(self, 10, QFont.Weight(t.look.title_weight))
+        font.setFamily(t.look.title_font())  # a section's heading, in the style's titles
+        painter.setFont(font)
         painter.setPen(QColor(t.text))
         painter.drawText(QRectF(0, 0, self.width() - 24, self.height()),
                          Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tr(self.title))
         glyph = "caret-down" if self.open else "caret-right"
         icon(glyph, t.text_muted).paint(painter, QRect(self.width() - 16, (self.height() - 14) // 2, 14, 14))
         if keyboard_focus(self):  # round the caret: the title lines up with the other titles, so no room left of it
-            focus_ring(painter, QRectF(self.width() - 19, (self.height() - 22) / 2, 19, 22), 6)
+            focus_ring(painter, QRectF(self.width() - 19, (self.height() - 22) / 2, 19, 22), t.look.item)
 
     def mouseReleaseEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -1597,7 +1623,7 @@ class _SignatureRow(QFrame):
         image = QLabel()
         image.setFixedSize(120, 40)
         image.setPixmap(picture.pixmap(QSize(120, 40)))
-        image.setStyleSheet(f"background: {themes.current.paper}; border-radius: 6px;")
+        image.setStyleSheet(f"background: {themes.current.paper}; border-radius: {themes.current.look.item}px;")
         layout.addWidget(image)
         layout.addWidget(_label(name, "MenuLabel"), 1)
         self.remove = IconButton("trash", "Delete this signature", icon_size=16)
@@ -1633,7 +1659,7 @@ class _SignatureRow(QFrame):
         super().paintEvent(event)
         if keyboard_focus(self):
             painter = QPainter(self)
-            focus_ring(painter, QRectF(self.rect()), 8)
+            focus_ring(painter, QRectF(self.rect()), themes.current.look.control)
 
 
 # The preview ------------------------------------------------------------------------------------
@@ -1782,9 +1808,7 @@ class ToolPreview(QWidget):
         t = themes.current
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        frame = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        shape = QPainterPath()
-        shape.addRoundedRect(frame, 10, 10)
+        shape = outline(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), max(t.look.card - 2, 0), t.look)
         painter.fillPath(shape, QColor(t.paper))
         if self.tool_style is not None:
             painter.save()

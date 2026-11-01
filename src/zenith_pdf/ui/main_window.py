@@ -919,8 +919,8 @@ class MainWindow(QMainWindow):
     def _on_setting_changed(self, key: str) -> None:
         """Apply a preference to everything open, the moment it changes."""
         settings = self._settings
-        if key in ("theme", "accent"):
-            themes.choose(settings.theme, settings.get("accent"))
+        if key in ("theme", "accent", "style"):
+            themes.choose(settings.theme, settings.get("accent"), settings.get("style"))
         elif key == "glass":
             set_glass(settings.get("glass"))
         elif key == "glass_adaptive":

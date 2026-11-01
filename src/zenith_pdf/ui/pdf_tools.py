@@ -129,7 +129,7 @@ class ToolForm(messages.MessageDialog):
     def check(self, key: str, label: str, default: bool = False) -> QCheckBox:
         box = QCheckBox(tr(label))
         box.setChecked(default)
-        self._form.addRow("", box)
+        self._form.addRow(box)  # the whole width: a long label (in German, say) would be cut off in the field column
         self._getters[key] = box.isChecked
         return box
 
@@ -240,8 +240,9 @@ class ProgressDialog(messages.MessageDialog):
 
     def _style_bar(self, *_) -> None:
         t = themes.current
-        self.bar.setStyleSheet(f"QProgressBar {{ background: {t.border}; border: none; border-radius: 3px; }}"
-                               f"QProgressBar::chunk {{ background: {t.accent}; border-radius: 3px; }}")
+        rounding = min(3, t.look.item)
+        self.bar.setStyleSheet(f"QProgressBar {{ background: {t.border}; border: none; border-radius: {rounding}px; }}"
+                               f"QProgressBar::chunk {{ background: {t.accent}; border-radius: {rounding}px; }}")
 
     def set_progress(self, value: int, maximum: int | None = None, text: str | None = None) -> None:
         if maximum is not None and maximum != self.bar.maximum():

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QMargins, QObject, QPoint, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QMenu, QVBoxLayout, QWidget
 from shiboken6 import isValid
@@ -19,7 +19,7 @@ from shiboken6 import isValid
 from ..core.i18n import source, tr
 from ..core.platforms import SYSTEM_NAME, WINDOWS, native_keys
 from ..theme import themes
-from .widgets import FloatingBar
+from .widgets import SHADOW_OFFSET, FloatingBar
 
 SHOW_DELAY_MS = 280
 HIDE_DELAY_MS = 160
@@ -594,7 +594,7 @@ class HelpBadge(QWidget):
         card = _live_card()
         active = self.underMouse() or (card is not None and card.showing(self._hook))
         if active:
-            painter.setBrush(QColor(t.accent))
+            painter.setBrush(QColor(t.accent_fill))
             painter.setPen(Qt.PenStyle.NoPen)
             text = QColor(t.accent_text)
         else:
@@ -650,12 +650,17 @@ class HelpCard(QWidget):
         keys_row.addStretch()
         inner.addLayout(keys_row)
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(self.MARGIN, self.MARGIN - 6, self.MARGIN, self.MARGIN + 6)
+        outer.setContentsMargins(self._margins())
         outer.addWidget(self.glass)
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
         self._hide_timer.setInterval(HIDE_DELAY_MS)
         self._hide_timer.timeout.connect(self.close_card)
+
+    def _margins(self) -> QMargins:
+        """Room round the glass for its shadow, more below where it falls; a glow spreads evenly all round."""
+        drop = 0 if themes.current.look.shadow == "glow" else SHADOW_OFFSET
+        return QMargins(self.MARGIN, self.MARGIN - drop, self.MARGIN, self.MARGIN + drop)
 
     def showing(self, owner: _Hook) -> bool:
         return self.isVisible() and self._owner is owner
@@ -684,6 +689,7 @@ class HelpCard(QWidget):
         layout.invalidate()
         layout.activate()
         self.glass.setFixedHeight(layout.totalHeightForWidth(CARD_WIDTH))
+        self.layout().setContentsMargins(self._margins())  # the style may have changed the shadow since
         self.layout().invalidate()
         self.layout().activate()
         self.adjustSize()
@@ -703,8 +709,9 @@ class HelpCard(QWidget):
         top = button.mapToGlobal(QPoint(0, 0))
         screen = button.screen().availableGeometry()
         size = self.size()
-        glass_top = self.MARGIN - 6  # where the glass starts inside the card window
-        glass_bottom = self.MARGIN + 6
+        margins = self._margins()
+        glass_top = margins.top()  # where the glass starts inside the card window
+        glass_bottom = margins.bottom()
         x = top.x() + button.width() // 2 - size.width() // 2
         y = top.y() + button.height() + 8 - glass_top
         if y + size.height() > screen.bottom():

@@ -7,13 +7,13 @@ from __future__ import annotations
 from collections import OrderedDict
 
 from PySide6.QtCore import QPoint, QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from ..core.annotations import Rect
 from ..core.document import DocumentClosed, PdfiumError
 from ..core.i18n import tr
-from ..theme import themes
+from ..theme import outline, themes
 from .widgets import FloatingBar
 
 DELAY_MS = 450  # pointing this long at a link shows its card
@@ -78,8 +78,6 @@ class _Picture(QWidget):
     """The picture of the spot, with rounded corners and a fine edge, so a white page stands out on light glass,
     and an accent mark on its left edge at the height the link points at."""
 
-    RADIUS = 8
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -103,16 +101,17 @@ class _Picture(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        shape = QPainterPath()
-        shape.addRoundedRect(rect, self.RADIUS, self.RADIUS)
+        radius = t.look.overlay
+        shape = outline(rect, radius, t.look)
         painter.save()
         painter.setClipPath(shape)
         painter.drawPixmap(self.rect(), self._pixmap)
         if self._mark is not None:
-            top = min(max(self._mark, self.RADIUS), self.height() - self.RADIUS - MARK.height())
+            top = min(max(self._mark, radius), self.height() - radius - MARK.height())
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(t.accent))
-            painter.drawRoundedRect(QRectF(0, top, MARK.width(), MARK.height()), 1.5, 1.5)
+            corner = min(1.5, t.look.item)
+            painter.drawRoundedRect(QRectF(0, top, MARK.width(), MARK.height()), corner, corner)
         painter.restore()
         painter.setPen(QPen(QColor(t.border), 1.0))
         painter.setBrush(Qt.BrushStyle.NoBrush)

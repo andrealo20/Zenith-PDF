@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QObject, QRect, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 from ..core.annotations import Annotation, union
 from ..core.i18n import tr
 from ..settings import Settings
-from ..theme import qcolor, themes
+from ..theme import outline, qcolor, themes
 from . import messages
 from .annotation_items import paint_annotation
 from .clipboard import from_records, to_records
@@ -92,12 +92,11 @@ class LibraryDelegate(QStyledItemDelegate):
         if option.state & (QStyle.StateFlag.State_MouseOver | QStyle.StateFlag.State_Selected):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(qcolor(t.hover))
-            painter.drawRoundedRect(rect, 8, 8)
+            painter.drawRoundedRect(rect, t.look.control, t.look.control)
         thumb = index.data(Qt.ItemDataRole.DecorationRole)
         side = THUMB
         target = QRectF(rect.x() + 6, rect.y() + (rect.height() - side) / 2, side, side)
-        frame = QPainterPath()
-        frame.addRoundedRect(target, 6, 6)
+        frame = outline(target, t.look.item, t.look)
         painter.save()
         painter.setClipPath(frame)
         painter.drawPixmap(target, thumb, QRectF(thumb.rect()))

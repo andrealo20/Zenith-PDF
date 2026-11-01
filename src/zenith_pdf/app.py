@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from .ui.main_window import MainWindow
 
 DWMWA_WINDOW_CORNER_PREFERENCE = 33  # Windows 11 and later
-DWMWCP_ROUND = 2  # the 8 px corners Windows 11 gives its own menus; the style sheet rounds menus by as much
+DWMWCP_DONOTROUND, DWMWCP_ROUND, DWMWCP_ROUNDSMALL = 1, 2, 3  # square, 8 px (Windows' own menus) and 4 px
 SPIN_INSET = 12  # px before a spin box's text, as in a line edit
 REVEAL_WAIT_S = 3.0  # the longest the window stays out of sight for its first pages to be drawn
 
@@ -54,6 +54,11 @@ def _native_corners() -> bool:
             and sys.getwindowsversion().build >= 22000)
 
 
+def _corner_preference(radius: float) -> int:
+    """The corners Windows 11 gives a menu whose style sheet rounds it by `radius` px."""
+    return DWMWCP_DONOTROUND if radius <= 0 else DWMWCP_ROUNDSMALL if radius <= 4 else DWMWCP_ROUND
+
+
 class _NativeCorners(QObject):
     """Asks Windows 11 to round a popup's corners as it shows, which keeps the system shadow."""
 
@@ -62,7 +67,7 @@ class _NativeCorners(QObject):
             import ctypes
             from ctypes import wintypes
 
-            preference = ctypes.c_int(DWMWCP_ROUND)
+            preference = ctypes.c_int(_corner_preference(themes.current.look.overlay))
             ctypes.windll.dwmapi.DwmSetWindowAttribute(
                 wintypes.HWND(int(watched.winId())), DWMWA_WINDOW_CORNER_PREFERENCE, ctypes.byref(preference),
                 ctypes.sizeof(preference))
@@ -84,11 +89,14 @@ class ZenithStyle(QProxyStyle):
     def polish(self, target):  # also called with the palette and the application
         result = super().polish(target)
         if isinstance(target, QMenu) or (isinstance(target, QWidget) and target.inherits("QComboBoxPrivateContainer")):
+            # Windows rounds by 8 px at most: rounder menus draw their own edge, without the system shadow. A
+            # change of style polishes them again, so each way also undoes the other.
+            native = self._corners is not None and themes.current.look.overlay <= 8
             if self._corners is not None:
-                target.installEventFilter(self._corners)
-            elif isinstance(target, QMenu):
-                target.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint, True)  # it would be square
-                target.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+                (target.installEventFilter if native else target.removeEventFilter)(self._corners)
+            if isinstance(target, QMenu):
+                target.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint, not native)  # it would be square
+                target.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, not native)
         elif isinstance(target, QAbstractSpinBox) and target.lineEdit() is not None:
             target.lineEdit().setTextMargins(SPIN_INSET, 0, 0, 0)
         return result
@@ -160,7 +168,7 @@ def create_app(argv: list[str], settings: Settings | None = None) -> tuple[QAppl
     settings = settings or Settings()
     settings.upgrade()
     set_language(settings.get("language"))  # before any window: every text is shown in it
-    themes.choose(settings.theme, settings.get("accent"))
+    themes.choose(settings.theme, settings.get("accent"), settings.get("style"))
     _default_glass(settings)
     set_glass(settings.get("glass"))
     set_glass_adaptive(settings.get("glass_adaptive"))
@@ -279,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
     if forward(targets):  # Zenith PDF is already running: it opens them, in its own window
         return 0
     settings = Settings()
-    splash = show_splash(settings.theme)
+    splash = show_splash(settings.theme, settings.get("style"))
     app, window = create_app(argv, settings)
     from .ui.main_window import MainWindow
 

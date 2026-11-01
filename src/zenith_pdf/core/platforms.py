@@ -52,6 +52,11 @@ def _first(candidates: tuple[str, ...], fallback: str) -> str:
     return QFontDatabase.systemFont(kind).family()
 
 
+def first_font(candidates: tuple[str, ...], kind: str = "general") -> str:
+    """The first of `candidates` installed here, else the system's own font of that kind ("general" or "mono")."""
+    return _first(candidates, kind)
+
+
 def ui_font() -> str:
     """The family the app's text is set in. Needs the Qt application."""
     return _first(UI_FONTS, "general")

@@ -102,7 +102,7 @@ class LevelMeter(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         rect = QRectF(self.rect())
-        radius = rect.height() / 2
+        radius = min(rect.height() / 2, t.look.item)
         painter.setBrush(QColor(t.border))
         painter.drawRoundedRect(rect, radius, radius)
         if self._level > 0.01:
@@ -159,10 +159,12 @@ class _RoundButton(QAbstractButton):
         if self.kind == "record":
             painter.drawEllipse(ring.center(), 21, 21)
         elif self.kind == "stop":
-            painter.drawRoundedRect(QRectF(x - 11, y - 11, 22, 22), 5, 5)
+            corner = min(5, t.look.chip)  # never rounder: a round stop would read as record
+            painter.drawRoundedRect(QRectF(x - 11, y - 11, 22, 22), corner, corner)
         elif self.kind == "pause":
-            painter.drawRoundedRect(QRectF(x - 10, y - 12, 7, 24), 2, 2)
-            painter.drawRoundedRect(QRectF(x + 3, y - 12, 7, 24), 2, 2)
+            corner = min(2, t.look.item)
+            painter.drawRoundedRect(QRectF(x - 10, y - 12, 7, 24), corner, corner)
+            painter.drawRoundedRect(QRectF(x + 3, y - 12, 7, 24), corner, corner)
         else:  # a triangle, nudged right so it looks centred
             painter.drawPolygon(QPolygonF([QPointF(x - 7, y - 13), QPointF(x + 14, y), QPointF(x - 7, y + 13)]))
 
@@ -619,10 +621,11 @@ class _Scrubber(QSlider):
         middle = self.height() / 2
         x = left + fraction * (right - left)
         painter.setPen(Qt.PenStyle.NoPen)
+        groove = min(2, t.look.item)  # as the app's other sliders
         painter.setBrush(QColor(t.border))
-        painter.drawRoundedRect(QRectF(left, middle - 2, right - left, 4), 2, 2)
+        painter.drawRoundedRect(QRectF(left, middle - 2, right - left, 4), groove, groove)
         painter.setBrush(QColor(t.accent))
-        painter.drawRoundedRect(QRectF(left, middle - 2, x - left, 4), 2, 2)
+        painter.drawRoundedRect(QRectF(left, middle - 2, x - left, 4), groove, groove)
         # The handle of the app's other sliders (theme.py): white, a faint rim, the accent under the pointer.
         hot = self.isSliderDown() or self.underMouse()
         painter.setPen(QPen(QColor(t.accent) if hot else QColor(0, 0, 0, 61), 1.0))

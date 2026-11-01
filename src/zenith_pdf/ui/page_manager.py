@@ -149,9 +149,10 @@ class PageCellDelegate(QStyledItemDelegate):
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
         if selected or hovered:
-            painter.setPen(QPen(QColor(t.accent if selected else t.text_muted), 2.5 if selected else 1.5))
+            painter.setPen(QPen(QColor((t.focus or t.accent) if selected else t.text_muted),
+                                2.5 if selected else 1.5))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(thumb.adjusted(-5, -5, 5, 5), 6, 6)
+            painter.drawRoundedRect(thumb.adjusted(-5, -5, 5, 5), t.look.item, t.look.item)
         painter.fillRect(thumb, Qt.GlobalColor.white)
         pixmap = index.data(Qt.ItemDataRole.DecorationRole)
         if pixmap is not None:

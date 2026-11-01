@@ -11,8 +11,7 @@ from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import QApplication, QWidget
 
-from .core.platforms import ui_font
-from .theme import DARK, LIGHT, THEMES, Theme
+from .theme import Theme
 
 NAME = "Zenith PDF"
 LOGO = Path(__file__).parent / "assets" / "zenith.png"
@@ -27,8 +26,9 @@ def card(theme: Theme, ratio: float) -> QPixmap:
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    radius = RADIUS if theme.look.card >= 8 else theme.look.card  # as round as the style's cards, or square
     outline = QPainterPath()
-    outline.addRoundedRect(QRectF(0.5, 0.5, WIDTH - 1, HEIGHT - 1), RADIUS, RADIUS)
+    outline.addRoundedRect(QRectF(0.5, 0.5, WIDTH - 1, HEIGHT - 1), radius, radius)
     painter.fillPath(outline, QColor(theme.raised))
     painter.setPen(QColor(theme.border))
     painter.drawPath(outline)
@@ -38,8 +38,8 @@ def card(theme: Theme, ratio: float) -> QPixmap:
                            Qt.TransformationMode.SmoothTransformation)
         logo.setDevicePixelRatio(ratio)
         painter.drawPixmap(round((WIDTH - LOGO_SIZE) / 2), LOGO_TOP, logo)
-    font = QFont(ui_font(), 16)
-    font.setWeight(QFont.Weight.DemiBold)
+    font = QFont(theme.look.title_font(), 16)
+    font.setWeight(QFont.Weight(theme.look.title_weight))
     painter.setFont(font)
     painter.setPen(QColor(theme.text))
     painter.drawText(QRectF(0, LOGO_TOP + LOGO_SIZE + 14, WIDTH, 36), Qt.AlignmentFlag.AlignCenter, NAME)
@@ -60,13 +60,14 @@ class Splash(QWidget):
         QPainter(self).drawPixmap(0, 0, self._picture)
 
 
-def show_splash(theme_name: str) -> Splash:
-    """The card in the theme the app starts in, shown and drawn now, on the screen the pointer is on (where the
-    app was started from)."""
+def show_splash(theme_name: str, style: str = "zenith") -> Splash:
+    """The card in the theme and style the app starts in, shown and drawn now, on the screen the pointer is on
+    (where the app was started from)."""
+    from .theme import ZENITH, _styles
+
     if theme_name == "system":
-        theme = LIGHT if QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Light else DARK
-    else:
-        theme = THEMES.get(theme_name, DARK)
+        theme_name = "light" if QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Light else "dark"
+    theme = (ZENITH if style == "zenith" else _styles().get(style, ZENITH)).palette(theme_name if theme_name in ("dark", "light") else "dark")
     screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
     splash = Splash(card(theme, screen.devicePixelRatio()))
     splash.move(screen.availableGeometry().center() - splash.rect().center())

@@ -35,7 +35,7 @@ class OutlinePanel(QWidget):
         self.tree.setUniformRowHeights(True)
         self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.tree.itemClicked.connect(self._on_clicked)
-        layout.addWidget(self.empty)
+        layout.addWidget(self.empty, 1)  # with no bookmarks it takes the room: the title stays at the top
         layout.addWidget(self.tree, 1)
         self.reload()
 
