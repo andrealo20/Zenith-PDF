@@ -30,6 +30,14 @@ class Release:
 
 
 RELEASES = (
+    Release("0.6.5", (
+        Highlight("Styles", "Settings > View & Layout > Style changes how the whole app looks: Zenith's own, Dot in "
+                  "black and white with one red, Neon with glowing edges on blue-black, or Material, with every colour "
+                  "drawn from the accent. Every feature stays the same.", "palette", "setting:view"),
+    ), (
+        "Main buttons, selected text and the highlighter on the text bar read better in both themes, and the tools "
+        "keep their colours in the tool chooser and the assistant.",
+    )),
     Release("0.6.4", (
         Highlight("A toolbar on any side", "Drag the handle at the start of the toolbar to the top, the bottom, the "
                   "left or the right of the window. Right-click the handle to fix the toolbar to that edge, with the "
