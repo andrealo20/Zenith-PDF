@@ -139,7 +139,7 @@ class ToolForm(messages.MessageDialog):
         self._getters[key] = lambda: button.color
         return button
 
-    def pages(self, key: str, count: int, current: int, label: str = "Pages") -> None:
+    def pages(self, key: str, count: int, current: int, label: str = "Pages") -> tuple[QComboBox, QLineEdit]:
         box = QComboBox()
         for value, text in (("all", "All pages"), ("current", f"This page ({current + 1})"), ("odd", "Odd pages"),
                             ("even", "Even pages"), ("range", "Pages…")):
@@ -172,6 +172,7 @@ class ToolForm(messages.MessageDialog):
             return list(range(count))
 
         self._getters[key] = chosen
+        return box, pick
 
     def note(self, text: str) -> None:
         label = muted_label(text)

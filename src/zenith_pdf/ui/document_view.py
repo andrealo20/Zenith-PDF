@@ -1929,9 +1929,11 @@ class DocumentView(QGraphicsView):
         self.scene().clearSelection()
         self._select_text(page, 0, count - 1)
 
-    def page_image(self, index: int, scale: float) -> QImage:
-        """A page with its annotations, as an image: for printing and copying."""
+    def page_image(self, index: int, scale: float, annotations: bool = True) -> QImage:
+        """A page with its annotations (or without), as an image: for printing and copying."""
         image = self.document.render(index, scale)
+        if not annotations:
+            return image
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.scale(scale, scale)

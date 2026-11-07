@@ -6,9 +6,9 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QEventLoop, QPoint, QRect, Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence, QPainter
-from PySide6.QtPrintSupport import QPrintDialog, QPrinter
+from PySide6.QtCore import QEventLoop, QPoint, Qt, QTimer, QUrl
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence
+from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -46,6 +46,7 @@ from .new_file import NewFilePanel
 from . import pdf_tools
 from . import tool_menu
 from .pdf_tools import ToolsPanel
+from .print_dialog import PrintDialog, print_pages
 from .home import HomePage
 from .reading import SHORTCUT as READING_SHORTCUT
 from .reading import ReadingMode
@@ -56,7 +57,6 @@ from .widgets import IconButton, set_glass, set_glass_adaptive
 from .workspace import Workspace
 
 APP_NAME = "Zenith PDF"
-PRINT_DPI = 300  # enough for print; more only makes huge spool files
 MIN_CONTENT_WIDTH = 360  # pixels: a window snapped to a third of a screen still shows a page
 FULL_TOP_BAR = 560  # narrower, save as, print and full screen leave the top bar for the More menu
 WIDE_ASSISTANT = 980  # px of window from which the assistant's button is a long field, not the icon alone
@@ -1313,57 +1313,16 @@ class MainWindow(QMainWindow):
         self._guide.activateWindow()
 
     def print_current(self) -> None:
-        """Print with annotations, each page fitted to the paper and kept upright."""
+        """Print with annotations, each sheet previewed as it will come out of the printer."""
         workspace = self.current_workspace()
         if workspace is None:
             return
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
         printer.setDocName(workspace.document.path.stem)
-        printer.setFromTo(1, workspace.document.page_count)
-        dialog = QPrintDialog(printer, self)
-        dialog.setOption(QPrintDialog.PrintDialogOption.PrintPageRange, True)
-        accepted = dialog.exec() == QPrintDialog.DialogCode.Accepted
-        dialog.deleteLater()
-        if not accepted:
-            return
-        first, last = printer.fromPage(), printer.toPage()
-        pages = range((first or 1) - 1, (last or workspace.document.page_count))
-        dpi = min(printer.resolution(), PRINT_DPI)
-        scale = dpi / 72
-        progress = QProgressDialog(tr("Printing…"), tr("Cancel"), 0, len(pages), self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        painter = QPainter()
-        if not painter.begin(printer):
-            progress.close()
-            progress.deleteLater()
-            messages.warn(self, "Can't print", "The printer could not be started.")
-            return
-        failure = None
-        try:
-            for count, index in enumerate(pages):
-                if progress.wasCanceled():
-                    break
-                progress.setValue(count)
-                if count:
-                    printer.newPage()
-                area = painter.viewport()
-                width, height = workspace.document.page_size(index)
-                # At most PRINT_DPI on the paper: a poster page rendered at its own size would not fit in memory.
-                paper = min(area.width() / width, area.height() / height) * dpi / printer.resolution()
-                image = workspace.view.page_image(index, min(scale, paper))
-                fitted = image.size().scaled(area.size(), Qt.AspectRatioMode.KeepAspectRatio)
-                x = area.x() + (area.width() - fitted.width()) // 2
-                y = area.y() + (area.height() - fitted.height()) // 2
-                painter.drawImage(QRect(x, y, fitted.width(), fitted.height()), image)
-        except Exception as error:  # reported once the printer is let go
-            failure = error
-        finally:
-            painter.end()  # a painter left open on the printer aborts the whole app, unsaved tabs and all
-            progress.close()
-            progress.deleteLater()
-        if failure is not None:
-            messages.warn(self, "Can't print", f"{workspace.document.path.name} could not be printed.",
-                          detail=str(failure))
+        view = workspace.view
+        options = PrintDialog(printer, view, view.current_page, self, self._settings).run()
+        if options is not None:
+            print_pages(self, printer, view, options)
 
     def closeEvent(self, event) -> None:
         for workspace in list(self.workspaces):

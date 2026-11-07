@@ -25,6 +25,7 @@ DEFAULTS: dict[str, object] = {
     "accent": "blue",  # a key of theme.ACCENTS
     "style": "zenith",  # how the whole app looks: a key of styles.STYLES
     "style_accent": "",  # the accent the style brought in place of the default, until the user picks one
+    "print_options": {},  # the choices of the last print, but its pages and copies (print_dialog.PrintDialog)
     "glass": "clear",  # the floating bars: "clear" or "balanced" frosted glass, or "solid"
     "icon_colours": False,  # icons coloured by what they do, as Acrobat's tools are; off: the text colour
     "glass_adaptive": True,  # the bars turn light over a bright page and dark over dark content
@@ -109,7 +110,7 @@ DEFAULTS: dict[str, object] = {
 }
 JSON_KEYS = {"asked", "tool_styles", "session", "file_state", "recent", "markup_library", "templates",
              "pinned_folders", "signatures", "toolbar_tools", "recent_times", "starred", "file_tags", "tag_colors",
-             "file_info", "tool_menu_sections", "recent_colours", "tips_seen", "assistant_recent"}
+             "file_info", "tool_menu_sections", "recent_colours", "tips_seen", "assistant_recent", "print_options"}
 FILE_STATES = 300  # documents whose last position is remembered
 RECENT_KEEP = 200  # recent files stored; "recent_limit" only says how many are shown, so lowering it loses none
 # Stored values of older versions, and what they mean now. Anything else not in CHOICES reads as the default.

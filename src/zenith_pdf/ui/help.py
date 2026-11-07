@@ -49,7 +49,8 @@ TOPICS: dict[str, Topic] = {
     "save_as": Topic("Save as", "Saves a copy under another name or in another folder, then keeps working on the copy.",
                      keys="Ctrl+Shift+S"),
     "print": Topic("Print", "Prints the document with its annotations.",
-                   "Pick the printer and the pages in the dialog. Each page is fitted to the paper.", "Ctrl+P"),
+                   "A preview shows each sheet as it will come out. Pick the printer, the pages, the paper, and "
+                   "whether each page fits it or keeps its own size.", "Ctrl+P"),
     "full_screen": Topic("Full screen", "Gives the whole screen to the pages.",
                          "Press the button or F11 again to go back.", "F11"),
     "more": Topic("More", "Settings, keyboard shortcuts, theme, and information about Zenith PDF."),

@@ -7,7 +7,6 @@ import pikepdf
 import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QPdfWriter
-from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QFileDialog, QTabBar
 
@@ -15,8 +14,9 @@ from conftest import settle
 from zenith_pdf.app import create_app
 from zenith_pdf.core.i18n import set_language, tr
 from zenith_pdf.settings import Settings
-from zenith_pdf.ui import main_window, messages
+from zenith_pdf.ui import messages
 from zenith_pdf.ui.main_window import MainWindow
+from zenith_pdf.ui.print_dialog import PrintOptions, print_pages
 
 
 @pytest.fixture
@@ -118,62 +118,27 @@ def test_printing_a_poster_page_renders_for_the_paper_and_reports_a_failure(wind
     pdf.add_blank_page(page_size=(14400, 14400))  # 200 x 200 inches
     pdf.save(path)
     output = tmp_path / "printed.pdf"
-
-    class FilePrinter(QPdfWriter):
-        """The printer, as print_current uses it: pages go to a PDF file, and the system's printers are never asked."""
-        PrinterMode = QPrinter.PrinterMode
-
-        def __init__(self, mode):
-            super().__init__(str(output))
-            self.setResolution(1200)
-
-        def setDocName(self, name):
-            pass
-
-        def setFromTo(self, first, last):
-            pass
-
-        def fromPage(self):
-            return 0  # no range picked: every page
-
-        def toPage(self):
-            return 0
-
-    class Accept:
-        DialogCode = QPrintDialog.DialogCode
-        PrintDialogOption = QPrintDialog.PrintDialogOption
-
-        def __init__(self, *args):
-            pass
-
-        def setOption(self, *args):
-            pass
-
-        def exec(self):
-            return QPrintDialog.DialogCode.Accepted
-
-        def deleteLater(self):
-            pass
-
-    monkeypatch.setattr(main_window, "QPrinter", FilePrinter)
-    monkeypatch.setattr(main_window, "QPrintDialog", Accept)
+    printer = QPdfWriter(str(output))  # pages go to a PDF file, and the system's printers are never asked
+    printer.setResolution(1200)
     warned = []
     monkeypatch.setattr(messages, "warn", lambda parent, title, *args, **kwargs: warned.append(title))
     window.open_file(path)
     view = window.current_workspace().view
     render = view.page_image
     scales = []
-    monkeypatch.setattr(view, "page_image", lambda index, scale: scales.append(scale) or render(index, scale))
-    window.print_current()
+    monkeypatch.setattr(view, "page_image", lambda index, scale, annotations=True: scales.append(scale)
+                        or render(index, scale, annotations))
+    for scaling in ("fit", "actual"):  # at its own size it is cut by the paper, never rendered whole at 300 dpi
+        print_pages(window, printer, view, PrintOptions((0,), scaling=scaling))
     assert not warned and output.stat().st_size > 0
     # 300 dpi on paper about 8 inches wide; at 300 dpi of the page itself the bitmap would be 60000 pixels a side.
-    assert len(scales) == 1 and scales[0] * 14400 <= 9 * 300
+    assert len(scales) == 2 and all(scale * 14400 <= 9 * 300 for scale in scales)
 
-    def out_of_memory(index, scale):
+    def out_of_memory(index, scale, annotations=True):
         raise MemoryError("PDFium could not allocate a 60001x60001 bitmap")
 
     monkeypatch.setattr(view, "page_image", out_of_memory)
-    window.print_current()  # the app goes on, with a message instead of aborting
+    print_pages(window, QPdfWriter(str(output)), view, PrintOptions((0,)))  # the app goes on, with a message
     assert warned == ["Can't print"]
 
 
