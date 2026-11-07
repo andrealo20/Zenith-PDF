@@ -30,6 +30,11 @@ class Release:
 
 
 RELEASES = (
+    Release("0.6.6", (
+        Highlight("Print preview", "Print shows each sheet as it will come out of the printer, annotations and all. "
+                  "Two-sided printing, several pages to a sheet, the paper tray, margins and quality are in the same "
+                  "window, which remembers your choices.", "printer"),
+    )),
     Release("0.6.5", (
         Highlight("Styles", "Settings > View & Layout > Style changes how the whole app looks: Zenith's own, Dot in "
                   "black and white with one red, Neon with glowing edges on blue-black, or Material, with every colour "
