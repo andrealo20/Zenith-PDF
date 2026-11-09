@@ -30,6 +30,11 @@ class Release:
 
 
 RELEASES = (
+    Release("0.6.7", (
+        Highlight("A smoother app", "Menus, panels and dialogs fade in, buttons and switches glide instead of jumping, "
+                  "and the page marks what a click will pick. Settings > View & Layout > Reduce motion turns the "
+                  "movement off.", "sparkle", "setting:view"),
+    )),
     Release("0.6.6", (
         Highlight("Print preview", "Print shows each sheet as it will come out of the printer, annotations and all. "
                   "Two-sided printing, several pages to a sheet, the paper tray, margins and quality are in the same "
