@@ -473,9 +473,11 @@ def test_the_line_of_light_ticks_only_while_it_is_on_screen(workspace, motion_on
 def test_the_search_options_stand_one_over_the_other_when_their_labels_do_not_fit_a_row(workspace):
     search = workspace.search
     workspace.side.show_panel("search")
+    short = "Aa"  # fits beside the other with any system font; English does not on macOS
+    search.match_case.setText(short)
+    QApplication.sendEvent(search, QResizeEvent(search.size(), search.size()))
     settle()
-    assert search.match_case.y() == search.whole_word.y()  # as in English
-    short = search.match_case.text()
+    assert search.match_case.y() == search.whole_word.y()
     search.match_case.setText("A label as long as some languages have for it, which no row of the panel holds")
     QApplication.sendEvent(search, QResizeEvent(search.size(), search.size()))
     settle()
