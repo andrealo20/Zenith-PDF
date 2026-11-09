@@ -146,7 +146,7 @@ def test_a_locked_zoom_stays_and_fit_height_fits_the_page(workspace):
         view.top_inset
 
 
-def test_a_zoom_step_glides_and_keeps_the_point_under_the_pointer(workspace):
+def test_a_zoom_step_glides_and_keeps_the_point_under_the_pointer(workspace, motion_on):
     view = workspace.view
     view.set_zoom(1.0)
     anchor = QPointF(view.viewport().width() / 3, view.viewport().height() / 3)

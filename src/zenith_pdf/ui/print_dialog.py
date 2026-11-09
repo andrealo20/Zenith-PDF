@@ -14,6 +14,7 @@ from PySide6.QtCore import QMarginsF, QRectF, QSize, QSizeF, Qt
 from PySide6.QtGui import QColor, QImage, QPageLayout, QPageSize, QPainter, QPen
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter, QPrinterInfo
 from PySide6.QtWidgets import (
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QProgressDialog,
@@ -26,8 +27,8 @@ from PySide6.QtWidgets import (
 
 from ..core.i18n import tr
 from ..icons import icon
-from ..theme import themes
-from . import messages
+from ..theme import outline, themes
+from . import messages, motion
 from .pdf_tools import ToolForm
 from .widgets import IconButton
 
@@ -166,13 +167,19 @@ class SheetPreview(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        painter.fillRect(self.rect(), QColor(t.canvas))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(t.canvas))
+        painter.drawPath(outline(QRectF(self.rect()), t.look.card, t.look))  # the style's corners, as the fields have
         layout = self._dialog.printer.pageLayout()
         full = layout.fullRect(QPageLayout.Unit.Point)
         room = QRectF(self.rect()).adjusted(SHEET_MARGIN, SHEET_MARGIN, -SHEET_MARGIN, -SHEET_MARGIN)
         zoom = min(room.width() / full.width(), room.height() / full.height())
         sheet = QRectF(room.center().x() - full.width() * zoom / 2, room.center().y() - full.height() * zoom / 2,
                        full.width() * zoom, full.height() * zoom)
+        if t.look.shadow == "soft":  # a little depth under the paper, where the style has shadows
+            for lift, alpha in ((4, 18), (2, 34)):
+                painter.setBrush(QColor(0, 0, 0, alpha))
+                painter.drawRect(sheet.translated(0, lift).adjusted(-1, -1, 1, 1))
         painter.setPen(QPen(QColor(t.border), 1))
         painter.setBrush(QColor("#ffffff"))
         painter.drawRect(sheet.adjusted(-0.5, -0.5, 0.5, 0.5))
@@ -255,6 +262,8 @@ class PrintDialog(ToolForm):
         system.clicked.connect(self._system_dialog)
         self._form.addRow("", system)
         self._more_rows = range(first, self._form.rowCount())
+        # The form makes the labels of its rows itself: held here, or Python frees the wrappers the fades paint with.
+        self._more_widgets = self._widgets_of(self._more_rows)
         self._more.clicked.connect(lambda: self._show_more(not self._more_shown))
         self._show_more(bool(saved.get("more", False)))
         if not names:
@@ -286,6 +295,7 @@ class PrintDialog(ToolForm):
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFixedWidth(OPTIONS_WIDTH)
+        scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Tab goes control to control, and brings each into view
         scroll.viewport().setAutoFillBackground(False)
         self._box.setAutoFillBackground(False)
         row = QHBoxLayout()
@@ -333,10 +343,24 @@ class PrintDialog(ToolForm):
             return
         super().keyPressEvent(event)
 
+    def _widgets_of(self, rows) -> list[QWidget]:
+        """The widgets of these rows of the form, each once: a row that spans it gives its one widget for two roles."""
+        found: list[QWidget] = []
+        for row in rows:
+            for role in (QFormLayout.ItemRole.LabelRole, QFormLayout.ItemRole.FieldRole,
+                         QFormLayout.ItemRole.SpanningRole):
+                item = self._form.itemAt(row, role)
+                if item is not None and item.widget() is not None and item.widget() not in found:
+                    found.append(item.widget())
+        return found
+
     def _show_more(self, shown: bool) -> None:
         self._more_shown = shown
         for row in self._more_rows:
             self._form.setRowVisible(row, shown)
+        if shown:  # the rows that were folded away come in, each in its place
+            for widget in self._more_widgets:
+                motion.appear(widget, 4)
         self._more.setIcon(icon("caret-down" if shown else "caret-right"))
 
     def _saved(self) -> dict:

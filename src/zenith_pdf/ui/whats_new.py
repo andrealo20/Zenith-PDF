@@ -3,7 +3,8 @@ Show me button that opens the tool, setting or command it is about. The guide ke
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QPoint, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -19,19 +20,46 @@ from ..core.i18n import tr
 from ..core.platforms import native_keys
 from ..core.releases import Highlight, Release
 from ..icons import icon
-from ..theme import themes
+from ..theme import outline, themes
+from . import messages, motion
 
 WIDTH = 560
-GLYPH = 44  # the icon of a highlight's card
+GLYPH = 32  # the icon of a highlight's card, on a tile of TILE
+TILE = 60
 ROW_GLYPH = 20  # the icons of the overview
+SLIDE = 24  # px a card comes in from the side, after the one before or behind it
 
 
 def _label(text: str, name: str, rich: bool = False) -> QLabel:
     label = QLabel(native_keys(tr(text)))
-    label.setObjectName(name)
+    if name:
+        label.setObjectName(name)
+    label.setIndent(0)  # a label with a margin in the style sheet is drawn in a frame, which indents its text
     label.setWordWrap(True)
     label.setTextFormat(Qt.TextFormat.RichText if rich else Qt.TextFormat.PlainText)
     return label
+
+
+class _Tile(QWidget):
+    """A highlight's icon on a tile in the tint of the accent, with the style's corners."""
+
+    def __init__(self, name: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._name = name
+        self.setFixedSize(TILE, TILE)
+        themes.changed.connect(self.update)
+
+    def paintEvent(self, event) -> None:
+        t = themes.current
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        tint = QColor(t.accent)
+        tint.setAlphaF(0.14)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(tint)
+        painter.drawPath(outline(QRectF(self.rect()), t.look.card, t.look))
+        picture = icon(self._name, t.accent).pixmap(QSize(GLYPH, GLYPH), self.devicePixelRatioF())
+        painter.drawPixmap(QPoint((TILE - GLYPH) // 2, (TILE - GLYPH) // 2), picture)
 
 
 class WhatsNewDialog(QDialog):
@@ -42,6 +70,7 @@ class WhatsNewDialog(QDialog):
     def __init__(self, releases: list[Release], parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("MessageDialog")
+        messages.house(self)
         self.setWindowTitle(tr("What's new"))
         self.setFixedWidth(WIDTH)
         self.highlights: list[Highlight] = [h for release in releases for h in release.highlights]
@@ -72,6 +101,12 @@ class WhatsNewDialog(QDialog):
         layout.addLayout(row)
         self.go(0)
 
+    def sizeHint(self) -> QSize:
+        # The window opens as tall as wrapped text needs at the width given here: never wider than the dialog is,
+        # or the words wrap to more lines than the height has room for.
+        hint = super().sizeHint()
+        return QSize(min(hint.width(), WIDTH), hint.height())
+
     def _overview(self, releases: list[Release]) -> QWidget:
         page = QWidget()
         column = QVBoxLayout(page)
@@ -92,7 +127,7 @@ class WhatsNewDialog(QDialog):
                 glyph.setPixmap(icon(highlight.icon, themes.current.accent).pixmap(
                     QSize(ROW_GLYPH, ROW_GLYPH), self.devicePixelRatioF()))
                 row.addWidget(glyph, 0, Qt.AlignmentFlag.AlignTop)
-                row.addWidget(_label(highlight.title, "DialogBody"), 1)
+                row.addWidget(_label(highlight.title, ""), 1)  # the news itself, in the text colour
                 column.addLayout(row)
             for line in release.more:
                 column.addWidget(_label(f"•  {line}", "Muted"))
@@ -104,11 +139,7 @@ class WhatsNewDialog(QDialog):
         column = QVBoxLayout(page)
         column.setContentsMargins(0, 8, 0, 0)
         column.setSpacing(12)
-        glyph = QLabel()
-        glyph.setFixedSize(GLYPH, GLYPH)
-        glyph.setPixmap(icon(highlight.icon, themes.current.accent).pixmap(QSize(GLYPH, GLYPH),
-                                                                          self.devicePixelRatioF()))
-        column.addWidget(glyph)
+        column.addWidget(_Tile(highlight.icon), 0, Qt.AlignmentFlag.AlignLeft)
         column.addWidget(_label(highlight.title, "DialogTitle"))
         column.addWidget(_label(highlight.text, "DialogBody"))
         if highlight.action:
@@ -123,7 +154,11 @@ class WhatsNewDialog(QDialog):
 
     def go(self, index: int) -> None:
         index = min(max(index, 0), self.pages.count() - 1)
+        before = self.pages.currentIndex()
         self.pages.setCurrentIndex(index)
+        if index != before:  # the next card comes in from the right, the one before from the left
+            edge = Qt.Edge.RightEdge if index > before else Qt.Edge.LeftEdge
+            motion.slide_in(self.pages.currentWidget(), edge, SLIDE, motion.NORMAL)
         last = index == self.pages.count() - 1
         self.back.setVisible(index > 0)
         self.next.setText(tr("Done" if last else ("Show me each one" if index == 0 else "Next")))

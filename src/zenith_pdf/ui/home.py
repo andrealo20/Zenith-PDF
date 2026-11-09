@@ -11,6 +11,10 @@ in the background and kept, so the list shows at once next time.
 The page fits a narrow window: the guide column goes first, then the quick
 actions lose their captions and their names, and the file list drops the
 columns it can do without, so the name always has room.
+
+A row of the list lights as a whole under the pointer and fades as the pointer
+leaves; the picture of a page that has just been read fades in over its place;
+a list with no files, and a search that matches none, say so with a picture.
 """
 
 from __future__ import annotations
@@ -23,11 +27,13 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import shiboken6
 from PySide6.QtCore import (
     QAbstractTableModel,
     QEvent,
     QModelIndex,
     QObject,
+    QPoint,
     QRect,
     QRectF,
     QSize,
@@ -37,7 +43,7 @@ from PySide6.QtCore import (
     QUrl,
     Signal,
 )
-from PySide6.QtGui import QColor, QDesktopServices, QFont, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QCursor, QDesktopServices, QFont, QImage, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -62,14 +68,16 @@ from ..core.i18n import tr
 from ..core.platforms import native_keys
 from ..icons import icon
 from ..settings import Settings
-from ..theme import qcolor, themes
+from ..theme import outline, qcolor, themes
 from .library_search import InsideResults
-from . import messages
+from . import messages, motion
 from .help import attach_help
-from .widgets import IconButton, muted_label
+from .side_panel import FadingButton
+from .widgets import IconButton, focus_ring, icon_pixmap, keyboard_focus, muted_label
 
 INFO_LIMIT = 400  # files whose page count and author are remembered
-ROW_HEIGHT = 50
+ROW_HEIGHT = 56
+THUMB_WIDTH = 34  # the widest a page's picture goes in the name column
 # Tag colours, given in this order as tags are made. No red: it reads as an error.
 TAG_COLOURS = ["#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#14b8a6", "#ec4899", "#64748b"]
 TIPS = [
@@ -370,80 +378,205 @@ class FileDelegate(QStyledItemDelegate):
         t = themes.current
         entry: FileEntry = index.data(FILE_ROLE)
         rect = option.rect
+        over = bool(option.state & QStyle.StateFlag.State_MouseOver)  # the pointer is on this cell
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        if option.state & QStyle.StateFlag.State_MouseOver:
-            painter.fillRect(rect, qcolor(t.hover))
+        lit = self._home.row_light(entry.path)
+        if lit > 0.0:  # the pointer is on the row, or has just left it: every cell of it, above the line
+            fill = qcolor(t.pressed if self._home.row_pressed(entry.path) else t.hover)
+            fill.setAlpha(round(fill.alpha() * lit))
+            painter.fillRect(rect.adjusted(0, 0, 0, -1), fill)
         painter.setPen(QPen(QColor(t.border), 1))
         painter.drawLine(rect.bottomLeft(), rect.bottomRight())
         column = index.column()
-        if column == STAR:
-            glyph = icon("star-fill" if entry.starred else "star", "#f5b301" if entry.starred else t.text_muted)
-            glyph.paint(painter, QRect(rect.center().x() - 9, rect.center().y() - 9, 18, 18))
-        elif column == NAME:
-            box = QRect(rect.x() + 4, rect.y() + 6, 30, rect.height() - 12)
-            if entry.thumbnail is not None:
-                pixmap = entry.thumbnail
-                fitted = pixmap.size().scaled(box.size() * pixmap.devicePixelRatio(), Qt.AspectRatioMode.KeepAspectRatio)
-                target = QRect(0, 0, round(fitted.width() / pixmap.devicePixelRatio()),
-                               round(fitted.height() / pixmap.devicePixelRatio()))
-                target.moveCenter(box.center())
-                painter.drawPixmap(target, pixmap)
-                painter.setPen(QPen(QColor(t.border), 1))
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawRect(target)
+        middle = QPoint(rect.x() + rect.width() // 2, rect.y() + (rect.height() - 1) // 2)
+        if column in (STAR, MORE):
+            if over:  # a button: under the pointer it shows its shape
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(qcolor(t.pressed))
+                painter.drawPath(outline(QRectF(middle.x() - 14, middle.y() - 14, 28, 28), t.look.item, t.look))
+            if column == STAR:
+                glyph = icon("star-fill" if entry.starred else "star", "#f5b301" if entry.starred else t.text_muted)
+                size = self._home.star_size(entry.path)
+                painter.translate(middle)
+                painter.scale(size, size)
+                painter.translate(-middle)
             else:
-                icon("file-pdf", t.accent).paint(painter, box.adjusted(3, 6, -3, -6))
-            font = QFont(option.font)
-            font.setWeight(QFont.Weight.DemiBold)
-            painter.setFont(font)
-            painter.setPen(QColor(t.text))
-            metrics = painter.fontMetrics()
-            text_rect = rect.adjusted(46, 0, -6, 0)
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter,
-                             metrics.elidedText(entry.path.name, Qt.TextElideMode.ElideMiddle, text_rect.width()))
+                glyph = icon("dots-three-vertical", t.text if over else t.text_muted)
+            glyph.paint(painter, QRect(middle.x() - 9, middle.y() - 9, 18, 18))
+        elif column == NAME:
+            self._paint_name(painter, option, entry)
         elif column == TAGS:
-            x = rect.x() + 4
-            painter.setFont(option.font)
-            metrics = painter.fontMetrics()
-            round_ = 11 if t.look.chip >= 5 else t.look.chip  # pills, while the style rounds chips as Zenith does
-            for tag in entry.tags:
-                width = metrics.horizontalAdvance(tag) + 16
-                if x + width > rect.right() - 4:
-                    break
-                chip = QRectF(x, rect.center().y() - 11, width, 22)
-                colour = QColor(self._home.tag_colour(tag))
-                fill = QColor(colour)
-                fill.setAlpha(46)
-                painter.setPen(QPen(colour, 1))
-                painter.setBrush(fill)
-                painter.drawRoundedRect(chip, round_, round_)
-                painter.setPen(QColor(t.text))
-                painter.drawText(chip, Qt.AlignmentFlag.AlignCenter, tag)
-                x += width + 4
-            if not entry.tags and option.state & QStyle.StateFlag.State_MouseOver:  # an extra: only under the pointer
-                painter.setPen(QColor(t.text_muted))
-                icon("tag", t.text_muted).paint(painter, QRect(x, rect.center().y() - 8, 16, 16))
-                area = QRect(x + 22, rect.y(), rect.right() - 4 - (x + 22), rect.height())
-                painter.drawText(area, Qt.AlignmentFlag.AlignVCenter,
-                                 metrics.elidedText(tr("Add tag"), Qt.TextElideMode.ElideRight, area.width()))
-        elif column == MORE:
-            icon("dots-three-vertical", t.text_muted).paint(painter, QRect(rect.center().x() - 9, rect.center().y() - 9,
-                                                                           18, 18))
+            self._paint_tags(painter, option, entry, over)
         else:
             painter.setFont(option.font)
             painter.setPen(QColor(t.text_muted if column != AUTHOR else t.text))
             text = index.data(Qt.ItemDataRole.DisplayRole) or ""
             metrics = painter.fontMetrics()
-            area = rect.adjusted(6, 0, -6, 0)
+            area = rect.adjusted(6, 0, -6, -1)
             # A folder keeps both ends, a name its start.
             mode = Qt.TextElideMode.ElideRight if column == AUTHOR else Qt.TextElideMode.ElideMiddle
             painter.drawText(area, Qt.AlignmentFlag.AlignVCenter, metrics.elidedText(text, mode, area.width()))
         painter.restore()
 
+    def _paint_name(self, painter: QPainter, option, entry: FileEntry) -> None:
+        """The picture of the first page, and the name: its ending, ".pdf", quieter than the rest."""
+        t = themes.current
+        look = t.look
+        rect = option.rect
+        box = QRect(rect.x() + 4, rect.y() + 6, THUMB_WIDTH, rect.height() - 13)
+        corner = min(look.chip, 3)
+        shown = self._home.thumb_shown(entry.path)
+        if entry.thumbnail is None or shown < 1.0:  # no picture yet, or one on its way in over this
+            painter.save()
+            painter.setOpacity(1.0 - shown if entry.thumbnail is not None else 1.0)
+            paper = QRectF(0, 0, box.height() * 0.72, box.height())
+            paper.moveCenter(QRectF(box).center())
+            painter.setPen(QPen(QColor(t.border), 1))
+            painter.setBrush(qcolor(t.hover))
+            painter.drawPath(outline(paper.adjusted(0.5, 0.5, -0.5, -0.5), corner, look))
+            icon("file-pdf", t.text_muted).paint(painter, QRect(round(paper.center().x()) - 8,
+                                                                round(paper.center().y()) - 8, 16, 16))
+            painter.restore()
+        if entry.thumbnail is not None:
+            pixmap = entry.thumbnail
+            ratio = pixmap.devicePixelRatio()
+            fitted = pixmap.size().scaled(box.size() * ratio, Qt.AspectRatioMode.KeepAspectRatio)
+            target = QRectF(0, 0, fitted.width() / ratio, fitted.height() / ratio)
+            target.moveCenter(QRectF(box).center())
+            page = outline(target, corner, look)
+            painter.save()
+            painter.setOpacity(shown)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(0, 0, 0, 80 if t.name == "dark" else 38))
+            painter.drawPath(page.translated(0, 1))  # a thin shadow: the page rests on the row
+            painter.setClipPath(page)
+            painter.drawPixmap(target, pixmap, QRectF(pixmap.rect()))
+            painter.setClipping(False)
+            painter.setPen(QPen(QColor(t.border), 1))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(outline(target.adjusted(0.5, 0.5, -0.5, -0.5), corner, look))
+            painter.restore()
+        font = QFont(option.font)
+        font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        area = rect.adjusted(4 + THUMB_WIDTH + 10, 0, -6, -1)
+        ending = entry.path.suffix
+        name = metrics.elidedText(entry.path.stem, Qt.TextElideMode.ElideMiddle,
+                                  max(area.width() - metrics.horizontalAdvance(ending), 0))
+        painter.setPen(QColor(t.text))
+        painter.drawText(area, Qt.AlignmentFlag.AlignVCenter, name)
+        painter.setPen(QColor(t.text_muted))
+        painter.drawText(area.adjusted(metrics.horizontalAdvance(name), 0, 0, 0), Qt.AlignmentFlag.AlignVCenter, ending)
+
+    def _paint_tags(self, painter: QPainter, option, entry: FileEntry, over: bool) -> None:
+        """The tag chips as far as they fit, then how many more there are; with none, "Add tag" under the pointer."""
+        t = themes.current
+        look = t.look
+        rect = option.rect
+        painter.setFont(option.font)
+        metrics = painter.fontMetrics()
+        round_ = 11 if look.chip >= 5 else look.chip  # pills, while the style rounds chips as Zenith does
+        x, right = rect.x() + 4, rect.right() - 4
+        for position, tag in enumerate(entry.tags):
+            more = len(entry.tags) - position - 1  # the tags after this one
+            reserve = metrics.horizontalAdvance(f"+{more}") + 8 if more else 0
+            text, width = tag, metrics.horizontalAdvance(tag) + 16
+            if x + width + reserve > right:
+                if position:  # no room for this one: the rest is a count
+                    painter.setPen(QColor(t.text_muted))
+                    painter.drawText(QRect(x, rect.y(), right - x, rect.height() - 1), Qt.AlignmentFlag.AlignVCenter,
+                                     f"+{more + 1}")
+                    return
+                width = max(right - x - reserve, 32)  # a first chip too long for the column is cut to fit
+                text = metrics.elidedText(tag, Qt.TextElideMode.ElideRight, width - 16)
+            chip = QRectF(x, rect.y() + (rect.height() - 1) / 2 - 11, width, 22)
+            colour = QColor(self._home.tag_colour(tag))
+            fill = QColor(colour)
+            fill.setAlpha(46)
+            painter.setPen(QPen(colour, 1))
+            painter.setBrush(fill)
+            painter.drawPath(outline(chip, round_, look))
+            painter.setPen(QColor(t.text))
+            painter.drawText(chip, Qt.AlignmentFlag.AlignCenter, text)
+            x += width + 4
+        if not entry.tags and over:  # an extra: only under the pointer
+            painter.setPen(QColor(t.text_muted))
+            middle = rect.y() + (rect.height() - 1) // 2
+            icon("tag", t.text_muted).paint(painter, QRect(x, middle - 8, 16, 16))
+            area = QRect(x + 22, rect.y(), rect.right() - 4 - (x + 22), rect.height() - 1)
+            painter.drawText(area, Qt.AlignmentFlag.AlignVCenter,
+                             metrics.elidedText(tr("Add tag"), Qt.TextElideMode.ElideRight, area.width()))
+
+
+class Tile(QLabel):
+    """An icon, in the accent, on a rounded square tinted as the style tints what is chosen."""
+
+    def __init__(self, icon_name: str, size: int, glyph: int, parent=None):
+        super().__init__(parent)
+        self.icon_name = icon_name
+        self._glyph = glyph
+        self.setFixedSize(size, size)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        themes.changed.connect(self.recolour)
+        self.recolour()
+
+    def set_icon(self, icon_name: str) -> None:
+        self.icon_name = icon_name
+        self.recolour()
+
+    def recolour(self, *_) -> None:
+        self.setPixmap(icon_pixmap(self.icon_name, self._glyph, themes.current.accent))
+
+    def paintEvent(self, event) -> None:
+        t = themes.current
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(qcolor(t.selection))
+        painter.drawPath(outline(QRectF(self.rect()), min(t.look.card, self.width() / 3), t.look))
+        painter.end()
+        super().paintEvent(event)
+
+
+class EmptyState(QWidget):
+    """What a list says when it has nothing to show: a picture, what is missing, and what to do about it."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.glyph = Tile("files", 64, 28)
+        self.title = QLabel()
+        self.title.setObjectName("SectionTitle")
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.text = muted_label()
+        self.text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.text.setWordWrap(True)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(40, 0, 40, 0)
+        layout.setSpacing(6)
+        layout.addStretch(2)
+        layout.addWidget(self.glyph, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addSpacing(10)
+        layout.addWidget(self.title)
+        layout.addWidget(self.text)
+        layout.addStretch(3)
+
+    def show_state(self, icon_name: str, title: str, text: str = "") -> None:
+        """The state, in words already in the language in use."""
+        self.glyph.set_icon(icon_name)
+        self.title.setText(title)
+        self.text.setText(native_keys(text))
+        self.text.setVisible(bool(text))
+
 
 class NavButton(QPushButton):
-    """A row of the left column: icon, label, and a count on the right."""
+    """A row of the left column: icon, label, and a count on the right.
+
+    The fill under the pointer is painted here, to fade it (the page's style sheet leaves it to the button); the
+    chosen row's fill stays the sheet's, so each style keeps its own way of marking it.
+    """
 
     def __init__(self, icon_name: str, text: str, key: str, colour: str | None = None, parent=None):
         super().__init__(parent)
@@ -457,10 +590,39 @@ class NavButton(QPushButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(36)
         self.setToolTip(tr(text))
+        self.setAccessibleName(tr(text))  # its words are painted, not set
+        self._fill = motion.Fill(self)
+        self._fill.changed.connect(self.update)
+        self.toggled.connect(lambda _: self._settle())
+        self.pressed.connect(self._settle)
+        self.released.connect(self._settle)
+
+    def _settle(self, hover: bool | None = None) -> None:
+        """Send the fill where it belongs: under the pointer or pressed, else clear."""
+        t = themes.current
+        hot = (self.underMouse() if hover is None else hover) and self.isEnabled() and not self.isChecked()
+        self._fill.go(qcolor(t.pressed if self.isDown() else t.hover) if hot else QColor(0, 0, 0, 0),
+                      motion.FAST if hot else motion.NORMAL)
+
+    def enterEvent(self, event) -> None:
+        self._settle(True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._settle(False)
+        super().leaveEvent(event)
 
     def paintEvent(self, event) -> None:
-        super().paintEvent(event)
         t = themes.current
+        radius = min(18 if t.look.pill_buttons else t.look.control, self.height() / 2)  # as the sheet shapes it
+        if self._fill.colour.alpha():
+            under = QPainter(self)
+            under.setRenderHint(QPainter.RenderHint.Antialiasing)
+            under.setPen(Qt.PenStyle.NoPen)
+            under.setBrush(self._fill.colour)
+            under.drawPath(outline(QRectF(self.rect()), radius, t.look))
+            under.end()
+        super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect()
@@ -485,13 +647,16 @@ class NavButton(QPushButton):
             painter.setPen(QColor(t.text_muted))
             painter.drawText(QRect(rect.width() - 44, 0, 34, rect.height()),
                              Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, self.count)
+        if keyboard_focus(self):
+            focus_ring(painter, QRectF(rect), radius)
 
 
 class QuickCard(QFrame):
     """A large button among the quick actions.
 
     In a narrow window it drops its caption ("compact"), then its name too ("icon"),
-    and the tooltip says what it does.
+    and the tooltip says what it does. The style sheet draws its fill and edge, and what they do under the
+    pointer; the card adds a press, an arrow that comes in at the corner as the pointer does, and the keyboard.
     """
 
     clicked = Signal()
@@ -501,29 +666,31 @@ class QuickCard(QFrame):
         self.setObjectName("QuickCard")
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # Tab reaches it; Enter and Space press it
+        self.setAccessibleName(tr(title))
+        self.setAccessibleDescription(tr(detail))
         self.icon_name = icon_name
         self.title = title
         self.detail_text = detail
         self.mode = "full"
+        self._down = False
+        self._press = motion.Fill(self)  # the fill of a press, fading in and out
+        self._press.changed.connect(self.update)
+        self._reach = motion.Smooth(self)  # how far the pointer or the keyboard has come: the arrow
+        self._reach.changed.connect(self.update)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(2)
-        self.glyph = QLabel()
-        self.glyph.setFixedSize(26, 26)
+        self.glyph = Tile(icon_name, 36, 20)
         self.name = QLabel(tr(title))
         self.name.setObjectName("PanelRowText")
         self.caption = muted_label(detail)
         self.caption.setWordWrap(True)
         layout.addWidget(self.glyph)
-        layout.addSpacing(6)
+        layout.addSpacing(8)
         layout.addWidget(self.name)
         layout.addWidget(self.caption)
         layout.addStretch()
-        themes.changed.connect(self._recolour)
-        self._recolour()
-
-    def _recolour(self, *_) -> None:
-        self.glyph.setPixmap(icon(self.icon_name, themes.current.accent).pixmap(26, 26))
 
     def needs(self) -> int:
         """The width that shows the name without the caption."""
@@ -539,13 +706,75 @@ class QuickCard(QFrame):
         self.name.setVisible(mode != "icon")
         self.layout().setAlignment(self.glyph, Qt.AlignmentFlag.AlignHCenter if mode == "icon" else Qt.AlignmentFlag(0))
         self.setToolTip("" if mode == "full" else f"{tr(self.title)}: {tr(self.detail_text)}")
+        self.update()
 
     def minimumSizeHint(self) -> QSize:
-        return QSize(56, super().minimumSizeHint().height())
+        return QSize(64, super().minimumSizeHint().height())  # the tile and the margins round it
+
+    def _settle(self, hover: bool | None = None) -> None:
+        """Send the press and the arrow where they belong."""
+        t = themes.current
+        near = (self.underMouse() if hover is None else hover) or keyboard_focus(self)
+        self._press.go(qcolor(t.pressed) if self._down else QColor(0, 0, 0, 0),
+                       motion.FAST if self._down else motion.NORMAL)
+        self._reach.go(1.0 if near else 0.0, motion.FAST if near else motion.NORMAL)
+
+    def enterEvent(self, event) -> None:
+        self._settle(True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._settle(False)
+        super().leaveEvent(event)
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        self._settle()
+
+    def focusOutEvent(self, event) -> None:
+        super().focusOutEvent(event)
+        self._settle()
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._down = True
+            self._settle()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
+        self._down = False
+        self._settle()
         if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.position().toPoint()):
             self.clicked.emit()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space) and not event.isAutoRepeat():
+            self.clicked.emit()
+        else:
+            super().keyPressEvent(event)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)  # the sheet's fill and edge
+        t = themes.current
+        radius = 2 if t.look.chamfer else t.look.card  # as the sheet shapes it
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self._press.colour.alpha():
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(self._press.colour)
+            painter.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
+        reach = self._reach.value
+        if reach > 0.0 and self.mode != "icon":
+            tinted = t.look.tint[0 if t.name == "dark" else 1] and t.look.checked_icon == "accent"
+            painter.setOpacity(reach)
+            nudge = round(4 * (1.0 - reach))  # it comes from the corner it points away from
+            icon("arrow-up-right", t.accent_ink if tinted else t.text).paint(
+                painter, QRect(self.width() - 14 - 16 - nudge, 22 + nudge, 16, 16))
+            painter.setOpacity(1.0)
+        if keyboard_focus(self):
+            focus_ring(painter, QRectF(self.rect()), radius)
 
 
 class HomePage(QWidget):
@@ -569,6 +798,12 @@ class HomePage(QWidget):
         self._tag_colours: dict[str, str] = settings.get("tag_colors")
         self._quiet = False  # while the page stores tag colours itself
         self.scope = "all"
+        self._pointed: str | None = None  # the file whose row the pointer is on
+        self._pressed: str | None = None  # and the one it is pressing
+        self._lit: dict[str, motion.Smooth] = {}  # how lit each row that was under the pointer is, by path
+        self._shown: dict[str, motion.Smooth] = {}  # how far a page picture that just came in has faded in
+        self._grown: dict[str, motion.Smooth] = {}  # how far a star that was just clicked has grown
+        self._source_rows: dict[str, int] = {}  # where each listed file stands in the model
         self.loader = InfoLoader(self)
         self.loader.loaded.connect(self._on_loaded)
 
@@ -576,6 +811,9 @@ class HomePage(QWidget):
         self.nav = nav = QFrame()
         nav.setObjectName("HomeSide")
         nav.setFixedWidth(NAV_WIDTH)
+        # The rows paint their hover and press fills themselves (NavButton), to fade them: the sheet leaves them.
+        nav.setStyleSheet("QPushButton#HomeNav:hover:!checked, QPushButton#HomeNav:pressed:!checked "
+                          "{ background: transparent; }")
         self._nav = QVBoxLayout(nav)
         self._nav.setContentsMargins(14, 22, 14, 14)
         self._nav.setSpacing(2)
@@ -635,7 +873,7 @@ class HomePage(QWidget):
         top = QHBoxLayout()
         top.setSpacing(10)
         # On a narrow page the left column is out of the row: this opens it over the files.
-        self.menu_button = IconButton("list", "Files, folders, tags and tools", icon_size=20)
+        self.menu_button = FadingButton("list", "Files, folders, tags and tools", icon_size=20)
         self.menu_button.setFixedSize(BUTTON_HEIGHT, BUTTON_HEIGHT)
         self.menu_button.clicked.connect(self.toggle_nav)
         self.menu_button.hide()
@@ -685,6 +923,7 @@ class HomePage(QWidget):
         self.table.setModel(self.proxy)
         self.table.setItemDelegate(FileDelegate(self))
         self.table.setMouseTracking(True)
+        self.table.viewport().setMouseTracking(True)
         self.table.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.table.setShowGrid(False)
         self.table.setSortingEnabled(True)
@@ -695,6 +934,7 @@ class HomePage(QWidget):
         self.table.verticalHeader().setDefaultSectionSize(ROW_HEIGHT)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         header = self.table.horizontalHeader()
+        header.setStyleSheet("QHeaderView::section:hover { color: palette(window-text); }")  # it is a button
         header.setHighlightSections(False)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         for column, width in COLUMN_WIDTHS.items():
@@ -702,24 +942,31 @@ class HomePage(QWidget):
         header.setSectionResizeMode(NAME, QHeaderView.ResizeMode.Stretch)
         header.setMinimumSectionSize(30)
         self.table.clicked.connect(self._on_clicked)
-        self.table.viewport().installEventFilter(self)  # its width is what the columns share
-        self.empty = muted_label("Files you open will appear here. Open one, or drop PDFs on the window.")
-        self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty.setWordWrap(True)
+        self.table.verticalScrollBar().valueChanged.connect(self._repoint)
+        self._viewport = self.table.viewport()
+        self._viewport.installEventFilter(self)  # its width is what the columns share, its pointer the lit row
+        self.empty = EmptyState()
         self.empty.setMinimumHeight(140)
+        self.nothing = EmptyState(self.table.viewport())  # a search that finds no file, in the table's own place
+        self.nothing.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.nothing.show_state("magnifying-glass", tr("No file matches"))
+        self.nothing.hide()
 
         main = QVBoxLayout()
         main.setContentsMargins(26, 22, 26, 18)
         main.setSpacing(16)
         main.addLayout(top)
         main.addWidget(self.quick)
-        main.addSpacing(4)
-        main.addLayout(title_row)
-        main.addWidget(self.empty, 1)  # with no files, the space below the cards is the message's
-        main.addWidget(self.table, 1)
+        main.addSpacing(12)  # the files are a group of their own, and the title belongs to them
+        files = QVBoxLayout()
+        files.setSpacing(4)
+        files.addLayout(title_row)
+        files.addWidget(self.empty, 1)  # with no files, the space below the cards is the message's
+        files.addWidget(self.table, 1)
         self.inside = InsideResults()
         self.inside.page_requested.connect(self.page_requested)
-        main.addWidget(self.inside, 1)
+        files.addWidget(self.inside, 1)
+        main.addLayout(files, 1)
 
         # Right column: the way into the guide
         self.aside = QFrame()
@@ -740,6 +987,7 @@ class HomePage(QWidget):
         whats_new = QPushButton(tr("What's new"))
         whats_new.setFixedHeight(BUTTON_HEIGHT)
         whats_new.clicked.connect(lambda: self.guide_requested.emit("whats-new"))
+        self._tip = random.choice(TIPS)
         self.tip = QLabel()
         self.tip.setObjectName("TipCard")
         self.tip.setWordWrap(True)
@@ -817,6 +1065,10 @@ class HomePage(QWidget):
         self._tag_colours = self._settings.get("tag_colors")
         self._colour_tags(sorted({name for names in self._settings.get("file_tags").values() for name in names}))
         self._build_nav()
+        self._list()
+
+    def _list(self) -> None:
+        """The files of the scope, with their title, their count and what is said when there are none."""
         times = self._settings.get("recent_times")
         infos = self._settings.get("file_info")
         starred = set(self._settings.get("starred"))
@@ -842,7 +1094,14 @@ class HomePage(QWidget):
                 missing.append(path)
             entries.append(entry)
         self._entries_by_path = {str(e.path): e for e in entries}
+        self._source_rows = {str(e.path): row for row, e in enumerate(entries)}
         self.model.set_entries(entries)
+        for glows in (self._lit, self._shown, self._grown):  # nothing kept for files no longer listed
+            for gone in [path for path in glows if path not in self._entries_by_path]:
+                glows.pop(gone).deleteLater()
+        if self._pointed not in self._entries_by_path:
+            self._point(None)  # its row is gone, and the hand with it
+        self._repoint()
         self.loader.request(missing)
         titles = {"all": "All files", "starred": "Starred"}
         if self.scope.startswith("folder:"):
@@ -856,13 +1115,12 @@ class HomePage(QWidget):
         self.summary.setText(tr(f"{count} file{'s' if count != 1 else ''}"))
         self.empty.setVisible(not entries)
         self.table.setVisible(bool(entries))
-        if self.scope != "all" and not entries:
-            self.empty.setText(tr("Nothing here yet."))
-        else:
-            self.empty.setText(tr("Files you open will appear here. Open one, or drop PDFs on the window."))
-        self.tip.setText(native_keys(tr(random.choice(TIPS))))
+        if not entries:
+            self.empty.show_state(*self._nothing_to_show())
+        self.tip.setText(native_keys(tr(self._tip)))
         self.search.setPlaceholderText(tr(self._files_placeholder))
         self.inside.show_for(self.search.text())
+        self._sync_nothing()
 
     def _on_loaded(self, path: str, info: dict, image: QImage) -> None:
         if info:
@@ -886,6 +1144,11 @@ class HomePage(QWidget):
         entry.title = info.get("title", entry.title)
         if not image.isNull():
             entry.thumbnail = QPixmap.fromImage(image)
+            if path in self._shown:
+                self._shown.pop(path).deleteLater()
+            shown = self._shown[path] = motion.Smooth(self.table.viewport())  # the picture fades in over its place
+            shown.changed.connect(lambda _, path=path: self._repaint_row(path))
+            shown.go(1.0, motion.NORMAL)
         self.model.changed(path)
 
     def _prune_thumbnails(self) -> None:
@@ -904,7 +1167,25 @@ class HomePage(QWidget):
 
     def _search(self, text: str) -> None:
         self.proxy.set_text(text)
+        self._repoint()  # the rows moved under a pointer that rests on the list
         self.inside.show_for(text)
+        self._sync_nothing()
+
+    def _nothing_to_show(self) -> tuple[str, str, str]:
+        """The picture, the title and the words of a list with no files, by what the list is."""
+        if self.scope == "starred":
+            return "star", tr("Nothing here yet."), tr("Click the star beside a file to keep it here.")
+        if self.scope.startswith("tag:"):
+            return "tag", tr("Nothing here yet."), tr("Tag a file from its row, and it is listed here.")
+        if self.scope.startswith("folder:"):
+            return "folder-simple", tr("Nothing here yet."), tr("This folder has no PDF files.")
+        return "files", tr("No files yet"), tr("Files you open will appear here. Open one, or drop PDFs on the window.")
+
+    def _sync_nothing(self) -> None:
+        """Say so when files are listed but the search matches none of them."""
+        self.nothing.glyph.setVisible(not self.inside.isVisibleTo(self))  # those results are the answer: no picture
+        self.nothing.setGeometry(self.table.viewport().rect())
+        self.nothing.setVisible(bool(self.model.entries) and not self.proxy.rowCount())
 
     def set_indexer(self, indexer) -> None:
         """Search inside the documents too, with the app's index."""
@@ -916,6 +1197,63 @@ class HomePage(QWidget):
     def _on_indexed(self, _path: str) -> None:
         if self.inside.query and self.isVisible():
             self.inside.show_for(self.search.text())  # a file just read may hold the words
+
+    # Under the pointer --------------------------------------------------------
+
+    def row_light(self, path: Path) -> float:
+        """How lit the row of `path` is, 0 to 1: it comes up as the pointer reaches it and goes down as it leaves."""
+        glow = self._lit.get(str(path))
+        return glow.value if glow is not None else 0.0
+
+    def row_pressed(self, path: Path) -> bool:
+        """Whether the row of `path` is under a pressed mouse button."""
+        return self._pressed == str(path)
+
+    def star_size(self, path: Path) -> float:
+        """How big the star of `path` is, as a share of its size: a star just clicked grows into its new look."""
+        grown = self._grown.get(str(path))
+        return grown.value if grown is not None else 1.0
+
+    def thumb_shown(self, path: Path) -> float:
+        """How far the picture of `path`'s first page has come in over its placeholder, 0 to 1."""
+        shown = self._shown.get(str(path))
+        return shown.value if shown is not None else 1.0
+
+    def _repaint_rows(self, *_) -> None:
+        self.table.viewport().update()
+
+    def _repaint_row(self, path: str) -> None:
+        """Paint again only the row of `path`, as its light, its star or its picture changes: a list of many rows
+        is not painted whole on every step."""
+        source = self._source_rows.get(path)
+        row = self.proxy.mapFromSource(self.model.index(source, 0)).row() if source is not None else -1
+        if row < 0:
+            self._repaint_rows()
+            return
+        viewport = self.table.viewport()
+        viewport.update(0, self.table.rowViewportPosition(row), viewport.width(), ROW_HEIGHT)
+
+    def _point(self, at: QPoint | None) -> None:
+        """The row at `at` lights up and the one before it fades; a row is a thing to click, so it shows a hand."""
+        row = self.table.rowAt(at.y()) if at is not None else -1
+        path = str(self._entry(self.proxy.index(row, NAME)).path) if row >= 0 else None
+        if path == self._pointed:
+            return
+        before, self._pointed = self._pointed, path
+        if bool(before) != bool(path):
+            self.table.viewport().setCursor(Qt.CursorShape.PointingHandCursor if path else Qt.CursorShape.ArrowCursor)
+        if before in self._lit:
+            self._lit[before].go(0.0, motion.NORMAL)  # it lingers a little as the pointer goes
+        if path is not None:
+            if path not in self._lit:
+                self._lit[path] = motion.Smooth(self.table.viewport())
+                self._lit[path].changed.connect(lambda _, path=path: self._repaint_row(path))
+            self._lit[path].go(1.0, motion.FAST)
+
+    def _repoint(self, *_) -> None:
+        """Find the row under the pointer again, for when the rows moved under it: a scroll, a new list."""
+        viewport = self.table.viewport()
+        self._point(viewport.mapFromGlobal(QCursor.pos()) if viewport.underMouse() else None)
 
     # Left column ------------------------------------------------------------
 
@@ -991,7 +1329,7 @@ class HomePage(QWidget):
         layout.addWidget(label)
         layout.addStretch()
         if icon_name:
-            button = IconButton(icon_name, tip, icon_size=14)
+            button = FadingButton(icon_name, tip, icon_size=14)
             button.clicked.connect(slot)
             layout.addWidget(button)
         return row
@@ -1005,11 +1343,18 @@ class HomePage(QWidget):
 
     def show_scope(self, key: str) -> None:
         self.close_nav()
+        changed = key != self.scope
         self.scope = key
-        self.refresh()
+        # The rows stay as they are, so the keyboard keeps its place; a click on the chosen one had unchecked it.
+        for button in self._nav_buttons:
+            button.setChecked(button.key == key)
+        self._list()
+        if changed:  # a new list arrives rather than swaps
+            motion.appear(self.table if self.table.isVisible() else self.empty, motion.RISE // 2, motion.NORMAL)
 
     def _folder_menu(self, folder: str) -> None:
         menu = QMenu(self)
+        motion.appear_on_show(menu, -motion.RISE)  # it drops out of the pointer
         menu.addAction(icon("folder-open"), tr("Show in Explorer"),
                        lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(folder)))
         menu.addAction(icon("x"), tr("Unpin"), lambda: self._unpin(folder))
@@ -1044,6 +1389,11 @@ class HomePage(QWidget):
         else:
             starred.append(str(path))
         self._settings.set("starred", starred)
+        if str(path) in self._grown:
+            self._grown.pop(str(path)).deleteLater()
+        grown = self._grown[str(path)] = motion.Smooth(self.table.viewport(), 0.5)
+        grown.changed.connect(lambda _, path=str(path): self._repaint_row(path))
+        grown.go(1.0, motion.NORMAL)
 
     def add_tag(self, path: Path) -> None:
         tags = self._settings.get("file_tags")
@@ -1068,6 +1418,7 @@ class HomePage(QWidget):
 
     def _file_menu(self, entry: FileEntry) -> None:
         menu = QMenu(self)
+        motion.appear_on_show(menu, -motion.RISE)
         menu.addAction(icon("file-pdf"), tr("Open"), lambda: self.file_requested.emit(entry.path))
         menu.addAction(icon("folder-open"), tr("Show in Explorer"),
                        lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(entry.path.parent))))
@@ -1077,6 +1428,7 @@ class HomePage(QWidget):
         menu.addAction(icon("tag"), tr("Add tag…"), lambda: self.add_tag(entry.path))
         if entry.tags:
             remove = menu.addMenu(icon("tag-simple"), tr("Remove tag"))
+            motion.appear_on_show(remove, -motion.RISE, motion.FAST)  # pointing at its entry opens it: it comes faster
             for name in entry.tags:
                 remove.addAction(tr(name), lambda n=name: self.remove_tag(entry.path, n))
         menu.addSeparator()
@@ -1086,11 +1438,27 @@ class HomePage(QWidget):
     # Fitting the window ---------------------------------------------------------
 
     def eventFilter(self, watched, event) -> bool:
-        if event.type() == QEvent.Type.Resize:
-            if watched is self.table.viewport():
+        kind = event.type()
+        if watched is self._viewport:
+            if not shiboken6.isValid(self.table):  # the page is going: events still come through
+                return False
+            if kind == QEvent.Type.Resize:
                 self._fit_columns()
-            elif watched is self.quick:
-                self._fit_cards()
+                self.nothing.setGeometry(self._viewport.rect())
+            elif kind == QEvent.Type.MouseMove:
+                self._point(event.position().toPoint())
+            elif kind == QEvent.Type.MouseButtonPress:
+                self._point(event.position().toPoint())
+                # Only the left button clicks a row, so only it presses one.
+                self._pressed = self._pointed if event.button() == Qt.MouseButton.LeftButton else None
+                self._repaint_rows()
+            elif kind == QEvent.Type.MouseButtonRelease:
+                self._pressed = None
+                self._repaint_rows()
+            elif kind == QEvent.Type.Leave:
+                self._point(None)
+        elif kind == QEvent.Type.Resize and watched is self.quick:
+            self._fit_cards()
         return super().eventFilter(watched, event)
 
     def _fit_columns(self) -> None:
@@ -1131,6 +1499,11 @@ class HomePage(QWidget):
         for card in self.cards:
             card.set_mode(mode)
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._tip = random.choice(TIPS)
+        self.tip.setText(native_keys(tr(self._tip)))
+
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self.aside.setVisible(self.width() >= ASIDE_FROM)
@@ -1167,6 +1540,8 @@ class HomePage(QWidget):
         self.scrim.raise_()
         self.nav.show()
         self.nav.raise_()
+        motion.appear(self.scrim, 0, motion.NORMAL)
+        motion.slide_in(self.nav, Qt.Edge.LeftEdge)
 
     def close_nav(self) -> None:
         """Close the left column when it is open over the files; in a wide page it stays."""

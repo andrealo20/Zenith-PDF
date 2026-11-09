@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import shiboken6
 from PySide6.QtCore import QLineF, QPointF, Qt
-from PySide6.QtGui import QColor, QPen
+from PySide6.QtGui import QPen
 from PySide6.QtWidgets import QApplication, QGraphicsLineItem
 
-from ..theme import themes
+from . import motion
+from .annotation_items import accent_on
 
 REACH_PX = 6  # how close, in screen pixels, an edge must come to snap
 Z_GUIDE = 20
@@ -23,7 +24,9 @@ class Snapper:
     def __init__(self, view):
         self.view = view
         self._content: dict[int, tuple[list, list]] = {}  # page -> (xs, ys) of its content, worked out once
-        self._guides: list[QGraphicsLineItem] = []
+        self._lines: dict[str, QGraphicsLineItem] = {}  # "x" the vertical guide and "y" the horizontal, kept once made
+        self._fades: dict[str, motion.Smooth] = {}  # how much of each shows: all of it while wanted, then it eases out
+        self._wanted: set[str] = set()  # the guides there are now
 
     # What is on ---------------------------------------------------------
 
@@ -36,6 +39,11 @@ class Snapper:
         if QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier:
             return False
         return self._pref("snap_annotations") or self._pref("snap_content")
+
+    @property
+    def _guides(self) -> list[QGraphicsLineItem]:
+        """The guide lines showing now."""
+        return [self._lines[axis] for axis in self._wanted if axis in self._lines]
 
     def forget(self) -> None:
         """The pages changed: their content is measured again when needed."""
@@ -115,22 +123,52 @@ class Snapper:
     # Guides ----------------------------------------------------------------
 
     def _show(self, page: int, x: float | None, y: float | None) -> None:
-        self.hide()
         if not 0 <= page < len(self.view._pages):
+            self.hide()
             return
         item = self.view._pages[page]
         width, height = item.rect.width(), item.rect.height()
-        for line in ([QLineF(x, 0, x, height)] if x is not None else []) + (
-                [QLineF(0, y, width, y)] if y is not None else []):
-            guide = QGraphicsLineItem(line, item)
-            pen = QPen(QColor(themes.current.accent), 1, Qt.PenStyle.DashLine)
-            pen.setCosmetic(True)
-            guide.setPen(pen)
+        for axis, line in (("x", QLineF(x, 0, x, height) if x is not None else None),
+                           ("y", QLineF(0, y, width, y) if y is not None else None)):
+            if line is None:
+                self._leave(axis)
+            else:
+                self._guide(axis, item).setLine(line)
+                self._wanted.add(axis)
+
+    def _guide(self, axis: str, page_item) -> QGraphicsLineItem:
+        """The guide of `axis` on `page_item`, at full strength: made when first wanted (one pair is moved about from
+        then on, not built again at every step of a drag), brought to another page, or back from fading out."""
+        guide = self._lines.get(axis)
+        if guide is None or not shiboken6.isValid(guide):  # a reload may have deleted it with the pages
+            guide = self._lines[axis] = QGraphicsLineItem(page_item)
             guide.setZValue(Z_GUIDE)
-            self._guides.append(guide)
+            if axis not in self._fades:
+                self._fades[axis] = motion.Smooth(self.view, 1.0)
+                self._fades[axis].changed.connect(lambda value, axis=axis: self._faded(axis, value))
+        elif guide.parentItem() is not page_item:
+            guide.setParentItem(page_item)
+        accent = accent_on(page_item)
+        if guide.pen().color() != accent:
+            pen = QPen(accent, 1, Qt.PenStyle.DashLine)
+            pen.setCosmetic(True)  # a hairline, at any zoom
+            guide.setPen(pen)
+        self._fades[axis].set(1.0)
+        return guide
+
+    def _leave(self, axis: str) -> None:
+        """The guide is not wanted any more: it eases out over FAST rather than blinking off, which also keeps one
+        from flickering where the pointer hovers on the edge of snapping."""
+        if axis in self._wanted:
+            self._wanted.discard(axis)
+            self._fades[axis].go(0.0, motion.FAST, motion.EASE_IN)
+
+    def _faded(self, axis: str, strength: float) -> None:
+        guide = self._lines.get(axis)
+        if guide is not None and shiboken6.isValid(guide):
+            guide.setOpacity(strength)
+            guide.setVisible(strength > 0.0)
 
     def hide(self) -> None:
-        for guide in self._guides:
-            if shiboken6.isValid(guide) and guide.scene() is not None:  # a reload may have deleted it
-                guide.scene().removeItem(guide)
-        self._guides = []
+        for axis in list(self._wanted):
+            self._leave(axis)

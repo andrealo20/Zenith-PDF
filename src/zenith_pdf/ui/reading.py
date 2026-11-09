@@ -21,6 +21,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 from shiboken6 import isValid
 
 from ..core.i18n import tr
+from . import motion
 from .help import close_help_card
 from .widgets import Fade, FloatingBar, IconButton
 
@@ -115,6 +116,7 @@ class ReadingMode(QObject):
             self._hide(workspace)
         self._workspace = None
         window.top_bar.show()
+        motion.appear(window.top_bar, -motion.RISE)  # it comes back down, as the bars of the canvas fade in
         if self._window_state is not None and window.isFullScreen():
             window.set_full_screen(False, self._window_state)
         self._window_state = None

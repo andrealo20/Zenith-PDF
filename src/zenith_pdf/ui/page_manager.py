@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import (
@@ -22,8 +23,11 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QListView, QStyle, QStyledIte
 
 from ..core.i18n import tr
 from ..core.render import RenderPool
-from ..theme import themes
-from .widgets import IconButton, muted_label, separator
+from ..icons import readable
+from ..theme import outline, themes
+from . import motion
+from .side_panel import CLEAR, Arrivals, FadingButton, RowFades
+from .widgets import muted_label, separator
 
 if TYPE_CHECKING:
     from .workspace import Workspace
@@ -31,6 +35,17 @@ if TYPE_CHECKING:
 THUMB = 170  # longest side, in logical pixels
 CELL = QSize(THUMB + 40, THUMB + 48)
 ROWS_MIME = "application/x-zenith-pdf-page-rows"
+ARRIVAL_ROLE = Qt.ItemDataRole.UserRole + 1  # how far a page that has just been drawn has faded in, 0 to 1
+TINT = 0.12  # the share of its ring's opacity that a page's card takes, behind it
+
+
+@lru_cache(maxsize=16)
+def _chosen_label(canvas: str, ring: str, accent: str, text: str) -> str:
+    """The accent as the number under a chosen page. On its card (the ring's colour, TINT of it, over the canvas) the
+    accent falls short of 4.5:1 in the light themes (3:1 in Zenith's), so it moves toward the text until it reads."""
+    colour = QColor(accent)
+    return readable((colour.redF(), colour.greenF(), colour.blueF()),
+                    motion.mixed(QColor(canvas), QColor(ring), TINT).name(), text, 4.5)
 
 
 class PageManagerModel(QAbstractListModel):
@@ -43,6 +58,8 @@ class PageManagerModel(QAbstractListModel):
         self._ratio = ratio
         self._token = object()
         self._pixmaps: dict[int, QPixmap] = {}
+        self._arrivals = Arrivals(self)  # a page drawn fades in, rather than appearing
+        self._arrivals.changed.connect(self._arrived)
         renderer.rendered.connect(self._on_rendered)
 
     @property
@@ -55,6 +72,7 @@ class PageManagerModel(QAbstractListModel):
         self._renderer.discard(lambda key: isinstance(key, tuple) and key[0] is token)
         self._token = object()
         self._pixmaps.clear()
+        self._arrivals.clear()
         self.endResetModel()
 
     def rowCount(self, parent=QModelIndex()) -> int:
@@ -79,7 +97,14 @@ class PageManagerModel(QAbstractListModel):
                 scale = width * self._ratio / self._document.page_size(row)[0]
                 self._renderer.request((self._token, row), self._document, row, scale, (3, row))
             return self._pixmaps.get(row)
+        if role == ARRIVAL_ROLE:
+            return self._arrivals.level(row)
         return None
+
+    def _arrived(self, row: int) -> None:
+        if row < self.rowCount():
+            index = self.index(row)
+            self.dataChanged.emit(index, index, [ARRIVAL_ROLE])
 
     def _on_rendered(self, key, scale, image) -> None:
         if isinstance(key, tuple) and key[0] is self._token:
@@ -88,6 +113,7 @@ class PageManagerModel(QAbstractListModel):
             self._pixmaps[key[1]] = pixmap
             index = self.index(key[1])
             self.dataChanged.emit(index, index, [Qt.ItemDataRole.DecorationRole])
+            self._arrivals.arrive(key[1])
 
     # Drag and drop: the model doesn't move rows itself; it reports the new order and
     # the workspace rebuilds the document (and with it this model) in that order.
@@ -129,9 +155,10 @@ class PageManagerModel(QAbstractListModel):
 
 
 class PageCellDelegate(QStyledItemDelegate):
-    def __init__(self, model: PageManagerModel, parent=None):
-        super().__init__(parent)
+    def __init__(self, model: PageManagerModel, view: QListView):
+        super().__init__(view)
         self._model = model
+        self._fades = RowFades(view)  # the ring and the card behind a page come and go gently
 
     def sizeHint(self, option, index) -> QSize:
         return CELL
@@ -148,16 +175,25 @@ class PageCellDelegate(QStyledItemDelegate):
         thumb = QRectF(cell.x() + (cell.width() - width) / 2, cell.y() + 12 + (THUMB - height) / 2, width, height)
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
-        if selected or hovered:
-            painter.setPen(QPen(QColor((t.focus or t.accent) if selected else t.text_muted),
-                                2.5 if selected else 1.5))
+        want = QColor(t.focus or t.accent) if selected else QColor(t.text_muted) if hovered else CLEAR
+        ring = self._fades.colour(index.row(), want)
+        if ring.alpha():
+            card = QColor(ring)
+            card.setAlphaF(ring.alphaF() * TINT)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(card)
+            painter.drawPath(outline(QRectF(cell).adjusted(6, 2, -6, -2), t.look.card, t.look))
+            painter.setPen(QPen(ring, 2.5 if selected else 1.5))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(thumb.adjusted(-5, -5, 5, 5), t.look.item, t.look.item)
         painter.fillRect(thumb, Qt.GlobalColor.white)
         pixmap = index.data(Qt.ItemDataRole.DecorationRole)
         if pixmap is not None:
+            painter.setOpacity(index.data(ARRIVAL_ROLE))  # a page just drawn comes in from the blank one
             painter.drawPixmap(thumb, pixmap, QRectF(pixmap.rect()))
-        painter.setPen(QColor(t.accent if selected else t.text_muted))
+            painter.setOpacity(1.0)
+        painter.setPen(QColor(_chosen_label(t.canvas, t.focus or t.accent, t.accent, t.text) if selected
+                              else t.text_muted))
         label = QRect(cell.x(), cell.y() + 12 + THUMB + 6, cell.width(), 20)
         painter.drawText(label, Qt.AlignmentFlag.AlignCenter, index.data(Qt.ItemDataRole.DisplayRole))
         painter.restore()
@@ -224,13 +260,13 @@ class PageManager(QWidget):
             if icon_name is None:
                 bar.addWidget(separator())
                 continue
-            button = IconButton(icon_name, tip, help=help)
+            button = FadingButton(icon_name, tip, help=help)
             button.clicked.connect(slot)
             bar.addWidget(button)
             if needs:
                 self._needs_selection.append(button)
         bar.addWidget(separator())
-        done = IconButton("x", "Back to the document (Esc)", help="pm_close")
+        done = FadingButton("x", "Back to the document (Esc)", help="pm_close")
         done.clicked.connect(lambda: self.closed.emit(self.current_page()))
         bar.addWidget(done)
 

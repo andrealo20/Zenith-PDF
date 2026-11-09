@@ -7,12 +7,14 @@ another tool is picked, or the user closes it.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, Qt
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QRectF, Qt
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ..core.i18n import tr
 from ..core.platforms import WINDOWS, native_keys
 from ..theme import themes
+from . import motion
 from .tool_catalog import BY_KEY, base_of
 from .widgets import FloatingBar, IconButton, icon_pixmap
 
@@ -111,6 +113,23 @@ TOOL_TIPS: dict[str, tuple[str, ...]] = {
 }
 
 
+class _Bullet(QWidget):
+    """The mark before a tip: a small dot in the accent, level with the middle of the line the tip starts on, so a
+    tip that wraps hangs from it."""
+
+    def __init__(self, line: int):
+        super().__init__()
+        self.setFixedSize(6, line)
+        themes.changed.connect(self.update)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(themes.current.accent))
+        painter.drawEllipse(QRectF(1, self.height() / 2 - 2, 4, 4))
+
+
 class TipCard(FloatingBar):
     """The card itself: the tool's tips, Got it, and a way to turn tips off."""
 
@@ -162,19 +181,26 @@ class TipCard(FloatingBar):
         spec = BY_KEY.get(base_of(key))
         self.title.setText(tr(f"Tips: {spec.title if spec else key}"))
         while self._body.count():
-            item = self._body.takeAt(0)
-            if item.widget() is not None:
-                item.widget().hide()
-                item.widget().setParent(None)
-                item.widget().deleteLater()
+            widget = self._body.takeAt(0).widget()
+            if widget is not None:
+                widget.hide()
+                widget.setParent(None)
+                widget.deleteLater()
         self.lines = []
         for text in lines:
-            row = QLabel(f"•  {native_keys(tr(text))}")
-            row.setObjectName("TipText")
-            row.setWordWrap(True)
-            row.setTextFormat(Qt.TextFormat.PlainText)
+            label = QLabel(native_keys(tr(text)))
+            label.setObjectName("TipText")
+            label.setWordWrap(True)
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.ensurePolished()  # the line's height is the style sheet's font, not the default one
+            row = QWidget()
+            columns = QHBoxLayout(row)
+            columns.setContentsMargins(0, 0, 0, 0)
+            columns.setSpacing(8)
+            columns.addWidget(_Bullet(label.fontMetrics().height()), 0, Qt.AlignmentFlag.AlignTop)
+            columns.addWidget(label, 1)
             self._body.addWidget(row)
-            self.lines.append(row)
+            self.lines.append(label)
         self.layout().invalidate()
         self.layout().activate()
         self.setFixedHeight(self.layout().totalHeightForWidth(CARD_WIDTH))
@@ -234,6 +260,8 @@ class ToolTips(QObject):
         self._place()
         self.card.show()
         self.card.raise_()
+        # It comes out of the toolbar it hangs from, which is above it unless the toolbar is at the bottom.
+        self.card.appear(motion.RISE if getattr(workspace.toolbar, "side", "top") == "bottom" else -motion.RISE)
         return True
 
     def _place(self) -> None:

@@ -17,7 +17,7 @@ from ..core.annotations import TextMarkup
 from ..core.i18n import tr
 from ..icons import icon
 from ..theme import themes
-from . import clipboard
+from . import clipboard, motion
 from .help import explain_menu
 from .tool_menu import SelectionMenu, selection_options
 from .widgets import FloatingBar, IconButton, separator
@@ -116,6 +116,7 @@ class SelectionBar(FloatingBar):
     def _menu(self, entries, parent=None) -> QMenu:
         """A menu of (icon, text, slot) entries; a list in place of the slot is a submenu, None a line."""
         menu = QMenu(parent or self)
+        motion.appear_on_show(menu, -motion.RISE, motion.FAST if parent else motion.NORMAL)  # hangs from its button
         for entry in entries:
             if entry is None:
                 menu.addSeparator()
@@ -193,6 +194,12 @@ class SelectionBar(FloatingBar):
 
     def _sync_paste(self) -> None:
         self._action("Paste").setEnabled(clipboard.has_annotations() and not self._workspace.document.read_only)
+
+    def setVisible(self, visible: bool) -> None:
+        rising = visible and not self.isVisible()
+        super().setVisible(visible)
+        if rising:  # as the selection comes, not each time the tab it is in is shown again
+            self.appear()
 
     def hideEvent(self, event) -> None:
         super().hideEvent(event)

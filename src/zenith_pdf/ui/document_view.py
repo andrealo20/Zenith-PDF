@@ -10,15 +10,17 @@ from __future__ import annotations
 
 import base64
 import bisect
+import math
 import subprocess
 import sys
 import tempfile
 import time
 from dataclasses import fields, replace
+from functools import lru_cache
 from pathlib import Path
 
+import shiboken6
 from PySide6.QtCore import (
-    QEasingCurve,
     QEvent,
     QEventLoop,
     QObject,
@@ -54,7 +56,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QGraphicsItem,
     QGraphicsPathItem,
-    QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsView,
     QMenu,
@@ -99,17 +100,24 @@ from ..theme import qcolor, themes
 from . import clipboard
 from . import annotation_items
 from . import messages
-from .annotation_items import Z_ANNOTATION, AnnotationItem, Handle, hit_path, paint_annotation
+from . import motion
+from .annotation_items import SEPIA, Z_ANNOTATION, AnnotationItem, Handle, hit_path, page_accent, paint_annotation
 from .commands import AddAnnotations, ChangeAnnotations, RemoveAnnotations, ReorderAnnotations
 from .history import NEAR, History, Spot
 from .text_editor import TextBoxEditor
 from .tiles import Tile, TileCache, cell_rect, paint_page, render_area, scale_key, tile_grid
 from .tool_catalog import base_of, toolbar_keys
 from .tools import IMAGE_SIZES, MarkupTool, Tool, ToolSettings, alive, make_tools, remove_item
+from .widgets import shadow_colour
 
 PAGE_GAP = 14.0  # points between pages
 MARGIN = 28.0  # points around the column of pages
 SHADOW = 8.0  # points reserved around a page for its shadow
+# A page's shadow falls off over these bands, a pixel wide each, from its edge out: each one's share of the strongest.
+SHADOW_BANDS = (1.0, 0.72, 0.46, 0.26, 0.12, 0.04)
+SHADOW_LIFT = 1  # pixels a "soft" shadow falls below the page: the light comes from above
+SHADOW_SHARE = {"soft": 1.5, "glow": 0.65}  # the strongest alpha, as a share of the palette's shadow alpha
+SHADOW_MOST = 0.5  # and never more than this
 # Mouse-wheel zoom moves along these levels, so the next level up and down is
 # known in advance and can be rendered before the user asks for it.
 ZOOM_LADDER = (
@@ -120,7 +128,7 @@ ZOOM_MIN, ZOOM_MAX = ZOOM_LADDER[0], ZOOM_LADDER[-1]
 BASE_ZOOM = 0.5  # quality of the whole-page fallback shown while tiles arrive
 SPECULATIVE_TILES = 96  # cap on tiles rendered ahead for the neighbouring zoom levels
 ZOOM_SETTLE_MS = 30  # continuous (touchpad) zoom renders once it pauses this long
-ZOOM_GLIDE_MS = 180  # a wheel notch or a zoom key glides to the next level in this time
+ZOOM_GLIDE_MS = motion.NORMAL  # a wheel notch or a zoom key glides to the next level in this time
 FOLLOWUP_MS = 30  # quiet time after results before rendering ahead of the user
 VIEW_ONLY_TOOLS = ("select", "hand", "lasso", "laser", "snapshot")
 # Lines over the pages, on screen only, to write or draw straight: their kind, and the distance between them.
@@ -203,8 +211,52 @@ def levels_to_prepare(zoom: float, last_direction: int) -> list[float]:
 
 LAYOUTS = {"single": "Single page", "double": "Two pages", "cover": "Two pages, cover alone"}
 TINTS = {"normal": "Normal", "dark": "Dark (inverted)", "sepia": "Sepia"}
-SEPIA = QColor(244, 233, 210)
-TEXT_SELECTION = QColor(51, 115, 255, 77)  # over selected text, as a drag with Select shows it
+SELECTION_ALPHA = {False: 77, True: 100}  # 0-255 of the accent over selected text, on a page, and on an inverted one
+SEARCH_ROUND = 2.0  # points: the corners of what a search found
+
+
+@lru_cache(maxsize=32)
+def frame_picture(reach: int, edge: int, kind: str, shadow: int, line: int) -> tuple[QPixmap, int, int]:
+    """What surrounds a page, as a picture to be cut in nine (PageItem.paint_frame), made on a page one pixel across:
+    the shadow it casts, `reach` device pixels out from the page in the falling strength of SHADOW_BANDS, in the colour
+    `shadow` (an rgba); `kind` is the look's "soft", which falls a little below the page, or "glow". Over it the
+    hairline edge, `edge` pixels wide, in the colour `line`. Returns the picture, the pixels the shadow falls below the
+    page, and the margin it has all round. Made once for a zoom."""
+    lift = round(SHADOW_LIFT * reach / len(SHADOW_BANDS)) if kind == "soft" else 0
+    margin = max(reach, edge)
+    picture = QPixmap(2 * margin + 1, 2 * margin + 1)
+    picture.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(picture)
+    painter.setPen(Qt.PenStyle.NoPen)
+    page = QRect(margin, margin - lift, 1, 1)  # in the middle, a little above what casts the shadow
+
+    def ring(inner: QRect, outer: QRect, colour: QColor) -> None:
+        path = QPainterPath()
+        path.addRect(QRectF(outer))
+        path.addRect(QRectF(inner))
+        painter.fillPath(path, colour)
+
+    if reach:
+        colour = QColor.fromRgba(shadow)
+        strongest = min(colour.alphaF() * SHADOW_SHARE[kind], SHADOW_MOST)
+        profile = (*SHADOW_BANDS, 0.0)
+
+        def tone(pixel: int) -> QColor:  # the shadow `pixel` pixels out from what casts it
+            place = max((pixel + 0.5) * len(SHADOW_BANDS) / reach - 0.5, 0.0)  # in bands, from the first one's middle
+            band, between = int(place), place - int(place)
+            result = QColor(colour)
+            result.setAlphaF(strongest * (profile[band] + (profile[band + 1] - profile[band]) * between))
+            return result
+
+        cast = page.translated(0, lift)
+        painter.fillRect(cast, tone(0))
+        for pixel in range(reach):
+            ring(cast.adjusted(-pixel, -pixel, pixel, pixel),
+                 cast.adjusted(-pixel - 1, -pixel - 1, pixel + 1, pixel + 1), tone(pixel))
+    if edge:
+        ring(page, page.adjusted(-edge, -edge, edge, edge), QColor.fromRgba(line))
+    painter.end()
+    return picture, lift, margin
 
 
 class PageItem(QGraphicsItem):
@@ -216,6 +268,7 @@ class PageItem(QGraphicsItem):
         self.tint = tint
         self.overlay = "none"  # OVERLAYS
         self.base: QPixmap | None = None
+        self.reveal = 1.0  # how far its content has come out of the white of the paper, 0 to 1
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemUsesExtendedStyleOption)
 
     def boundingRect(self) -> QRectF:
@@ -225,24 +278,55 @@ class PageItem(QGraphicsItem):
         self.base = pixmap
         self.update()
 
+    def paint_frame(self, painter: QPainter, theme) -> None:
+        """What surrounds the page: the shadow it casts, or in a style that glows its glow, and its hairline edge,
+        drawn as eight pieces of one small picture in device pixels. A piece costs a blit; bands of rectangles would
+        cost a row of the page's height each, at every frame of a scroll."""
+        device = painter.deviceTransform()
+        ratio = painter.device().devicePixelRatioF()
+        bands = len(SHADOW_BANDS)
+        kind = theme.look.shadow if theme.look.shadow in SHADOW_SHARE else ""
+        # A logical pixel for each of its bands, and no more than boundingRect has room for.
+        room = int(SHADOW * abs(device.m11()) * bands / (bands + SHADOW_LIFT))
+        reach = min(round(bands * ratio), room) if kind else 0
+        line = qcolor(theme.page_edge) if theme.page_edge else QColor(0, 0, 0, 0)
+        edge = max(1, round(ratio)) if line.alpha() else 0  # a logical pixel
+        if reach < 1 and not edge:
+            return
+        picture, lift, margin = frame_picture(reach, edge, kind if reach else "",
+                                              shadow_colour(theme).rgba() if reach else 0, line.rgba())
+        # The page's edges as Qt rounds the fill of its white (halves up, where round() goes to even), in device
+        # pixels; then in the painter's own units.
+        box = device.mapRect(self.rect)
+        origin = device.map(QPointF(0, 0)) - painter.worldTransform().map(QPointF(0, 0)) * ratio
+        left, top = math.floor(box.left() + 0.5) - origin.x(), math.floor(box.top() + 0.5) - origin.y()
+        right, bottom = math.floor(box.right() + 0.5) - origin.x(), math.floor(box.bottom() + 0.5) - origin.y()
+        above, below = margin - lift, margin + lift
+        xs, ys = (left - margin, left, right, right + margin), (top - above, top, bottom, bottom + below)
+        cuts, rows = (0, margin, margin + 1, 2 * margin + 1), (0, above, above + 1, 2 * margin + 1)
+        painter.save()
+        painter.setWorldTransform(QTransform.fromScale(1 / ratio, 1 / ratio))
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        for row in range(3):
+            for column in range(3):
+                if (row, column) != (1, 1) and xs[column + 1] > xs[column] and ys[row + 1] > ys[row]:
+                    painter.drawPixmap(
+                        QRectF(xs[column], ys[row], xs[column + 1] - xs[column], ys[row + 1] - ys[row]), picture,
+                        QRectF(cuts[column], rows[row], cuts[column + 1] - cuts[column], rows[row + 1] - rows[row]))
+        painter.restore()
+
     def paint(self, painter: QPainter, option, widget=None) -> None:
-        # One device pixel in points, capped so the shadow stays inside boundingRect.
-        step = min(1.0 / max(painter.worldTransform().m11(), 1e-6), SHADOW / 4)
-        painter.setPen(Qt.PenStyle.NoPen)
-        t = themes.current
-        if t.look.shadow == "soft":  # flat and glowing styles lift the page by its edge alone
-            for spread, alpha in ((3, 14), (2, 24), (1, 40)):
-                painter.setBrush(QColor(0, 0, 0, alpha))
-                d = spread * step
-                painter.drawRect(self.rect.adjusted(-d, -d + step, d, d + step))
-        if t.page_edge:
-            painter.setBrush(qcolor(t.page_edge))
-            painter.drawRect(self.rect.adjusted(-step, -step, step, step))
+        self.paint_frame(painter, themes.current)
         painter.fillRect(self.rect, Qt.GlobalColor.white)
         exposed = option.exposedRect.intersected(self.rect)
         if exposed.isEmpty():
             return
+        painter.save()
+        painter.setClipRect(self.rect, Qt.ClipOperation.IntersectClip)  # a tile's last pixel may reach past the white
+        if self.reveal < 1.0:
+            painter.setOpacity(painter.opacity() * self.reveal)
         paint_page(painter, self.index, self.rect, exposed, self.cache, self.base)
+        painter.restore()
         # Page tints are applied on screen, so switching them never re-renders.
         # Annotations are child items, painted after this, so they keep their colours.
         if self.tint == "dark":
@@ -342,7 +426,7 @@ class DocumentView(QGraphicsView):
         self._zoom_direction = 0  # +1 after zooming in, -1 after zooming out
         self.glide = QVariantAnimation(self)
         self.glide.setDuration(ZOOM_GLIDE_MS)
-        self.glide.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.glide.setEasingCurve(motion.EASE_OUT)
         self._glide_anchor: QPointF | None = None
         self.glide.valueChanged.connect(lambda zoom: self._apply_zoom(zoom, self._glide_anchor))
         self.glide.finished.connect(lambda: self._schedule_renders(0))
@@ -352,8 +436,12 @@ class DocumentView(QGraphicsView):
         self.annotations_shown = True
         self.overlay = "none"  # OVERLAYS, over every page
         self._current = 0
-        self._hit_items: dict[SearchHit, list[QGraphicsRectItem]] = {}
+        self._hit_items: dict[SearchHit, list[QGraphicsPathItem]] = {}
         self._focused_hit: SearchHit | None = None
+        self._entered: set[int] = set()  # the pages whose content has come in once: it fades in only that first time
+        self._hot: AnnotationItem | None = None  # the annotation the pointer is on, marked as what a click picks
+        self._glow = motion.Smooth(self)  # how far that mark has come
+        self._glow.changed.connect(self._glowed)
         self._items: dict[str, AnnotationItem] = {}
         self._tools = make_tools(self)
         from .form_layer import FormLayer
@@ -502,6 +590,8 @@ class DocumentView(QGraphicsView):
         self.setBackgroundBrush(QColor(theme.canvas))
         if getattr(self, "forms", None) is not None:
             self.forms.recolour()
+        self._recolour_selected()
+        self._tint_text_selection()
 
     def drawBackground(self, painter: QPainter, rect: QRectF) -> None:
         if self._canvas is None:
@@ -538,6 +628,7 @@ class DocumentView(QGraphicsView):
         self._dispose_editors()
         self.clear_text_selection()
         self._leave_link()
+        self._mark(None)
         self.release_hold()  # a point held in place belongs to the pages before
         self.stop_tools()  # nothing may hold on to an item of the scene about to be cleared
         self.snapper.forget()  # the pages' content is measured again for snapping
@@ -589,6 +680,9 @@ class DocumentView(QGraphicsView):
         for page in self._pages:
             page.tint = tint
             page.update()
+        self.forms.recolour()  # the fields are lit in the accent as the page's tint wants it
+        self._recolour_selected()
+        self._tint_text_selection()
 
     # Zoom ---------------------------------------------------------------
 
@@ -611,6 +705,9 @@ class DocumentView(QGraphicsView):
         """Zoom to `zoom` over a few frames, the point under `anchor` staying put. Another step while it glides
         goes on from the level it was heading for (zoom_target)."""
         zoom = min(max(zoom, ZOOM_MIN), ZOOM_MAX)
+        if not motion.enabled():
+            self.set_zoom(zoom, anchor)
+            return
         if self._zoom_refused(zoom, False):
             return
         self._leave_link()
@@ -635,6 +732,7 @@ class DocumentView(QGraphicsView):
     def _apply_zoom(self, zoom: float, anchor: QPointF | None = None, fit: str | None = None) -> None:
         self._fit = fit
         self._leave_link()
+        self._mark(None)  # the pages moved under the pointer
         if abs(zoom - self._zoom) > 1e-6:
             self._zoom_direction = 1 if zoom > self._zoom else -1
         anchor_px = (anchor or QPointF(self.viewport().rect().center())).toPoint()
@@ -898,6 +996,10 @@ class DocumentView(QGraphicsView):
         self._scroll_to(self._pages[page].y() + spot.y, self.top_inset)
         self._on_scrolled()  # the current page, as scrolling there sets it
 
+    def scrollContentsBy(self, dx: int, dy: int) -> None:
+        self._mark(None)  # the pages moved under the pointer: what it is on is not known until it moves again
+        super().scrollContentsBy(dx, dy)
+
     def _on_scrolled(self) -> None:
         self._leave_link()
         self._schedule_renders(0)
@@ -947,6 +1049,7 @@ class DocumentView(QGraphicsView):
         name = base_of(key)
         self.stop_format_painter()  # another tool puts the brush down: its first press must not go to the painter
         self._leave_link()
+        self._mark(None)
         if self._active is not None:
             self._active.cancel()
             self._active = self._active_page = None
@@ -975,6 +1078,7 @@ class DocumentView(QGraphicsView):
         if on == self.reading:
             return
         self._leave_link()
+        self._mark(None)
         if on:
             self.finish_text_edit()  # typed text is kept, not left half done
             self.stop_format_painter()
@@ -1114,6 +1218,7 @@ class DocumentView(QGraphicsView):
         page, pos = self._page_at(event.position())
         if page is not None and tool.press(page, pos, event):
             self._active, self._active_page = tool, page
+            self._tint_text_selection()
             event.accept()
             return
         if tool.name == "select":
@@ -1147,6 +1252,7 @@ class DocumentView(QGraphicsView):
     def leaveEvent(self, event) -> None:
         self._mouse = None
         self._leave_link()
+        self._mark(None)
         super().leaveEvent(event)
 
     def hideEvent(self, event) -> None:
@@ -1204,16 +1310,36 @@ class DocumentView(QGraphicsView):
         self._commit_moves()
 
     def _update_hover_cursor(self, view_pos: QPointF) -> None:
+        self._mark(self._hover_cursor(view_pos))
+
+    def _mark(self, item: AnnotationItem | None) -> None:
+        """Mark the annotation the pointer is on as what a click would pick (None: nothing is). The mark eases in
+        over FAST and goes at once, so crossing a row of them leaves one marked, never two."""
+        if item is self._hot:
+            return
+        old, self._hot = self._hot, item
+        self._glow.set(0.0)
+        if old is not None and shiboken6.isValid(old):
+            old.set_hover(0.0)
+        if item is not None:
+            self._glow.go(1.0, motion.FAST)
+
+    def _glowed(self, amount: float) -> None:
+        if self._hot is not None and shiboken6.isValid(self._hot):
+            self._hot.set_hover(amount)
+
+    def _hover_cursor(self, view_pos: QPointF) -> AnnotationItem | None:
+        """Set the cursor for what the pointer is on. Returns the annotation it is on, when a click would pick it."""
         if self.reading:
             self._reading_hover(view_pos)
-            return
+            return None
         if self.tool_settings.tool != "select" or self._space_down:
             self._leave_link()
-            return
+            return None
         if self._over_editor(view_pos)[1]:
             self._leave_link()
             self._set_cursor(Qt.CursorShape.IBeamCursor)
-            return
+            return None
         target = self._link_target(view_pos)
         if target is not None:
             self._set_cursor(Qt.CursorShape.PointingHandCursor)
@@ -1222,22 +1348,24 @@ class DocumentView(QGraphicsView):
                 QToolTip.hideText()
                 self._on_link = True
                 self.link_hovered.emit(int(value), point, view_pos.toPoint())
-                return
+                return None
             self._leave_link()
             tip = value if kind == "uri" else f"Go to page {value + 1}"
             if QToolTip.text() != tip:
                 QToolTip.showText(self.viewport().mapToGlobal(view_pos.toPoint()), tip, self.viewport())
-            return
+            return None
         self._leave_link()
         QToolTip.hideText()
         item = self._annotation_item_at(view_pos)
         if item is not None:
             movable = item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable
             self._set_cursor(Qt.CursorShape.SizeAllCursor if movable else Qt.CursorShape.PointingHandCursor)
-            return
+            on_field = bool(self.forms.items) and self.forms.item_at(view_pos) is not None
+            return None if on_field else item  # a press on a field fills it in, whatever lies over it
         page, pos = self._page_at(view_pos)
         over_text = page is not None and self.document.char_at(page.index, (pos.x(), pos.y())) >= 0
         self._set_cursor(Qt.CursorShape.IBeamCursor if over_text else Qt.CursorShape.ArrowCursor)
+        return None
 
     def _reading_hover(self, view_pos: QPointF) -> None:
         """Reading mode: the open hand, or a pointing hand over a link with a tooltip of where it goes. No card
@@ -1824,6 +1952,7 @@ class DocumentView(QGraphicsView):
         record = None
         if saved:  # pick one; with none saved yet, the dialog for a new one opens at once
             menu = QMenu(self)
+            motion.appear_on_show(menu)
             for record in saved:
                 menu.addAction(signature_icon(record), record["name"]).setData(record)
             menu.addSeparator()
@@ -1962,11 +2091,15 @@ class DocumentView(QGraphicsView):
 
     def _remove_item(self, annotation: Annotation) -> None:
         item = self._items.pop(annotation.id)
+        if item is self._hot:
+            self._mark(None)
         item.setSelected(False)
         self.scene().removeItem(item)
 
     def _change_item(self, old: Annotation, new: Annotation) -> None:
         item = self._items[new.id]
+        if item is self._hot:
+            self._mark(None)  # it may have left the pointer, which rests where it was
         if old.page != new.page and 0 <= new.page < len(self._pages):  # moved to another page, or back
             item.setParentItem(self._pages[new.page])
         item.set_annotation(new)
@@ -2073,6 +2206,13 @@ class DocumentView(QGraphicsView):
         if grouped and not self.document.read_only:
             self.undo_stack.push(ChangeAnnotations(self.store, grouped, [replace(a, group="") for a in grouped],
                                                    "Ungroup"))
+
+    def _recolour_selected(self) -> None:
+        """What marks a selection is drawn in the accent as it reads on the page: again, for a new theme or tint."""
+        if self.scene() is not None:
+            for item in self.scene().selectedItems():
+                if isinstance(item, AnnotationItem):
+                    item.recolour()
 
     def selected_annotations(self) -> list[Annotation]:
         return [i.annotation for i in self.scene().selectedItems() if isinstance(i, AnnotationItem)]
@@ -2320,10 +2460,29 @@ class DocumentView(QGraphicsView):
 
     # Text selection -----------------------------------------------------
 
+    def selection_colour(self) -> QColor:
+        """What lies over selected text: the accent as it reads on the page, more of it on an inverted one."""
+        inverted = self.page_tint == "dark"
+        colour = page_accent(inverted, self.page_tint == "sepia")
+        colour.setAlpha(SELECTION_ALPHA[inverted])
+        return colour
+
+    def _tint_text_selection(self) -> None:
+        """The selection in the colour of the theme and the page now, and the text Select is being dragged over too:
+        it takes the colour the selection will keep from the first pixel."""
+        previews = [self._text_selection[3]] if self._text_selection is not None else []
+        select = self._tools.get("select")
+        if select is not None and self._active is select:
+            previews.append(select.preview)
+        for preview in previews:
+            if alive(preview):
+                preview.setBrush(QBrush(self.selection_colour()))
+
     def set_text_selection(self, page: int, rects, text: str, preview) -> None:
         if self._text_selection is not None:
             remove_item(self._text_selection[3])  # replaced: no "nothing selected" in between
         self._text_selection = (page, rects, text, preview)
+        self._tint_text_selection()
         self.text_selection_changed.emit(self.text_selection_rect())
 
     def clear_text_selection(self) -> None:
@@ -2351,7 +2510,6 @@ class DocumentView(QGraphicsView):
         preview = QGraphicsPathItem(self._pages[page])
         preview.setZValue(3)
         preview.setPen(Qt.PenStyle.NoPen)
-        preview.setBrush(QBrush(TEXT_SELECTION))
         path = QPainterPath()
         for rect in rects:
             path.addRect(QRectF(*rect))
@@ -2623,10 +2781,12 @@ class DocumentView(QGraphicsView):
         if not isinstance(key, tuple) or key[0] is not self._token:
             return
         if key[1] == "base":
+            self._bring_in(self._pages[key[2]])
             self._pages[key[2]].set_base(QPixmap.fromImage(image))
         elif key[1] == "tile":
             _, _, page, level, col, row = key
             item = self._pages[page]
+            self._bring_in(item)
             size = (item.rect.width(), item.rect.height())
             cell = cell_rect(size, scale, col, row)
             area = render_area(size, scale, cell)
@@ -2636,6 +2796,25 @@ class DocumentView(QGraphicsView):
             if not self._sharp_under(page, area, level):
                 item.update(area)
         self._followup_timer.start()
+
+    def _bring_in(self, page: PageItem) -> None:
+        """The first content a page gets comes out of the white of the paper over NORMAL, where it popped in. Only
+        that first time: a page drawn again (its layers changed, a form filled in) takes its new picture at once, as a
+        fade there would be a flash. It costs a scroll nothing: a finished page paints as it did."""
+        if page.index in self._entered:
+            return
+        self._entered.add(page.index)
+        page.reveal = 0.0
+        fade = motion.Smooth(self)
+        fade.changed.connect(lambda value: self._faded(page, fade, value))
+        fade.go(1.0, motion.NORMAL)
+
+    def _faded(self, page: PageItem, fade: motion.Smooth, value: float) -> None:
+        if shiboken6.isValid(page):  # a reload may have taken the page away
+            page.reveal = value
+            page.update(page.rect)
+        if value >= 1.0:
+            fade.deleteLater()
 
     def _sharp_under(self, page: int, area: QRectF, level: int) -> bool:
         """Whether a tile of another zoom level (`level`) landing on `area` of `page` changes nothing on screen:
@@ -2652,15 +2831,16 @@ class DocumentView(QGraphicsView):
     # Search highlights --------------------------------------------------
 
     def add_search_hit(self, hit: SearchHit) -> None:
-        page = self._pages[hit.page]
-        items = []
+        # One shape for the whole hit: the pieces of text it is made of overlap, and apart each would darken its edge.
+        path = QPainterPath()
+        path.setFillRule(Qt.FillRule.WindingFill)  # so that simplified() unites the pieces, and does not cut holes
         for x, y, w, h in hit.rects:
-            item = QGraphicsRectItem(x - 1, y - 1, w + 2, h + 2, page)
-            item.setPen(Qt.PenStyle.NoPen)
-            item.setBrush(QBrush(themes.current.search_hit))
-            item.setZValue(1)
-            items.append(item)
-        self._hit_items[hit] = items
+            path.addRoundedRect(QRectF(x - 1, y - 1, w + 2, h + 2), SEARCH_ROUND, SEARCH_ROUND)
+        item = QGraphicsPathItem(path.simplified(), self._pages[hit.page])
+        item.setPen(Qt.PenStyle.NoPen)
+        item.setBrush(QBrush(themes.current.search_hit))
+        item.setZValue(1)
+        self._hit_items[hit] = [item]
 
     def focus_search_hit(self, hit: SearchHit) -> None:
         for previous in self._hit_items.get(self._focused_hit, []):

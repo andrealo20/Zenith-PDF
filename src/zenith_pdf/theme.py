@@ -360,6 +360,12 @@ def qcolor(token: str) -> QColor:
     return QColor(token)
 
 
+def bar_radius(look: Look) -> float:
+    """The corners of a button on a floating bar: round, as the bar's ends, 4 px in from them; on a bar with
+    corners, its corners 4 px in."""
+    return 18 if look.capsules else max(look.panel - 4, 0)
+
+
 def _palette(t: Theme) -> QPalette:
     palette = QPalette()
     roles = {
@@ -406,7 +412,7 @@ def _style_sheet(t: Theme) -> str:
     danger_soft = f"rgba({red.red()}, {red.green()}, {red.blue()}, 34)"  # under a destructive button's pointer
     k = t.look
     button = 15 if k.pill_buttons else k.control  # round ends on a 30 px button; Qt squares a larger radius
-    bar = 18 if k.capsules else max(k.panel - 4, 0)  # buttons on a floating bar: its curve, 4 px in
+    bar = bar_radius(k)  # buttons on a floating bar: its curve, 4 px in
     row = max(k.card - 2, 0)  # the rows of panels, a little less round than the cards round them
     focus = t.focus or t.accent
     return _for_platform(f"""
@@ -454,6 +460,10 @@ def _style_sheet(t: Theme) -> str:
     #FloatingBar QToolButton:hover {{ background: {t.glass_hover}; }}
     #FloatingBar QToolButton:pressed {{ background: {t.glass_pressed}; }}
     #FloatingBar QToolButton:checked {{ background: {t.glass_checked}; }}
+    /* A plain icon button on a bar paints its hover and pressed fills itself, to fade them (widgets.IconButton). */
+    #FloatingBar QToolButton[fade="true"]:hover:!checked, #FloatingBar QToolButton[fade="true"]:pressed:!checked {{
+        background: transparent;
+    }}
     #FloatingBar QToolButton#DangerButton:hover {{ background: {danger_soft}; }}
     #FloatingBar QToolButton#BackChip {{
         background: {t.glass_hover}; border-radius: {min(14, bar)}px; padding: 5px 10px 5px 8px; font-weight: 600;
@@ -722,13 +732,16 @@ def tone_sheet(t: Theme) -> str:
     Only on what sits on the bar itself ("> "): a menu that opens from it, such as a tool's, is solid and keeps
     the app's colours. Without it a light bar gave the dark menu dark text."""
     bar = "#FloatingBar >"
-    round_ = 18 if t.look.capsules else max(t.look.panel - 4, 0)
+    round_ = bar_radius(t.look)
     return _for_platform(f"""
     {bar} QLabel, {bar} QLabel#Muted, {bar} QLabel#ToastText {{ color: {t.text}; }}
     {bar} QToolButton {{ color: {t.text}; }}
     {bar} QToolButton:hover {{ background: {t.glass_hover}; }}
     {bar} QToolButton:pressed {{ background: {t.glass_pressed}; }}
     {bar} QToolButton:checked {{ background: {t.glass_checked}; }}
+    {bar} QToolButton[fade="true"]:hover:!checked, {bar} QToolButton[fade="true"]:pressed:!checked {{
+        background: transparent;
+    }}
     {bar} QToolButton#BackChip {{
         background: {t.glass_hover}; border-radius: {min(14, round_)}px; padding: 5px 10px 5px 8px; font-weight: 600;
     }}

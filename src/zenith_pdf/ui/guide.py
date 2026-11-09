@@ -9,7 +9,7 @@ from __future__ import annotations
 import html
 import platform
 
-from PySide6.QtCore import QSize, Qt, QUrl
+from PySide6.QtCore import QEvent, QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QIcon, QTextDocument
 from PySide6.QtWidgets import (
     QApplication,
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -31,10 +32,14 @@ from ..core.platforms import MAC, SYSTEM_NAME, WINDOWS, mono_font, native_keys, 
 from ..core.releases import EARLIER, RELEASES
 from ..icons import icon
 from ..theme import themes
+from . import motion
 from .dialogs import SHORTCUTS
 from .help import TOPICS
 from .tool_catalog import CATALOG, GROUPS
 from .widgets import say_copied
+
+READING_WIDTH = 780  # px: the widest the guide's text runs; a wider window keeps it in the middle
+MARGIN = 40  # px round the text
 
 GROUP_INTROS = {
     "Free-form": "Draw by hand with the mouse, a pen or a finger.",
@@ -389,12 +394,30 @@ below copies the version of Zenith PDF and of the parts it is built on, which he
     ]
 
 
+class _Page(QTextBrowser):
+    """The guide's text, never wider than it reads well: in a wide window it stays in the middle of the room."""
+
+    placed = Signal(int)  # the room left on each side of the text
+
+    def event(self, event) -> bool:
+        if event.type() == QEvent.Type.Wheel:  # the margins are no viewport, which alone takes the wheel: scroll too
+            return self.viewportEvent(event)
+        return super().event(event)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        side = max((self.width() - self.verticalScrollBar().sizeHint().width() - READING_WIDTH - 2 * MARGIN) // 2, 0)
+        self.setViewportMargins(side, 0, side, 0)
+        self.placed.emit(side)
+
+
 class GuideWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("SettingsWindow")
         self.setWindowTitle(tr("Guide"))
         self.resize(1040, 740)
+        self._shown: str | None = None  # the chapter on the page
         nav = QFrame()
         nav.setObjectName("SettingsNav")
         nav.setFixedWidth(300)
@@ -416,11 +439,11 @@ class GuideWindow(QDialog):
         nav_layout.addWidget(title)
         nav_layout.addWidget(self.search)
         nav_layout.addWidget(self.list, 1)
-        self.text = QTextBrowser()
+        self.text = _Page()
         self.text.setObjectName("GuideText")
         self.text.setFrameShape(QFrame.Shape.NoFrame)
         self.text.setOpenExternalLinks(True)
-        self.text.document().setDocumentMargin(40)
+        self.text.document().setDocumentMargin(MARGIN)
         self.copy = QPushButton(tr("Copy version details"))
         self.copy.clicked.connect(self._copy_details)
         right = QVBoxLayout()
@@ -428,8 +451,11 @@ class GuideWindow(QDialog):
         right.setSpacing(0)
         right.addWidget(self.text, 1)
         self.bottom = QWidget()  # only under "Report a problem"; elsewhere the text reaches the bottom
+        self.bottom.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)  # its margins are no width
         bottom = QHBoxLayout(self.bottom)
-        bottom.setContentsMargins(40, 0, 40, 20)
+        bottom.setContentsMargins(MARGIN, 0, MARGIN, 20)
+        # Under the text, not the window: in a wide one the button keeps to the left edge of the text.
+        self.text.placed.connect(lambda side: bottom.setContentsMargins(MARGIN + side, 0, MARGIN + side, 20))
         bottom.addWidget(self.copy)
         bottom.addStretch()
         right.addWidget(self.bottom)
@@ -440,6 +466,14 @@ class GuideWindow(QDialog):
         layout.addLayout(right, 1)
         themes.changed.connect(self._build)
         self._build()
+
+    def showEvent(self, event) -> None:
+        opening = not event.spontaneous()
+        if opening:
+            self.setAttribute(Qt.WidgetAttribute.WA_Moved, False)  # the entrance's moves are no place of its own
+        super().showEvent(event)  # a dialog centres itself over its parent here, unless it has been moved
+        if opening:
+            motion.appear(self)  # after that: its first move would stop the centring
 
     def _style(self) -> str:
         t = themes.current
@@ -486,6 +520,9 @@ class GuideWindow(QDialog):
         key = item.data(Qt.ItemDataRole.UserRole)
         page = next(text for k, _, _, text in self.chapters if k == key)
         self.text.setHtml(f"<body>{tr(page)}</body>")
+        if key != self._shown:  # another chapter comes in; the same one drawn again (a new theme) doesn't
+            self._shown = key
+            motion.appear(self.text, motion.RISE // 2, motion.FAST)
         self.bottom.setVisible(key == "problem")
         self.copy.setText(tr("Copy version details"))  # a chapter shown again starts with nothing copied
         words = self.search.text().strip()
@@ -510,6 +547,7 @@ class GuideWindow(QDialog):
             self.list.setCurrentItem(None)
             self.list.blockSignals(False)
             self.bottom.hide()
+            self._shown = None
             self.text.setHtml(tr(f"<body><p class='muted'>No chapter mentions “{html.escape(text.strip())}”. "
                               "Try another word, or fewer words.</p></body>"))
         elif self.list.currentItem() is None or self.list.currentItem().isHidden():

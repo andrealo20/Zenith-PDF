@@ -19,7 +19,7 @@ import re
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 
-from PySide6.QtCore import QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QMouseEvent, QPainter, QPainterPath, QPen, QWheelEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -68,6 +68,7 @@ from ..core.annotations import (
 from ..icons import icon, readable
 from ..settings import DEFAULTS
 from ..theme import outline, qcolor as token_color, themes
+from . import motion
 from .annotation_items import paint_annotation
 from .help import explain_menu
 from .tool_catalog import ALWAYS, BY_KEY, DUPLICABLE, base_of, instance_title
@@ -111,7 +112,6 @@ EDGE = 12  # kept clear of the window's sides
 FLOOR = 16  # kept clear of the window's bottom
 THROTTLE_MS = 30  # a dragged slider applies at most this often
 SETTLE_MS = 150  # a selection changed by keys waits this long, so one change is one undo step
-SLIDE_MS = 120  # a pinned menu sliding under the next tool
 PREVIEW = QSize(BODY_WIDTH, 72)
 GLYPH = 22  # the tool's icon before its name
 TITLE_INDENT = 30  # where the name starts, and the subject under it
@@ -345,13 +345,14 @@ def _slider_rules(t) -> str:
         background: #ffffff; border: 1px solid rgba(0, 0, 0, 60);
     }}
     QSlider::handle:horizontal:hover {{ border: 1px solid rgba({accent.red()}, {accent.green()}, {accent.blue()}, 200); }}
-    QSlider[ring="true"]::handle:horizontal {{ width: 14px; height: 14px; border: 2px solid {t.accent}; }}
+    QSlider::handle:horizontal:pressed, QSlider[ring="true"]::handle:horizontal {{  /* held, or reached by the keys */
+        width: 14px; height: 14px; border: 2px solid {t.accent};
+    }}
     """
 
 
 def menu_style(t) -> str:
     """The menu's own rules, on top of the app's style sheet."""
-    danger = QColor(t.danger)
     k = t.look
     primary_ring = t.accent if k.key == "dot" else t.text  # off the main button's fill: Dot's is the text colour
     focus = t.focus or t.accent
@@ -366,14 +367,13 @@ def menu_style(t) -> str:
     QToolButton#MenuButton, QToolButton#MenuRemove {{
         border: 2px solid transparent; border-radius: {k.control}px; padding: 0; background: transparent;
     }}
-    QToolButton#MenuButton:hover {{ background: {t.hover}; }}
-    QToolButton#MenuButton:pressed {{ background: {t.pressed}; }}
-    QToolButton#MenuButton:checked {{ background: {t.selection}; }}
-    QToolButton#MenuRemove:hover {{ background: rgba({danger.red()}, {danger.green()}, {danger.blue()}, 34); }}
     QToolButton#MenuPencil {{
         border: 2px solid transparent; border-radius: {min(k.item, 11)}px; padding: 0; background: transparent;
     }}
-    QToolButton#MenuPencil:hover {{ background: {t.hover}; }}
+    /* Their fills under the pointer, a press and a choice are painted by the buttons (_MenuButton), to fade. */
+    QToolButton#MenuButton:hover, QToolButton#MenuButton:pressed, QToolButton#MenuButton:checked,
+    QToolButton#MenuRemove:hover, QToolButton#MenuRemove:pressed, QToolButton#MenuPencil:hover,
+    QToolButton#MenuPencil:pressed {{ background: transparent; }}
     QToolButton#MenuButton:focus, QToolButton#MenuRemove:focus, QToolButton#MenuPencil:focus {{
         border-color: {focus};
     }}
@@ -614,10 +614,12 @@ class Popover(QWidget):
         target = top_left - self.panel_origin()
         if self._slide is not None:
             self._slide.stop()
-        if animate and self.isVisible() and target != self.pos():
+            self._slide.deleteLater()  # one per move, or they pile up under the menu for as long as it is pinned
+            self._slide = None
+        if animate and motion.enabled() and self.isVisible() and target != self.pos():
             self._slide = QPropertyAnimation(self, b"pos", self)
-            self._slide.setDuration(SLIDE_MS)
-            self._slide.setEasingCurve(QEasingCurve.Type.OutCubic)
+            self._slide.setDuration(motion.NORMAL)
+            self._slide.setEasingCurve(motion.EASE_IN_OUT)  # from one place to another
             self._slide.setEndValue(target)
             self._slide.start()
         else:
@@ -675,6 +677,31 @@ def _font(widget: QWidget, points: float, weight: QFont.Weight = QFont.Weight.No
     return font
 
 
+class Levels:
+    """How far each cell of a control has come to a state, 0 to 1: a hover fading in and out, a ring of choice
+    settling. A cell is made when first asked about, at the state it has then, so nothing animates before it is seen.
+
+    A state comes in over FAST and goes over `leave`: NORMAL for a hover, which lingers a moment, FAST for a choice,
+    where the cell that gives way should not read as chosen beside the one that takes over."""
+
+    def __init__(self, owner: QWidget, leave: int = motion.NORMAL):
+        self._owner = owner
+        self._leave = leave
+        self._by: dict[int, motion.Smooth] = {}
+
+    def go(self, index: int, on: bool) -> None:
+        """Send cell `index` to on or off."""
+        smooth = self._by.get(index)
+        if smooth is None:
+            smooth = self._by[index] = motion.Smooth(self._owner, float(on))
+            smooth.changed.connect(self._owner.update)
+        smooth.go(1.0 if on else 0.0, motion.FAST if on else self._leave, motion.EASE_OUT if on else motion.EASE_IN)
+
+    def value(self, index: int) -> float:
+        smooth = self._by.get(index)
+        return smooth.value if smooth is not None else 0.0
+
+
 class Swatches(QWidget):
     """Round colour buttons in rows. The chosen one has a ring in the accent colour.
 
@@ -694,6 +721,10 @@ class Swatches(QWidget):
         self.spread = False  # the slots share the whole width, rather than sitting 32 px apart from the left
         self._hover = -1
         self._cursor = 0  # the slot the keys point at
+        self._hot = Levels(self)  # each slot's disc under the pointer
+        self._ring = Levels(self, motion.FAST)  # and its ring of choice
+        self._down = Levels(self)  # and how far a press has dipped it
+        self._pressed = -1  # the slot under the button that is held
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
@@ -746,29 +777,44 @@ class Swatches(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        chosen = self.selected_index()
-        index_of_colour = 0
+        chosen = self.chosen_slot()
         for i, (kind, value) in enumerate(self.slots()):
-            centre = self.slot_rect(i).center()
-            selected = False
-            if kind == "colour":
-                selected = index_of_colour == chosen
-                index_of_colour += 1
-            self.paint_slot(painter, i, kind, value, centre, selected)
+            # What each slot shows follows what is chosen and pointed at: the levels are sent from here, so every
+            # way the choice can change (a click, a key, a style loaded) gets its fade.
+            self._ring.go(i, i == chosen)
+            self._hot.go(i, i == self._hover and self.hoverable(i))
+            self._down.go(i, i == self._pressed and self.hoverable(i))
+            self.paint_slot(painter, i, kind, value, self.slot_rect(i).center(), i == chosen)
         if keyboard_focus(self) and 0 <= self._cursor < len(self.slots()):
             focus_ring(painter, self.slot_rect(self._cursor), themes.current.look.control)
 
-    def paint_slot(self, painter: QPainter, index: int, kind: str, value, centre: QPointF, selected: bool) -> None:
+    def hoverable(self, index: int) -> bool:
+        return True
+
+    def paint_halo(self, painter: QPainter, index: int, centre: QPointF) -> None:
+        """What goes round a slot: the disc the pointer brings, and the ring of the one chosen, which settles in
+        from a little further out as it comes and widens away as it goes."""
         t = themes.current
         radius = self.radius()
-        if index == self._hover and not selected:
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(token_color(t.hover))
+        painter.setPen(Qt.PenStyle.NoPen)
+        ring = self._ring.value(index)
+        disc = self._hot.value(index) * (1.0 - ring)  # the chosen one has its ring instead
+        if disc > 0.0:
+            fill = token_color(t.hover)
+            fill.setAlphaF(fill.alphaF() * disc)
+            painter.setBrush(fill)
             painter.drawEllipse(centre, radius + 3.5, radius + 3.5)
-        if selected:
-            painter.setPen(QPen(QColor(t.accent), 2.0))
+        if ring > 0.0:
+            colour = QColor(t.accent)
+            colour.setAlphaF(ring)
+            painter.setPen(QPen(colour, 2.0))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(centre, radius + 3, radius + 3)
+            reach = radius + 3 + 2 * (1.0 - ring)
+            painter.drawEllipse(centre, reach, reach)
+
+    def paint_slot(self, painter: QPainter, index: int, kind: str, value, centre: QPointF, selected: bool) -> None:
+        self.paint_halo(painter, index, centre)
+        radius = self.radius() * (1.0 - 0.1 * self._down.value(index))  # a press dips it
         painter.setPen(QPen(QColor(128, 128, 128, 110), 1.0))
         painter.setBrush(QColor.fromRgbF(*value))
         painter.drawEllipse(centre, radius, radius)
@@ -780,10 +826,18 @@ class Swatches(QWidget):
             self.update()
 
     def leaveEvent(self, event) -> None:
-        self._hover = -1
+        self._hover = self._pressed = -1
         self.update()
 
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._pressed = self._at(event.position())
+            self.update()
+        super().mousePressEvent(event)
+
     def mouseReleaseEvent(self, event) -> None:
+        self._pressed = -1
+        self.update()
         index = self._at(event.position())
         if index >= 0 and event.button() == Qt.MouseButton.LeftButton:
             self.activate(index)
@@ -857,21 +911,16 @@ class ColourRow(Swatches):
             return len(slots) - 1  # "...", which shows the custom colour
         return self.selected_index() + (1 if self.none else 0)
 
+    def hoverable(self, index: int) -> bool:
+        return self.slots()[index][0] != "none" or self.none_allowed
+
     def paint_slot(self, painter, index, kind, value, centre, selected) -> None:
         t = themes.current
         radius = self.radius()
         if kind == "colour":
             super().paint_slot(painter, index, kind, value, centre, selected)
             return
-        chosen = (kind == "none" and self.current is None) or (kind == "more" and self.is_custom())
-        if index == self._hover and not chosen and (kind != "none" or self.none_allowed):
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(token_color(t.hover))
-            painter.drawEllipse(centre, radius + 3.5, radius + 3.5)
-        if chosen:
-            painter.setPen(QPen(QColor(t.accent), 2.0))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(centre, radius + 3, radius + 3)
+        self.paint_halo(painter, index, centre)
         if kind == "none":
             offset = radius * 0.68
             if self.none_allowed:
@@ -1038,6 +1087,7 @@ class PalettePopover(Popover):
         y = min(anchor.y(), area.bottom() - self.panel.sizeHint().height() - EDGE)
         self.place_panel(QPoint(x, y))
         self.show()
+        motion.appear(self, -motion.RISE)  # it hangs from the colour that was pressed
 
     def close_menu(self) -> None:
         self.close()  # and deleted: a new one opens each time
@@ -1061,6 +1111,12 @@ class PalettePopover(Popover):
         self.dialog_requested.emit()
 
 
+def _rounded(rect: QRectF, radius: float) -> QPainterPath:
+    path = QPainterPath()
+    path.addRoundedRect(rect, radius, radius)
+    return path
+
+
 class OptionGrid(QWidget):
     """Choices as a grid of cells, each a drawn icon, a word, or both; one chosen, or several.
 
@@ -1081,6 +1137,10 @@ class OptionGrid(QWidget):
         self.selected: set = set()
         self._hover = -1
         self._cursor = 0  # the cell the keys point at
+        self._hot = Levels(self)  # each cell's fill under the pointer
+        self._lit = Levels(self, motion.FAST)  # and how far it is chosen
+        self._down = Levels(self)  # and how far a press has deepened the fill
+        self._pressed = -1  # the cell under the button that is held
         rows = max(1, math.ceil(len(self.items) / columns))
         self.setFixedHeight(rows * cell + (rows - 1) * 6)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -1130,19 +1190,9 @@ class OptionGrid(QWidget):
         radius = t.look.control
         for i, (value, glyph, text, _tip) in enumerate(self.items):
             rect = self.cell_rect(i)
-            on = value in self.selected
-            if on:
-                fill = QColor(accent)
-                fill.setAlpha(41)
-                painter.setPen(QPen(accent, 2.0))
-                painter.setBrush(fill)
-                painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius)
-            else:
-                painter.setPen(QPen(QColor(t.border), 1.0))
-                painter.setBrush(token_color(t.hover) if i == self._hover else Qt.BrushStyle.NoBrush)
-                painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
-            color = t.accent_ink if on else t.text  # on the tinted fill: the ring keeps the accent itself
-            font = _font(self, 9.5, QFont.Weight.DemiBold if on else QFont.Weight.Normal)
+            lit = self.paint_cell(painter, i, rect, radius, value in self.selected, accent)
+            color = motion.mixed(QColor(t.text), QColor(t.accent_ink), lit).name()  # on the tinted fill: the ring
+            font = _font(self, 9.5, QFont.Weight.DemiBold if lit >= 0.5 else QFont.Weight.Normal)  # keeps the accent
             metrics = QFontMetricsF(font)
             words = metrics.elidedText(text, Qt.TextElideMode.ElideRight, rect.width() - (40 if glyph else 10)) \
                 if text else ""
@@ -1159,6 +1209,31 @@ class OptionGrid(QWidget):
                                  Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tr(words))
         self.paint_focus(painter, radius)
 
+    def paint_cell(self, painter: QPainter, index: int, rect: QRectF, radius: float, on: bool, accent: QColor,
+                   shape=None) -> float:
+        """A cell's border and fill: its own border and what the pointer brings, and over them the accent ring and
+        tint of a cell that is chosen, each as far as it has come. Returns how far the cell is chosen, 0 to 1."""
+        t = themes.current
+        self._lit.go(index, on)
+        self._hot.go(index, index == self._hover)
+        self._down.go(index, index == self._pressed)
+        lit, hot = self._lit.value(index), self._hot.value(index)
+        shape = shape or (lambda r: _rounded(r, radius))
+        if lit < 1.0:
+            wash = motion.mixed(token_color(t.hover), token_color(t.pressed), self._down.value(index))
+            wash.setAlphaF(wash.alphaF() * hot)
+            painter.setPen(QPen(QColor(t.border), 1.0))
+            painter.setBrush(wash)
+            painter.drawPath(shape(rect.adjusted(0.5, 0.5, -0.5, -0.5)))
+        if lit > 0.0:
+            fill, ring = QColor(accent), QColor(accent)
+            fill.setAlpha(round(41 * lit))
+            ring.setAlphaF(lit)
+            painter.setPen(QPen(ring, 2.0))
+            painter.setBrush(fill)
+            painter.drawPath(shape(rect.adjusted(1, 1, -1, -1)))
+        return lit
+
     def paint_focus(self, painter: QPainter, radius: float) -> None:
         """The keyboard's ring, inside the cell's own border, so it reads apart from the chosen look."""
         if keyboard_focus(self) and 0 <= self._cursor < len(self.items):
@@ -1171,10 +1246,18 @@ class OptionGrid(QWidget):
             self.update()
 
     def leaveEvent(self, event) -> None:
-        self._hover = -1
+        self._hover = self._pressed = -1
         self.update()
 
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._pressed = self._at(event.position())
+            self.update()
+        super().mousePressEvent(event)
+
     def mouseReleaseEvent(self, event) -> None:
+        self._pressed = -1
+        self.update()
         index = self._at(event.position())
         if index >= 0 and event.button() == Qt.MouseButton.LeftButton:
             self.choose(self.items[index][0])
@@ -1228,18 +1311,15 @@ class OptionCards(OptionGrid):
         radius = max(t.look.card - 2, 0)
         for i, (value, glyph, title, caption) in enumerate(self.items):
             rect = self.cell_rect(i)
-            on = value in self.selected
-            if on:
-                fill = QColor(accent)
-                fill.setAlpha(41)
-                painter.setPen(QPen(accent, 2.0))
-                painter.setBrush(fill)
-                painter.drawPath(outline(rect.adjusted(1, 1, -1, -1), radius, t.look))
-            else:
-                painter.setPen(QPen(QColor(t.border), 1.0))
-                painter.setBrush(token_color(t.hover) if i == self._hover else Qt.BrushStyle.NoBrush)
-                painter.drawPath(outline(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, t.look))
-            icon(glyph, t.accent if on else t.text).paint(painter, QRect(round(rect.center().x() - 12), 10, 24, 24))
+            lit = self.paint_cell(painter, i, rect, radius, value in self.selected, accent,
+                                  shape=lambda r: outline(r, radius, t.look))
+            picture = QRect(round(rect.center().x() - 12), 10, 24, 24)
+            if lit < 1.0:
+                icon(glyph, t.text).paint(painter, picture)
+            if lit > 0.0:  # turning on, the picture takes the accent over its own colour
+                painter.setOpacity(lit)
+                icon(glyph, t.accent).paint(painter, picture)
+                painter.setOpacity(1.0)
             font = _font(self, 9.5, QFont.Weight.DemiBold)
             painter.setFont(font)
             painter.setPen(QColor(t.text))
@@ -1465,10 +1545,20 @@ class _SectionHeader(QWidget):
         self.title = title
         self.open = True
         self.divider = False
+        self._turn = motion.Smooth(self, 1.0)  # the caret: 1 pointing down, as when open; 0 pointing right
+        self._hot = motion.Smooth(self)  # and its colour: 0 muted, 1 the text's, under the pointer
+        for animated in (self._turn, self._hot):
+            animated.changed.connect(self.update)
         self.setFixedHeight(self.HEIGHT)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         themes.changed.connect(self.update)
+
+    def set_open(self, open_: bool) -> None:
+        self.open = open_
+        self._turn.go(1.0 if open_ else 0.0, motion.FAST, motion.EASE_IN_OUT)
+        self.update()
 
     def paintEvent(self, event) -> None:
         t = themes.current
@@ -1482,8 +1572,18 @@ class _SectionHeader(QWidget):
         painter.setPen(QColor(t.text))
         painter.drawText(QRectF(0, 0, self.width() - 24, self.height()),
                          Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, tr(self.title))
-        glyph = "caret-down" if self.open else "caret-right"
-        icon(glyph, t.text_muted).paint(painter, QRect(self.width() - 16, (self.height() - 14) // 2, 14, 14))
+        hot = self.underMouse()
+        self._hot.go(1.0 if hot else 0.0, motion.FAST if hot else motion.NORMAL, motion.EASE_OUT if hot else motion.EASE_IN)
+        tint = motion.mixed(QColor(t.text_muted), QColor(t.text), self._hot.value).name()  # brighter under the pointer
+        box = QRect(self.width() - 16, (self.height() - 14) // 2, 14, 14)
+        if self._turn.running:  # on its way: the one caret, turned about its middle
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            painter.translate(box.x() + 7, box.y() + 7)
+            painter.rotate(-90 * (1.0 - self._turn.value))
+            icon("caret-down", tint).paint(painter, QRect(-7, -7, 14, 14))
+            painter.resetTransform()
+        else:
+            icon("caret-down" if self.open else "caret-right", tint).paint(painter, box)
         if keyboard_focus(self):  # round the caret: the title lines up with the other titles, so no room left of it
             focus_ring(painter, QRectF(self.width() - 19, (self.height() - 22) / 2, 19, 22), t.look.item)
 
@@ -1529,9 +1629,10 @@ class Section(QWidget):
         self.set_open(not self.header.open, emit=True)
 
     def set_open(self, open_: bool, emit: bool = False) -> None:
-        self.header.open = open_
-        self.header.update()
+        self.header.set_open(open_)
         self.content.setVisible(open_)
+        if open_ and emit:
+            motion.appear(self.content, -motion.RISE // 2, motion.FAST)  # what opens drops in from its heading
         if emit:
             self.toggled.emit(open_)
 
@@ -1626,9 +1727,9 @@ class _SignatureRow(QFrame):
         image.setStyleSheet(f"background: {themes.current.paper}; border-radius: {themes.current.look.item}px;")
         layout.addWidget(image)
         layout.addWidget(_label(name, "MenuLabel"), 1)
-        self.remove = IconButton("trash", "Delete this signature", icon_size=16)
-        self.remove.setObjectName("MenuRemove")
-        self.remove.setFixedSize(28, 28)
+        # A _MenuButton: the sheet no longer fills the buttons named MenuRemove, they paint their own.
+        self.remove = _MenuButton("trash", "Delete this signature", danger=True, size=28, icon_size=16)
+        self.remove.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # the row has the focus, and the Delete key
         self.remove.setVisible(False)
         layout.addWidget(self.remove)
 
@@ -2565,6 +2666,40 @@ class _MenuButton(IconButton):
         else:
             super().keyPressEvent(event)
 
+    def _wanted(self, t) -> QColor:
+        """The fill the state asks for: a choice (a lock that is on), a press, the pointer; clear for none."""
+        pointed = self.underMouse() and self.isEnabled()
+        if self.isChecked():
+            fill = token_color(t.selection)
+            fill.setAlpha(min(255, fill.alpha() + (32 if self.isDown() else 16 if pointed else 0)))
+            return fill
+        if self._danger:  # a destructive button warms to red under the pointer
+            red = QColor(t.danger)
+            red.setAlpha(64 if self.isDown() else 34 if pointed else 0)
+            return red
+        if self.isDown():
+            return token_color(t.pressed)
+        return token_color(t.hover) if pointed else QColor(0, 0, 0, 0)
+
+    def paintEvent(self, event) -> None:
+        # Not IconButton's: these buttons stand in the menu's own panel, which has the look's own corners.
+        t = themes.current
+        want = self._wanted(t)
+        if want.alpha():
+            self._fill.go(want, motion.FAST)
+        else:
+            self._fill.go(want, motion.NORMAL, motion.EASE_IN)
+        fill = self._fill.colour
+        if fill.alpha():
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(fill)
+            radius = max((min(t.look.item, 11) if self.objectName() == "MenuPencil" else t.look.control) - 1, 0)
+            painter.drawRoundedRect(QRectF(self.rect()).adjusted(1, 1, -1, -1), radius, radius)  # as the sheet drew it
+            painter.end()
+        QToolButton.paintEvent(self, event)
+
     def enterEvent(self, event) -> None:
         super().enterEvent(event)
         if self._danger and self.isEnabled():
@@ -2807,6 +2942,7 @@ class ToolMenu(_Menu):
         self.reposition(animate=was_visible and changed_key)
         if not was_visible:
             self.show()
+            motion.appear(self, motion.RISE if self._above else -motion.RISE)  # it comes out of its button
         self.raise_()
 
     def anchor_widget(self) -> QWidget | None:
@@ -2932,6 +3068,7 @@ class ToolMenu(_Menu):
     def more_menu(self) -> QMenu:
         """What the ... button offers. Built fresh each time, so the positions are current."""
         menu = QMenu(self)
+        motion.appear_on_show(menu, -motion.RISE)  # it hangs from the ... button
         key, base = self.key, base_of(self.key)
         toolbar = self.toolbar
         if toolbar is not None and base in DUPLICABLE:
@@ -3084,7 +3221,10 @@ class SelectionMenu(_Menu):
             return
         anchor_rect, bounds = self.rects_of(anchor)
         self.place(anchor_rect, bounds, beside=beside)
+        was_visible = self.isVisible()
         self.show()
+        if not was_visible:
+            motion.appear(self, motion.RISE if self._above else -motion.RISE)
         self.raise_()
 
     def refresh(self, annotations) -> None:

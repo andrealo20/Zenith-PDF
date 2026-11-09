@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QTextDocument
+from PySide6.QtGui import QColor, QCursor, QPainter, QTextDocument
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -19,6 +19,9 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QSizePolicy,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QVBoxLayout,
     QWidget,
 )
@@ -28,11 +31,12 @@ from ..core.finder import Entry, Finder
 from ..core.i18n import tr
 from ..core.platforms import native_keys
 from ..theme import THEME_NAMES, qcolor, themes
+from . import motion
 from .dialogs import SHORTCUTS
 from .help import TOPICS
 from .tool_catalog import BY_KEY, CATALOG
 from .toolbar import tool_colour
-from .widgets import FloatingBar, IconButton, cached_icon, icon_pixmap, muted_label
+from .widgets import FloatingBar, IconButton, cached_icon, icon_pixmap, muted_label, separator
 
 if TYPE_CHECKING:
     from .main_window import MainWindow
@@ -40,11 +44,12 @@ if TYPE_CHECKING:
 PANEL_WIDTH = 640
 MAX_HEIGHT = 520
 ROW_HEIGHT = 48
-HEADER_HEIGHT = 30
+HEADER_HEIGHT = 32
+EMPTY_HEIGHT = 112
+INSET = 24  # px from the panel's edge to the icons: the search field's and the rows' share this line
 RESULTS = 24
 RECENT = 8  # picks remembered, to come first next time
-KINDS = {"tool": "Tool", "command": "Command", "setting": "Setting", "shortcut": "Shortcut", "guide": "Guide",
-         "writing": "Writing", "info": "Not available"}
+UNAVAILABLE = "Not available"
 VIEW_ONLY = {"select", "hand", "laser", "snapshot", "lasso"}  # tools that work on a document that can only be viewed
 NO_DOCUMENT = "Open a document first."
 READ_ONLY = "This document can only be viewed."
@@ -73,6 +78,16 @@ class AccentButton(IconButton):
         # Long only while there is room: a window made narrow is never held wide by it before it turns back
         # into the sparkle alone.
         self.setSizePolicy(QSizePolicy.Policy.Preferred, self.sizePolicy().verticalPolicy())
+        self._heat = motion.Smooth(self)  # 0 at rest, 1 under the pointer: the long field's edge and wash fade between
+        self._heat.changed.connect(self.update)
+
+    def enterEvent(self, event) -> None:
+        self._heat.go(1.0, motion.FAST)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._heat.go(0.0, motion.NORMAL)
+        super().leaveEvent(event)
 
     def _refresh(self, *_):
         self.setIcon(cached_icon(self._icon_name, themes.current.accent))
@@ -100,12 +115,16 @@ class AccentButton(IconButton):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         frame = QRectF(self.rect()).adjusted(0.5, 1.5, -0.5, -1.5)
         radius = frame.height() / 2 if t.look.control >= 8 else t.look.control  # round, as the settings search
-        painter.setPen(QColor(t.text_muted if self.underMouse() else t.border))
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(t.field))
         painter.drawRoundedRect(frame, radius, radius)
-        if self.isDown():
-            painter.setBrush(qcolor(t.pressed))  # an rgba() token
-            painter.drawRoundedRect(frame, radius, radius)
+        wash = qcolor(t.pressed if self.isDown() else t.hover)  # an rgba() token, fading in with the pointer
+        wash.setAlphaF(wash.alphaF() * (1.0 if self.isDown() else self._heat.value))
+        painter.setBrush(wash)
+        painter.drawRoundedRect(frame, radius, radius)
+        painter.setPen(motion.mixed(QColor(t.border), QColor(t.text_muted), self._heat.value))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(frame, radius, radius)
         side = 18
         self.icon().paint(painter, QRect(12, (self.height() - side) // 2, side, side))
         metrics = self.fontMetrics()
@@ -414,7 +433,7 @@ def _guide(window) -> list[Found]:
 
 
 class ResultRow(QWidget):
-    """One result: the icon, the name and where it lives, and its keys or what kind of thing it is."""
+    """One result: the icon, the name and where it lives, and its keys."""
 
     def __init__(self, entry: Entry):
         super().__init__()
@@ -427,15 +446,15 @@ class ResultRow(QWidget):
         title.setObjectName("AssistantTitle")
         # A short reason it can't run shows in place of where it lives; a long one waits in the footer.
         short = not entry.enabled and entry.note and entry.kind != "info"
-        detail = muted_label(entry.note if short else entry.subtitle)
-        detail.setObjectName("Muted")
+        detail = QLabel(native_keys(tr(entry.note if short else entry.subtitle)))
+        detail.setObjectName("AssistantKind")
         text = QVBoxLayout()
         text.setContentsMargins(0, 0, 0, 0)
         text.setSpacing(1)
         text.addWidget(title)
         text.addWidget(detail)
         row = QHBoxLayout(self)
-        row.setContentsMargins(10, 4, 12, 4)
+        row.setContentsMargins(INSET - 14, 4, 12, 4)  # the list's margin and the sheet's 2 px come first
         row.setSpacing(12)
         row.addWidget(glyph)
         row.addLayout(text, 1)
@@ -444,14 +463,101 @@ class ResultRow(QWidget):
             chip.setObjectName("KeyChip")
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             row.addWidget(chip, 0, Qt.AlignmentFlag.AlignVCenter)
-        else:
-            kind = QLabel(tr(KINDS.get(entry.kind, "")))
+        elif entry.kind == "info":  # the others say what they are in the line under their name
+            kind = QLabel(tr(UNAVAILABLE))
             kind.setObjectName("AssistantKind")
             row.addWidget(kind, 0, Qt.AlignmentFlag.AlignVCenter)
         if not entry.enabled:
             for label in (title, glyph):
                 label.setEnabled(False)
         self.setToolTip(tr(entry.note if not entry.enabled else ""))
+
+
+class _Quiet(QStyledItemDelegate):
+    """Paints nothing: a row is a widget, and the list paints the highlight behind it itself."""
+
+    def paint(self, painter, option, index) -> None:
+        pass
+
+
+class ResultList(QListWidget):
+    """The results. The chosen row's highlight is painted here, with the style sheet's own rule for a selected row
+    (so every style keeps its look), and glides from row to row; the row under the pointer fades its hover fill in."""
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("AssistantList")
+        self.setItemDelegate(_Quiet(self))
+        self._at = motion.Smooth(self)  # the highlight's top, in the rows' own pixels: it scrolls with them
+        self._at.changed.connect(self.viewport().update)
+        self._wash = motion.Smooth(self)  # how strong the hover fill shows
+        self._wash.changed.connect(self.viewport().update)
+        self._under = -1  # the row the pointer is on
+        self._washed = -1  # the row the wash is on: it stays there while the wash fades out
+        self.currentRowChanged.connect(self._follow)
+
+    def restart(self) -> None:
+        """The rows were replaced: the highlight is on the chosen one at once, not gliding in from the old results."""
+        top = self._top_of(self.currentRow())
+        if top is not None:
+            self._at.set(top)
+        self._under = self._washed = -1
+        self._wash.set(0.0)
+
+    def _top_of(self, row: int) -> int | None:
+        item = self.item(row) if row >= 0 else None
+        return None if item is None else self.visualItemRect(item).top() + self.verticalOffset()
+
+    def _follow(self, row: int) -> None:
+        top = self._top_of(row)
+        if top is not None:
+            self._at.go(top, motion.FAST)  # quick, and starting from where it is: arrow keys held down keep up
+        self._glow()
+
+    def _glow(self) -> None:
+        """Fade the hover fill in on the row under the pointer, unless it is the chosen one, which has its own."""
+        if self._under >= 0 and self._under != self.currentRow():
+            self._washed = self._under
+            self._wash.go(1.0, motion.FAST)
+        else:
+            self._wash.go(0.0, motion.NORMAL)
+
+    def eventFilter(self, watched, event) -> bool:
+        """The list is the filter of every widget set in it: the pointer coming onto a result and leaving it."""
+        kind = event.type()
+        if isinstance(watched, ResultRow) and kind in (QEvent.Type.Enter, QEvent.Type.Leave):
+            item = self.itemAt(watched.geometry().center()) if kind == QEvent.Type.Enter else None
+            self._under = self.row(item) if item is not None else -1
+            self._glow()
+        return super().eventFilter(watched, event)
+
+    def scrollContentsBy(self, dx: int, dy: int) -> None:
+        super().scrollContentsBy(dx, dy)
+        point = self.viewport().mapFromGlobal(QCursor.pos())  # rows pass under a still pointer without an Enter
+        item = self.itemAt(point) if self.viewport().rect().contains(point) else None
+        self._under = self.row(item) if item is not None else -1
+        self._glow()
+
+    def _panel(self, painter: QPainter, top: int, state: QStyle.StateFlag) -> None:
+        option = QStyleOptionViewItem()
+        option.initFrom(self)
+        option.state = QStyle.StateFlag.State_Enabled | QStyle.StateFlag.State_Active | state
+        option.rect = QRect(0, top, self.viewport().width(), ROW_HEIGHT)
+        option.showDecorationSelected = True
+        self.style().drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, self)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self.viewport())
+        shift = self.verticalOffset()
+        washed = self._top_of(self._washed) if self._washed >= 0 else None
+        if washed is not None and self._wash.value > 0:
+            painter.setOpacity(self._wash.value)
+            self._panel(painter, washed - shift, QStyle.StateFlag.State_MouseOver)
+            painter.setOpacity(1.0)
+        if self.currentRow() >= 0:
+            self._panel(painter, round(self._at.value) - shift, QStyle.StateFlag.State_Selected)
+        painter.end()
+        super().paintEvent(event)
 
 
 class AssistantPanel(FloatingBar):
@@ -461,6 +567,7 @@ class AssistantPanel(FloatingBar):
         super().__init__(window, popup=True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setFixedWidth(PANEL_WIDTH)
+        motion.appear_on_show(self, -motion.RISE)  # it comes down from the bar it was asked from
         self._window = window
         self._found = _entries(window)
         self._runs = {f.entry.key: f.run for f in self._found}
@@ -476,29 +583,35 @@ class AssistantPanel(FloatingBar):
         self.search.textChanged.connect(self._refresh)
         self.search.installEventFilter(self)
         top = QHBoxLayout()
-        top.setContentsMargins(6, 0, 4, 0)
-        top.setSpacing(10)
+        top.setContentsMargins(INSET, 10, INSET, 10)
+        top.setSpacing(8)  # the field's own 4 px of padding bring its text to the rows' (icon, 12 px gap)
         top.addWidget(self.glyph)
         top.addWidget(self.search, 1)
-        self.list = QListWidget()
-        self.list.setObjectName("AssistantList")
+        self.list = ResultList()
         self.list.setFrameShape(QListWidget.Shape.NoFrame)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # the keys stay in the field
         self.list.itemClicked.connect(self._clicked)
         self.list.currentRowChanged.connect(self._on_row)
-        self.footer = muted_label(HINT)
+        self.footer = QLabel(native_keys(tr(HINT)))
+        self.footer.setObjectName("AssistantKind")
         self.footer.setWordWrap(True)
-        self.footer.setContentsMargins(10, 0, 10, 0)
+        self.footer.setContentsMargins(INSET, 0, INSET, 0)
         self.footer.ensurePolished()
-        # Room for two lines always: a longer note (why something can't run) never pushes into the list.
-        self.footer.setFixedHeight(self.footer.fontMetrics().lineSpacing() * 2 + 4)
-        self.footer.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        # Room for two lines always, the text in the middle of it: a longer note (why something can't run) never
+        # pushes into the list.
+        self.footer.setFixedHeight(self.footer.fontMetrics().lineSpacing() * 2 + 16)
+        self.footer.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         layout.addLayout(top)
-        layout.addWidget(self.list, 1)
+        layout.addWidget(separator(vertical=False))
+        body = QVBoxLayout()
+        body.setContentsMargins(12, 6, 12, 6)
+        body.addWidget(self.list)
+        layout.addLayout(body, 1)
+        layout.addWidget(separator(vertical=False))
         layout.addWidget(self.footer)
         self._refresh("")
 
@@ -540,6 +653,8 @@ class AssistantPanel(FloatingBar):
             self.list.addItem(head)
             label = QLabel(tr(heading))
             label.setObjectName("AssistantSection")
+            label.setIndent(0)  # a label with a box takes half an "x" of indent: the text starts at its padding
+            label.setMargin(2)  # and lines up with the icons under it
             self.list.setItemWidget(head, label)
             height += HEADER_HEIGHT
             for entry in members:
@@ -552,17 +667,33 @@ class AssistantPanel(FloatingBar):
         if not sections:
             empty = QListWidgetItem()
             empty.setFlags(Qt.ItemFlag.NoItemFlags)
-            empty.setSizeHint(QSize(0, 64))
+            empty.setSizeHint(QSize(0, EMPTY_HEIGHT))
             self.list.addItem(empty)
-            words = text.strip()
-            note = muted_label(f"Nothing matches “{words}”. Try other words, or fewer.")
-            note.setWordWrap(True)
-            note.setContentsMargins(10, 0, 10, 0)
-            self.list.setItemWidget(empty, note)
-            height = 64
-        self.list.setFixedHeight(min(max(height, 64) + 4, MAX_HEIGHT))
+            self.list.setItemWidget(empty, self._nothing(text.strip()))
+            height = EMPTY_HEIGHT
+        self.list.setFixedHeight(min(height + 4, MAX_HEIGHT))
         self._select(self._first_row())
+        self.list.restart()
+        self.layout().activate()  # the new height reaches the layout now, for adjustSize() to ask it
         self.adjustSize()
+
+    def _nothing(self, words: str) -> QWidget:
+        """What the list shows when nothing matches: a glass and a line, in the middle."""
+        box = QWidget()
+        glass = QLabel()
+        glass.setPixmap(icon_pixmap("magnifying-glass", 24, themes.current.text_muted))
+        note = muted_label(f"Nothing matches “{words}”. Try other words, or fewer.")
+        note.setWordWrap(True)
+        for label in (glass, note):
+            label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(INSET, 0, INSET, 0)
+        layout.setSpacing(10)
+        layout.addStretch()
+        layout.addWidget(glass)
+        layout.addWidget(note)
+        layout.addStretch()
+        return box
 
     def _first_row(self) -> int:
         return next((row for row in range(self.list.count())

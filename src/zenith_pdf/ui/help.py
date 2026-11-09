@@ -19,6 +19,7 @@ from shiboken6 import isValid
 from ..core.i18n import source, tr
 from ..core.platforms import SYSTEM_NAME, WINDOWS, native_keys
 from ..theme import themes
+from . import motion
 from .widgets import SHADOW_OFFSET, FloatingBar
 
 SHOW_DELAY_MS = 280
@@ -633,6 +634,8 @@ class HelpCard(QWidget):
         self.what = QLabel()
         self.how_title = QLabel(tr("How to use"))
         self.how_title.setObjectName("HelpHeading")
+        for heading in (self.detail, self.how_title):
+            heading.setIndent(0)  # a label with a box takes half an "x" of indent: the headings start with the text
         self.how = QLabel()
         self.keys = QLabel()
         self.keys.setObjectName("HelpKeys")
@@ -668,6 +671,7 @@ class HelpCard(QWidget):
 
     def show_for(self, owner: _Hook, pinned: bool) -> None:
         self._hide_timer.stop()
+        shown = self.isVisible()
         previous = self._owner
         self._owner = owner
         self.pinned = pinned
@@ -699,6 +703,9 @@ class HelpCard(QWidget):
         self.show()
         self.raise_()
         self.glass.refresh_backdrop()
+        if not shown:  # coming from another button's card, it only moves
+            below = self.y() >= owner.target.mapToGlobal(QPoint(0, 0)).y()
+            motion.appear(self, -motion.RISE if below else motion.RISE)  # it comes out of its button
         if pinned:
             QApplication.instance().installEventFilter(self)
         for hook in (previous, owner):

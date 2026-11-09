@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from PySide6.QtCore import QEventLoop, QObject, QPoint, QSize, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QImage, QPainter, QUndoCommand
+from PySide6.QtCore import QEventLoop, QObject, QPoint, QRectF, QSize, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QImage, QPainter, QUndoCommand
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -48,11 +48,11 @@ from ..core.i18n import tr
 from ..core.pages import PAPER_SIZES
 from ..icons import icon
 from ..theme import themes
-from . import messages
+from . import messages, motion
 from .commands import AddAnnotations, RemoveAnnotations
 from .dialogs import ColorButton, parse_pages
 from .page_actions import IMAGE_FILES
-from .widgets import FloatingBar, IconButton, muted_label
+from .widgets import FloatingBar, IconButton, focus_ring, keyboard_focus, muted_label
 
 if TYPE_CHECKING:
     from .main_window import MainWindow
@@ -240,10 +240,7 @@ class ProgressDialog(messages.MessageDialog):
         self._started = time.monotonic()
 
     def _style_bar(self, *_) -> None:
-        t = themes.current
-        rounding = min(3, t.look.item)
-        self.bar.setStyleSheet(f"QProgressBar {{ background: {t.border}; border: none; border-radius: {rounding}px; }}"
-                               f"QProgressBar::chunk {{ background: {t.accent}; border-radius: {rounding}px; }}")
+        messages.style_progress(self.bar)
 
     def set_progress(self, value: int, maximum: int | None = None, text: str | None = None) -> None:
         if maximum is not None and maximum != self.bar.maximum():
@@ -1029,6 +1026,7 @@ class PropertiesDialog(messages.MessageDialog):
         self._fit_screen()
         if shown:
             self.facts.ensureWidgetVisible(self.font_list)
+            motion.appear(self.font_list, 4)
 
     def changes(self) -> dict | None:
         values = {key: field.text().strip() for key, field in self.fields.items()}
@@ -1057,13 +1055,32 @@ def properties(window: MainWindow) -> None:
         _edit(ws, "Change properties", lambda pdf: T.write_metadata(pdf, values))
 
 
+class _AttachmentList(QListWidget):
+    """The attachments; with none, the middle of the list says so, with the paperclip they would carry."""
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self.count():
+            return
+        t = themes.current
+        painter = QPainter(self.viewport())
+        area = QRectF(self.viewport().rect())
+        glyph = icon("paperclip", t.text_muted).pixmap(QSize(28, 28), self.devicePixelRatioF())
+        height = glyph.deviceIndependentSize().height() + 6 + self.fontMetrics().height()
+        top = area.center().y() - height / 2
+        painter.drawPixmap(QPoint(round(area.center().x() - 14), round(top)), glyph)
+        painter.setPen(QColor(t.text_muted))
+        painter.drawText(QRectF(area.left(), top + 34, area.width(), self.fontMetrics().height() + 2),
+                         Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, tr("No attachments"))
+
+
 class AttachmentsDialog(messages.MessageDialog):
     def __init__(self, workspace: Workspace, parent=None):
         super().__init__(parent, "Attachments", "Files carried inside the PDF. Adding or removing one is undoable.",
                          [("close", "Close", "")])
         self.setMinimumWidth(FORM_WIDTH)
         self._workspace = workspace
-        self.list = QListWidget()
+        self.list = _AttachmentList()
         self.list.setObjectName("AttachmentList")  # a framed field, so an empty list still reads as one
         self.list.setMinimumHeight(180)
         self.list.itemSelectionChanged.connect(self._sync)
@@ -1094,10 +1111,7 @@ class AttachmentsDialog(messages.MessageDialog):
             item.setData(Qt.ItemDataRole.UserRole, name)
             item.setToolTip(tr(description or name))
             self.list.addItem(item)
-        if not self.list.count():
-            placeholder = QListWidgetItem(tr("No attachments"))
-            placeholder.setFlags(Qt.ItemFlag.NoItemFlags)
-            self.list.addItem(placeholder)
+        self.list.viewport().update()
         self._sync()
 
     def _selected(self) -> list[str]:
@@ -1359,6 +1373,7 @@ class ToolTile(QFrame):
         self.setObjectName("PanelRow")
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setCursor(Qt.CursorShape.PointingHandCursor if enabled else Qt.CursorShape.ArrowCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus if enabled else Qt.FocusPolicy.NoFocus)  # Tab, then Enter
         self.setEnabled(enabled)
         self.setToolTip(tr(tool.description if enabled else f"{tool.description}. Open a document first."))
         self._on_click = on_click
@@ -1400,6 +1415,19 @@ class ToolTile(QFrame):
     def mouseReleaseEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton and self.isEnabled() and self.rect().contains(event.position().toPoint()):
             self._on_click(self.tool)
+
+    def keyPressEvent(self, event) -> None:
+        if self.isEnabled() and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self._on_click(self.tool)
+        else:
+            super().keyPressEvent(event)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if keyboard_focus(self):
+            look = themes.current.look
+            painter = QPainter(self)
+            focus_ring(painter, QRectF(self.rect()), 2 if look.chamfer else max(look.card - 2, 0))
 
 
 class ToolsPanel(FloatingBar):
@@ -1443,6 +1471,8 @@ class ToolsPanel(FloatingBar):
             grid.addLayout(tiles)
             self._groups.append((title, members))
         self.empty = muted_label("No tool matches.")
+        self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty.setContentsMargins(0, 32, 0, 0)  # a little way down the panel, not in its top corner
         self.empty.hide()
         grid.addWidget(self.empty)
         grid.addStretch()
@@ -1451,6 +1481,7 @@ class ToolsPanel(FloatingBar):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidget(body)
+        scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Tab goes tile to tile, and brings each into view
         scroll.setStyleSheet("QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }")
         self._scroll = scroll
         layout = QVBoxLayout(self)
@@ -1484,6 +1515,7 @@ class ToolsPanel(FloatingBar):
         self.move(max(screen.left(), min(corner.x() - PANEL_WIDTH, screen.right() - PANEL_WIDTH)), corner.y())
         self.set_backdrop(window)
         self.show()
+        self.appear(-motion.RISE)  # it hangs from the button, so it drops in
         self.search.setFocus()
 
 

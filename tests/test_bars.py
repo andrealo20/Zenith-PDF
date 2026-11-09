@@ -1,7 +1,7 @@
 """The zoom bar folded to the zoom alone, and the assistant's button as a long field to type in."""
 
 import pytest
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QEvent, QSettings, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -62,3 +62,14 @@ def test_the_assistant_button_is_a_long_field_that_takes_typing_at_once(window):
     window.resize(main_window.WIDE_ASSISTANT - 200, 800)
     settle()
     assert not button.wide and button.width() < button.WIDE  # a narrow window: the sparkle alone
+
+
+def test_the_long_field_fades_its_edge_and_wash_in_with_the_pointer(window, motion_on):
+    button = window.assistant_button
+    window.resize(main_window.WIDE_ASSISTANT + 100, 800)
+    settle()
+    assert button.wide and button._heat.value == 0.0
+    QTest.mouseMove(button, button.rect().center())
+    assert button._heat.target == 1.0
+    QApplication.sendEvent(button, QEvent(QEvent.Type.Leave))
+    assert button._heat.target == 0.0

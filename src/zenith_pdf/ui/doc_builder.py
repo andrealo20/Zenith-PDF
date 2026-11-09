@@ -30,6 +30,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QUndoCommand, QUndoStack
 from PySide6.QtWidgets import (
     QFileDialog,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -38,6 +39,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QStyle,
     QStyledItemDelegate,
@@ -51,10 +53,12 @@ from ..core.document import Document, PdfiumError
 from ..core.i18n import tr
 from ..core.render import RenderPool
 from ..icons import icon
-from ..theme import outline, themes
-from . import messages
+from ..theme import outline, qcolor, themes
+from . import messages, motion
 from .help import attach_help
-from .widgets import IconButton, icon_pixmap, muted_label, separator
+from .home import EmptyState
+from .side_panel import FadingButton
+from .widgets import focus_ring, icon_pixmap, keyboard_focus, muted_label, separator
 
 COLOURS = ["#8b7cf6", "#22b8cf", "#f59f43", "#ef6f8f", "#45bf7f", "#e3b532", "#5b8cff", "#c06bdc"]
 ROWS_MIME = "application/x-zenith-pdf-builder-rows"
@@ -140,6 +144,90 @@ class BuilderModel(QAbstractListModel):
         return False  # the builder rebuilds the rows itself
 
 
+class _Elided(QLabel):
+    """A label that cuts its text to the room it is given, where a plain one asks its neighbours to move over."""
+
+    def __init__(self, text: str, mode: Qt.TextElideMode = Qt.TextElideMode.ElideMiddle):
+        super().__init__(text)
+        self._whole = text
+        self._mode = mode
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)  # the layout sets its width
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        shown = self.fontMetrics().elidedText(self._whole, self._mode, self.width())
+        if shown != self.text():
+            self.setText(shown)
+
+
+class DropZone(EmptyState):
+    """A place to drop PDFs, outlined: the empty builder is one, and while files are dragged over the cards another
+    one lies over them. It takes the accent as the files come over it."""
+
+    def __init__(self, over_cards: bool = False, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._over_cards = over_cards
+        self._near = motion.Smooth(self)  # how near the files are, 0 to 1
+        self._near.changed.connect(self._moved)
+        if over_cards:  # it comes and goes with the files, and the cards show through it
+            self._fade = QGraphicsOpacityEffect(self)
+            self._fade.setOpacity(0.0)
+            self.setGraphicsEffect(self._fade)
+            self.hide()
+            self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.show_state("file-arrow-down", tr("Add PDF files"),
+                        "" if over_cards else tr("Open PDF files, or drop them here, to start building."))
+
+    def light(self, on: bool) -> None:
+        if self._over_cards and on:
+            self.show()
+            self.raise_()
+        self._near.go(1.0 if on else 0.0, motion.FAST if on else motion.NORMAL,
+                      motion.EASE_OUT if on else motion.EASE_IN)  # it comes with the files and goes as they go
+
+    def _moved(self, near: float) -> None:
+        if self._over_cards:
+            self._fade.setOpacity(near)
+            self.setVisible(near > 0.0)
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        t = themes.current
+        near = self._near.value
+        area = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        shape = outline(area, t.look.card, t.look)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        if self._over_cards:  # over the cards: they dim, so the words can be read
+            painter.setBrush(qcolor(t.canvas))
+            painter.setOpacity(0.92)
+            painter.drawPath(shape)
+            painter.setOpacity(1.0)
+        tint = qcolor(t.selection)
+        tint.setAlpha(round(tint.alpha() * near))
+        painter.setBrush(tint)
+        painter.drawPath(shape)
+        edge = QColor(t.text_disabled)  # the border itself barely shows on the light canvas
+        edge.setAlpha(150)
+        painter.setPen(QPen(motion.mixed(edge, QColor(t.accent), near), 1.5, Qt.PenStyle.DashLine))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(shape)
+        painter.end()
+
+
+class _Stage(QWidget):
+    """The builder's right side: the tools, the name and the cards, and the drop zone that lies over them."""
+
+    def __init__(self):
+        super().__init__()
+        self.veil = DropZone(over_cards=True, parent=self)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.veil.setGeometry(self.rect().adjusted(10, 10, -10, -10))
+
+
 class CardDelegate(QStyledItemDelegate):
     """A card: page thumbnail on its source's colour, a selection circle, the page range,
     and for collapsed groups the file name and a button to expand."""
@@ -162,6 +250,7 @@ class CardDelegate(QStyledItemDelegate):
         source = builder.sources.get(entry.source) if entry.source else None
         colour = QColor(source.colour if source else themes.current.text_muted)
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
         card = option.rect.adjusted(6, 6, -6, -6)
         look = themes.current.look
         round_ = max(look.card - 2, 0)
@@ -170,7 +259,7 @@ class CardDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         background = QColor(colour)
-        background.setAlpha(70 if selected else 42)
+        background.setAlpha(70 if selected else 56 if hovered else 42)
         painter.setPen(QPen(colour, 2.5) if selected else Qt.PenStyle.NoPen)
         painter.setBrush(background)
         painter.drawPath(outline(QRectF(card), round_, look))
@@ -187,6 +276,7 @@ class CardDelegate(QStyledItemDelegate):
         pixmap = builder.thumbnail(entry)
         if pixmap is not None:
             painter.save()
+            painter.setOpacity(builder.thumb_level((entry.source, entry.page)))  # a page that just came in fades in
             painter.translate(page.center())
             painter.rotate(entry.rotation)
             target = QRectF(0, 0, page.height(), page.width()) if entry.rotation % 180 else QRectF(0, 0, page.width(), page.height())
@@ -194,13 +284,14 @@ class CardDelegate(QStyledItemDelegate):
             painter.drawPixmap(target, pixmap, QRectF(pixmap.rect()))
             painter.restore()
 
-        # Selection circle, top left
-        circle = QRectF(card.x() + 10, card.y() + 8, 18, 18)
-        painter.setPen(QPen(QColor("white"), 1.5))
-        painter.setBrush(colour if selected else QColor(0, 0, 0, 60))
-        painter.drawEllipse(circle)
-        if selected:
-            icon("check", "white").paint(painter, circle.adjusted(3, 3, -3, -3).toRect())
+        # Selection circle, top left: on the card under the pointer, and on every card once one is chosen
+        if selected or hovered or builder.grid.selectionModel().hasSelection():
+            circle = QRectF(card.x() + 10, card.y() + 8, 18, 18)
+            painter.setPen(QPen(QColor("white"), 1.5))
+            painter.setBrush(colour if selected else QColor(0, 0, 0, 60))
+            painter.drawEllipse(circle)
+            if selected:
+                icon("check", "white").paint(painter, circle.adjusted(3, 3, -3, -3).toRect())
 
         # Page or range, top right
         label = builder.row_label(row)
@@ -231,6 +322,8 @@ class CardDelegate(QStyledItemDelegate):
             painter.drawEllipse(toggle)
             icon("arrows-out-line-horizontal" if row.group else "arrows-in-line-horizontal", "white").paint(
                 painter, toggle.adjusted(5, 5, -5, -5))
+        if option.state & QStyle.StateFlag.State_HasFocus and keyboard_focus(builder.grid):
+            focus_ring(painter, QRectF(card), round_)
         painter.restore()
 
     def editorEvent(self, event, model, option, index) -> bool:
@@ -256,6 +349,7 @@ class DocBuilder(QWidget):
         self._token = object()
         self._thumbs: dict[tuple, QPixmap] = {}
         self._pending: set[tuple] = set()
+        self._arrived: dict[tuple, motion.Smooth] = {}  # how far each page that just came in has faded in
         self.sources: dict[str, SourceFile] = {}
         self.order: list[str] = []  # source keys, as listed on the left
         self.entries: list[core.Entry] = []
@@ -278,6 +372,7 @@ class DocBuilder(QWidget):
         clear_button.clicked.connect(self.clear_all)
         for button, key in ((open_button, "db_open"), (sort_button, "db_sort"), (clear_button, "db_clear")):
             attach_help(button, key)
+        self.sort_button, self.clear_button = sort_button, clear_button
         top = QHBoxLayout()
         for button in (open_button, sort_button):
             top.addWidget(button)
@@ -296,21 +391,23 @@ class DocBuilder(QWidget):
         left_layout.setContentsMargins(12, 12, 12, 12)
         left_layout.addLayout(top)
         left_layout.addWidget(self.source_list, 1)
-        left_layout.addWidget(muted_label("Drag files to change their order."))
+        self.order_hint = muted_label("Drag files to change their order.")
+        self.order_hint.setWordWrap(True)  # Russian runs past the panel
+        left_layout.addWidget(self.order_hint)
 
         # Right: tools, the result's name, the cards
         tools = QHBoxLayout()
         tools.setSpacing(4)
-        undo = IconButton("arrow-u-up-left", "Undo (Ctrl+Z)", help="db_undo")
+        undo = FadingButton("arrow-u-up-left", "Undo (Ctrl+Z)", help="db_undo")
         undo.clicked.connect(self.undo_stack.undo)
-        redo = IconButton("arrow-u-up-right", "Redo (Ctrl+Y)", help="db_redo")
+        redo = FadingButton("arrow-u-up-right", "Redo (Ctrl+Y)", help="db_redo")
         redo.clicked.connect(self.undo_stack.redo)
         for button, signal in ((undo, self.undo_stack.canUndoChanged), (redo, self.undo_stack.canRedoChanged)):
             button.setEnabled(False)
             signal.connect(button.setEnabled)
         self.selection_tools = []
         def tool(icon_name, text, slot, help, needs_selection=True):
-            button = IconButton(icon_name, text, icon_size=18, text=text if text in ("Extract",) else None, help=help)
+            button = FadingButton(icon_name, text, icon_size=18, text=text if text in ("Extract",) else None, help=help)
             button.clicked.connect(slot)
             if needs_selection:
                 self.selection_tools.append(button)
@@ -330,6 +427,7 @@ class DocBuilder(QWidget):
         self.selection_button.setObjectName("MenuButton")  # a button with a caret: the choices are in its menu
         self.selection_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(self.selection_button)
+        motion.appear_on_show(menu, -motion.RISE)  # it hangs from its button
         menu.addAction(tr("Select all"), lambda: self.grid.selectAll())
         menu.addAction(tr("Select none"), lambda: self.grid.clearSelection())
         menu.addAction(tr("Invert selection"), self._invert_selection)
@@ -340,8 +438,8 @@ class DocBuilder(QWidget):
         self.build_button.clicked.connect(self.build)
         attach_help(self.build_button, "db_build")
         for widget in (undo, redo, separator(), extract, separator(), rotate_left, rotate_right, delete, duplicate,
-                       separator(), IconButton("magnifying-glass-minus", "Smaller", icon_size=16, help="db_smaller"),
-                       self.zoom, IconButton("magnifying-glass-plus", "Larger", icon_size=16, help="db_larger"),
+                       separator(), FadingButton("magnifying-glass-minus", "Smaller", icon_size=16, help="db_smaller"),
+                       self.zoom, FadingButton("magnifying-glass-plus", "Larger", icon_size=16, help="db_larger"),
                        separator(), self.selection_button):
             tools.addWidget(widget)
         tools.addStretch()
@@ -352,12 +450,8 @@ class DocBuilder(QWidget):
         self.name.textChanged.connect(self._fit_name)
         self._fit_name()
         self.count = muted_label()
-        insert = QToolButton()
-        insert.setText(tr(" Insert page"))
-        insert.setIcon(icon("plus"))
-        insert.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        insert = FadingButton("plus", "", icon_size=16, text=" Insert page", help="db_insert")
         insert.clicked.connect(self.insert_blank)
-        attach_help(insert, "db_insert")
         title = QHBoxLayout()
         title.addWidget(self.name)
         title.addWidget(self.count)
@@ -377,16 +471,18 @@ class DocBuilder(QWidget):
         self.grid.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.grid.setSpacing(4)
         self.grid.setUniformItemSizes(True)
-        self.empty = QLabel(tr("Open PDF files, or drop them here, to start building."))
-        self.empty.setObjectName("Muted")
-        self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.grid.setMouseTracking(True)  # the card under the pointer is lit: the sheet's hover rule did this unasked
+        self.grid.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.empty = DropZone()
 
-        right = QWidget()
+        right = _Stage()
+        self.drop_over_cards = right.veil
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(16, 12, 16, 12)
         right_layout.setSpacing(10)
         right_layout.addLayout(tools)
         right_layout.addLayout(title)
+        right_layout.addSpacing(6)
         right_layout.addWidget(self.empty, 1)
         right_layout.addWidget(self.grid, 1)
 
@@ -410,6 +506,9 @@ class DocBuilder(QWidget):
         self._sync_selection()
 
     def _refresh_sources(self) -> None:
+        self.order_hint.setVisible(len(self.order) > 1)  # there is an order to change
+        self.sort_button.setEnabled(len(self.order) > 1)
+        self.clear_button.setEnabled(bool(self.order or self.entries))
         self.source_list.blockSignals(True)
         self.source_list.clear()
         for key in self.order:
@@ -430,9 +529,11 @@ class DocBuilder(QWidget):
         handle.setPixmap(icon_pixmap("dots-six-vertical", 16, themes.current.text_muted))
         text = QVBoxLayout()
         text.setSpacing(0)
-        name = QLabel(tr(source.path.name))
+        name = _Elided(tr(source.path.name))
         name.setToolTip(str(source.path))
-        detail = muted_label(f"{source.document.page_count} pages · {pages} in use · added {source.added:%H:%M}")
+        detail = _Elided(tr(f"{source.document.page_count} pages · {pages} in use · added {source.added:%H:%M}"),
+                         Qt.TextElideMode.ElideRight)
+        detail.setObjectName("Muted")
         text.addWidget(name)
         text.addWidget(detail)
         dot = QLabel()
@@ -445,9 +546,10 @@ class DocBuilder(QWidget):
         painter.drawEllipse(0, 0, 14, 14)
         painter.end()
         dot.setPixmap(swatch)
-        more = IconButton("dots-three-vertical", "More", icon_size=16)
+        more = FadingButton("dots-three-vertical", "More", icon_size=16)
         more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(more)
+        motion.appear_on_show(menu, -motion.RISE)
         menu.addAction(tr("Add all its pages again"), lambda: self.add_pages_of(source.key))
         menu.addAction(tr("Remove from the build"), lambda: self.remove_source(source.key))
         more.setMenu(menu)
@@ -568,7 +670,26 @@ class DocBuilder(QWidget):
             pixmap.setDevicePixelRatio(self._ratio)
             self._thumbs[key[1:]] = pixmap
             self._pending.discard(key[1:])
+            if key[1:] in self._arrived:
+                self._arrived.pop(key[1:]).deleteLater()
+            shown = self._arrived[key[1:]] = motion.Smooth(self.grid.viewport())  # it fades in over the blank page
+            shown.changed.connect(self._repaint_cards)
+            shown.go(1.0, motion.NORMAL)
             self.grid.viewport().update()
+
+    def _repaint_cards(self, *_) -> None:
+        self.grid.viewport().update()
+
+    def thumb_level(self, key: tuple) -> float:
+        """How far the picture of the page `key` has come in, 0 to 1; a finished one is forgotten."""
+        shown = self._arrived.get(key)
+        if shown is None:
+            return 1.0
+        if shown.value >= 1.0 and not shown.running:
+            del self._arrived[key]
+            shown.deleteLater()
+            return 1.0
+        return shown.value
 
     def selected_entries(self) -> list[int]:
         indices = []
@@ -729,9 +850,20 @@ class DocBuilder(QWidget):
     def dragEnterEvent(self, event) -> None:
         if any(url.toLocalFile().lower().endswith(".pdf") for url in event.mimeData().urls()):
             event.acceptProposedAction()
+            self._light_drop(True)
+
+    def dragLeaveEvent(self, event) -> None:
+        self._light_drop(False)
 
     def dropEvent(self, event) -> None:
+        self._light_drop(False)
         self.add_files([u.toLocalFile() for u in event.mimeData().urls() if u.toLocalFile().lower().endswith(".pdf")])
+
+    def _light_drop(self, on: bool) -> None:
+        """Files are over the builder: the zone that takes them takes the accent."""
+        zone = self.drop_over_cards if self.entries else self.empty
+        for other in (self.drop_over_cards, self.empty):
+            other.light(on and other is zone)
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key.Key_Delete:

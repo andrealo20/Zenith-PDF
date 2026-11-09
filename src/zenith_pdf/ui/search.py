@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import threading
 
-from PySide6.QtCore import QObject, QRect, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter
+from PySide6.QtCore import QElapsedTimer, QObject, QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QLinearGradient, QPainter
 from PySide6.QtWidgets import (
     QCheckBox,
-    QHBoxLayout,
+    QGridLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -22,7 +22,9 @@ from ..core.document import Document, SearchHit
 from ..core.i18n import tr
 from ..icons import icon
 from ..theme import qcolor, themes
-from .widgets import muted_label, panel_title
+from . import motion
+from .side_panel import CLEAR, HANG, PAD, RowFades, panel_header
+from .widgets import muted_label
 
 HIT_ROLE = Qt.ItemDataRole.UserRole + 1
 
@@ -34,10 +36,65 @@ class _Relay(QObject):
     done = Signal(int)
 
 
+class _Busy(QWidget):
+    """A thin line along the top of the results while a search runs, with a short bar of light running along it.
+    With motion off it shows nothing: the status line says the search is on."""
+
+    PERIOD = 1300  # ms for the light to cross
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._clock = QElapsedTimer()
+        self._clock.start()
+        self._tick = QTimer(self)
+        self._tick.setInterval(16)
+        self._tick.timeout.connect(self.update)
+        self.hide()
+
+    def run(self, on: bool) -> None:
+        self.setVisible(on and motion.enabled())
+        self.raise_()
+
+    def showEvent(self, event) -> None:
+        self._clock.start()  # it ticks only while it is on screen: a panel switched away from needs no frames
+        self._tick.start()
+
+    def hideEvent(self, event) -> None:
+        self._tick.stop()
+
+    def paintEvent(self, event) -> None:
+        t = themes.current
+        share = motion.EASE_IN_OUT.valueForProgress((self._clock.elapsed() % self.PERIOD) / self.PERIOD)
+        length = max(self.width() * 0.3, 24.0)
+        left = -length + (self.width() + length) * share
+        light = QColor(t.focus or t.accent)
+        clear = QColor(light)
+        clear.setAlpha(0)
+        gradient = QLinearGradient(left, 0, left + length, 0)
+        gradient.setColorAt(0.0, clear)
+        gradient.setColorAt(0.5, light)
+        gradient.setColorAt(1.0, clear)
+        QPainter(self).fillRect(QRectF(self.rect()), gradient)
+
+
+class _Results(QListWidget):
+    """The results, with the line that says a search is running along their top."""
+
+    def __init__(self):
+        super().__init__()
+        self.busy = _Busy(self)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.busy.setGeometry(0, 0, self.width(), 2)
+
+
 class ResultDelegate(QStyledItemDelegate):
-    def __init__(self, panel: SearchPanel):
+    def __init__(self, panel: SearchPanel, view: QListWidget):
         super().__init__(panel)
         self._panel = panel
+        self.fades = RowFades(view)  # the fill under the pointer or the choice comes and goes gently
 
     def sizeHint(self, option, index) -> QSize:
         return QSize(200, 2 * option.fontMetrics.height() + 14)
@@ -45,16 +102,19 @@ class ResultDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option, index) -> None:
         t = themes.current
         hit: SearchHit = index.data(HIT_ROLE)
-        rect = option.rect.adjusted(6, 2, -6, -2)
+        rect = option.rect.adjusted(HANG, 2, -4, -2)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if option.state & QStyle.StateFlag.State_Selected:
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(qcolor(t.selection))
-            painter.drawRoundedRect(rect, t.look.item, t.look.item)
+            want = qcolor(t.selection)
         elif option.state & QStyle.StateFlag.State_MouseOver:
+            want = qcolor(t.hover)
+        else:
+            want = CLEAR
+        shade = self.fades.colour(index.row(), want)
+        if shade.alpha():
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(qcolor(t.hover))
+            painter.setBrush(shade)
             painter.drawRoundedRect(rect, t.look.item, t.look.item)
 
         metrics = option.fontMetrics
@@ -111,7 +171,9 @@ class SearchPanel(QWidget):
         self.field = QLineEdit()
         self.field.setPlaceholderText(tr("Search in document"))
         self.field.setClearButtonEnabled(True)
-        self.field.addAction(icon("magnifying-glass", themes.current.text_muted), QLineEdit.ActionPosition.LeadingPosition)
+        self._glass = self.field.addAction(icon("magnifying-glass", themes.current.text_muted),
+                                           QLineEdit.ActionPosition.LeadingPosition)
+        themes.changed.connect(self._repaint_glass)
         self.field.returnPressed.connect(self._on_return)
         self.field.textChanged.connect(self._on_text_changed)
 
@@ -120,28 +182,50 @@ class SearchPanel(QWidget):
         for box in (self.match_case, self.whole_word):
             box.setObjectName("Muted")
             box.toggled.connect(self.start)
-        options = QHBoxLayout()
+        self._options = options = QGridLayout()
         options.setContentsMargins(2, 0, 0, 0)
-        options.addWidget(self.match_case)
-        options.addWidget(self.whole_word)
-        options.addStretch()
+        options.addWidget(self.match_case, 0, 0)
+        options.addWidget(self.whole_word, 0, 1)
+        options.setColumnStretch(2, 1)  # what is left of the row
+        self._stacked = False  # the two stand one over the other, when their labels are too long for a row
 
         self.status = muted_label()
-        self.results = QListWidget()
-        self.results.setItemDelegate(ResultDelegate(self))
+        self.results = _Results()
+        self._delegate = ResultDelegate(self, self.results)
+        self.results.setItemDelegate(self._delegate)
         self.results.setMouseTracking(True)
         self.results.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.results.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.results.currentItemChanged.connect(self._on_current_changed)
 
+        self._controls = controls = QVBoxLayout()
+        controls.setContentsMargins(PAD, 0, PAD - 4, 8)
+        controls.setSpacing(8)
+        controls.addWidget(self.field)
+        controls.addLayout(options)
+        controls.addWidget(self.status)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 6, 0)
-        layout.setSpacing(8)
-        layout.addWidget(panel_title("Search"))
-        layout.addWidget(self.field)
-        layout.addLayout(options)
-        layout.addWidget(self.status)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(panel_header("Search"))
+        layout.addLayout(controls)
         layout.addWidget(self.results)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        margins = self._controls.contentsMargins()
+        room = self.width() - margins.left() - margins.right()
+        need = (self.match_case.sizeHint().width() + self.whole_word.sizeHint().width() + 2
+                + max(self._options.horizontalSpacing(), 0))
+        stacked = need > room  # labels as long as German's or Russian's would be cut off in a row
+        if stacked != self._stacked:
+            self._stacked = stacked
+            self._options.removeWidget(self.whole_word)
+            self._options.addWidget(self.whole_word, int(stacked), int(not stacked))
+
+    def _repaint_glass(self, *_) -> None:
+        """The magnifier in the field, in the muted colour of the theme now: it was made in the one before."""
+        self._glass.setIcon(icon("magnifying-glass", themes.current.text_muted))
 
     def page_label(self, page: int) -> str:
         if page not in self._labels:
@@ -156,20 +240,24 @@ class SearchPanel(QWidget):
         self._cancel.set()
         self._cancel = threading.Event()
         self._generation += 1
-        self.results.clear()
+        self._clear_results()
         self.cleared.emit()
         self.query = self.field.text().strip()
         if not self.query:
             self.status.setText("")
+            self.results.busy.run(False)
             return
         self.status.setText(tr("Searching…"))
+        self.results.busy.run(True)
         args = (self._generation, self.query, self.match_case.isChecked(), self.whole_word.isChecked(), self._cancel)
         threading.Thread(target=self._worker, args=args, daemon=True, name="search").start()
 
     def _worker(self, generation, query, match_case, whole_word, cancelled) -> None:
-        for hit in self._document.iter_search(query, match_case, whole_word, cancelled):
-            self._relay.hit.emit(generation, hit)
-        self._relay.done.emit(generation)
+        try:
+            for hit in self._document.iter_search(query, match_case, whole_word, cancelled):
+                self._relay.hit.emit(generation, hit)
+        finally:  # a search that failed is over all the same: its line of light must stop
+            self._relay.done.emit(generation)
 
     def _on_hit(self, generation: int, hit: SearchHit) -> None:
         if generation != self._generation:
@@ -186,6 +274,7 @@ class SearchPanel(QWidget):
         if generation != self._generation:
             return
         count = self.results.count()
+        self.results.busy.run(False)
         self.status.setText(tr("No results" if count == 0 else "1 result" if count == 1 else f"{count} results"))
 
     def _on_text_changed(self, text: str) -> None:
@@ -214,7 +303,13 @@ class SearchPanel(QWidget):
             self.start()
         else:
             self._cancel.set()
-            self.results.clear()
+            self._clear_results()
+            self.results.busy.run(False)
+
+    def _clear_results(self) -> None:
+        self._delegate.fades.reset()  # the highlight of a row that is gone is not the next one's
+        self.results.clear()
 
     def shutdown(self) -> None:
         self._cancel.set()
+        self.results.busy.run(False)

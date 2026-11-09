@@ -21,6 +21,7 @@ from ..core.platforms import package_family
 from ..core.updates import Update, UpdateError
 from ..settings import Settings
 from ..theme import themes
+from .messages import style_progress
 from .widgets import FloatingBar, IconButton, icon_pixmap
 
 CARD_WIDTH = 360
@@ -193,11 +194,8 @@ class UpdateCard(FloatingBar):
         self.hide()
 
     def _restyle(self, *_) -> None:
-        t = themes.current
-        self.glyph.setPixmap(icon_pixmap("arrow-circle-up", 20, t.accent))
-        rounding = min(3, t.look.item)
-        self.bar.setStyleSheet(f"QProgressBar {{ background: {t.border}; border: none; border-radius: {rounding}px; }}"
-                               f"QProgressBar::chunk {{ background: {t.accent}; border-radius: {rounding}px; }}")
+        self.glyph.setPixmap(icon_pixmap("arrow-circle-up", 20, themes.current.accent))
+        style_progress(self.bar)
 
     def _set(self, title: str, text: str, buttons: list[tuple[str, object, bool]], progress: bool = False) -> None:
         self.title.setText(tr(title))
@@ -217,10 +215,16 @@ class UpdateCard(FloatingBar):
             button.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # the card never takes the keyboard from the pages
             button.clicked.connect(slot)
             self.buttons.addWidget(button)
+            button.show()  # a card on screen sizes itself next: the layout would only show a new button after that
+        # The width is fixed, so it is the buttons of this state, in the language in use, that can widen it.
+        self.setFixedWidth(max(CARD_WIDTH, self.layout().minimumSize().width()))
         self.adjustSize()
         self.place()
+        coming = self.isHidden()  # a new state of the card on screen changes its words, not its place
         self.show()
         self.raise_()
+        if coming:
+            self.appear()
 
     def place(self) -> None:
         parent = self.parentWidget()

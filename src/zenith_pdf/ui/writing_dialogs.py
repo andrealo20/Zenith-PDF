@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QLocale, Qt, QUrl
-from PySide6.QtGui import QColor, QDesktopServices, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QTextCharFormat, QTextCursor, QTextFormat
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -124,6 +124,7 @@ class SpellingDialog(messages.MessageDialog):
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll.setMaximumHeight(LIST_HEIGHT)
+        self.scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Tab goes tick box to tick box, and brings each into view
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll.setWidget(self._rows)
         self.scroll.setStyleSheet("QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }")
@@ -370,6 +371,24 @@ def marks_of(view: DocumentView) -> list[writing.Marked]:
     return found
 
 
+def _tame_headings(view: QTextBrowser) -> None:
+    """Markdown headings come out much larger than the text round them; in a dialog a step above it is enough."""
+    view.ensurePolished()  # its font is the style sheet's, not the default one
+    document = view.document()
+    cursor = QTextCursor(document)
+    block = document.begin()
+    while block.isValid():
+        if block.blockFormat().headingLevel():
+            cursor.setPosition(block.position())
+            cursor.setPosition(block.position() + block.length() - 1, QTextCursor.MoveMode.KeepAnchor)
+            heading = QTextCharFormat()
+            heading.setProperty(QTextFormat.Property.FontSizeAdjustment, 0)
+            heading.setFontPointSize(view.font().pointSizeF() * 1.2)
+            heading.setFontWeight(QFont.Weight.DemiBold)
+            cursor.mergeCharFormat(heading)
+        block = block.next()
+
+
 class StudyNotesDialog(messages.MessageDialog):
     def __init__(self, parent, marks: list[writing.Marked], title: str):
         super().__init__(parent, "Study notes", "", [
@@ -395,6 +414,7 @@ class StudyNotesDialog(messages.MessageDialog):
     def _refresh(self, *_) -> None:
         self.markdown = writing.study_notes(self.marks, self.title, self.order.value)
         self.view.setMarkdown(self.markdown.split("\n", 1)[1])  # the dialog's heading names it already
+        _tame_headings(self.view)
 
 
 def choose_vault(parent, settings) -> Path | None:

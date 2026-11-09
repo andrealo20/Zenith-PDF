@@ -28,7 +28,7 @@ from ..core.render import RenderPool
 from ..core.store import AnnotationStore
 from ..settings import Settings
 from ..theme import themes
-from . import messages
+from . import messages, motion
 from .annotations_panel import AnnotationsPanel
 from .commands import ChangePages
 from .dialogs import ApplyToPagesDialog, PropertiesDialog
@@ -121,12 +121,15 @@ class PageCounter(FloatingBar):
         self.total.setText(tr(f" of {count} "))
         self.set_page(self._view.current_page)
         spot = self._view.history.peek_back()
+        came = spot is not None and not self.back_button.isVisible()
         self.back_button.setVisible(spot is not None)
         if spot is not None:
             self.back_button.setText(str(spot.page + 1))
             self.back_button.setToolTip(tr(f"Back to page {spot.page + 1} (Alt+Left)"))
             self.back_button.setProperty("help_detail", f"Back to page {spot.page + 1}")
         self.adjustSize()
+        if came:
+            motion.appear(self.back_button, 0, motion.FAST)  # the bar is wider at once; the chip fades in
 
     def set_page(self, index: int) -> None:
         if not self.field.hasFocus():
@@ -254,6 +257,7 @@ class ZoomBar(FloatingBar):
 
     def set_compact(self, compact: bool) -> None:
         """The zoom alone, or every view control, then placed again at the new size."""
+        shown = {widget for widget in self._widgets if widget.isVisible()}
         self.compact = compact
         self.compact_button.set_icon_name("caret-left" if compact else "caret-right")
         self.compact_button.setToolTip(tr("Show all the view controls" if compact else "Show only the zoom"))
@@ -262,6 +266,9 @@ class ZoomBar(FloatingBar):
             canvas.resizeEvent(None)  # the canvas folds and places its bars
         else:
             self.fit(1 << 20)  # no canvas yet: room for everything
+        for widget in self._widgets:  # unfolded: the bar is wider at once, and the controls that came fade in
+            if widget.isVisible() and widget not in shown:
+                motion.appear(widget, 0, motion.NORMAL)
 
     def _fill_more(self, menu: QMenu) -> None:
         """The More button's menu: what fit() folded away, as menu entries."""
@@ -351,6 +358,7 @@ class ZoomBar(FloatingBar):
         popup.adjustSize()
         popup.move(corner.x() - popup.width() // 2, corner.y() - popup.height() - 10)
         popup.show()
+        popup.appear()  # it stands above its button: it rises out of it
 
 
 class SnappingPopup(FloatingBar):
@@ -1074,6 +1082,7 @@ class Workspace(QWidget):
         popup.adjustSize()
         popup.move(corner.x() - popup.width() // 2, corner.y() - popup.height() - 10)
         popup.show()
+        popup.appear()
         self.layers_popup = popup
 
     def set_layer(self, index: int, shown: bool) -> None:
@@ -1194,6 +1203,7 @@ class Workspace(QWidget):
             self.page_manager.closed.connect(self._close_page_manager)
             self.page_manager.reload(select=self.view.current_page)
             self.canvas.show_manager(self.page_manager)
+            motion.appear(self.page_manager)  # it comes in as it opens, not again whenever its tab is shown
             self.page_manager.list.setFocus()
         else:
             self._close_page_manager(self.page_manager.current_page())

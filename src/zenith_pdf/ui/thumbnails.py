@@ -10,7 +10,7 @@ from ..core.document import Document
 from ..core.render import RenderPool
 from ..theme import themes
 from .annotation_items import paint_annotation
-from .widgets import panel_title
+from .side_panel import CLEAR, Arrivals, RowFades, panel_header
 
 THUMB_WIDTH = 120  # in the panel at its first width: a wider panel has them as large a share of it
 TALLEST = 1.5  # a thumbnail's height at most, in its widths
@@ -18,6 +18,7 @@ PANEL_SHARE = THUMB_WIDTH / 264  # of the panel's width at first (side_panel.PAN
 PADDING = 10
 LABEL_HEIGHT = 22
 PAGE_SIZE_ROLE = Qt.ItemDataRole.UserRole + 1
+ARRIVAL_ROLE = Qt.ItemDataRole.UserRole + 2  # how far a page that has just been drawn has faded in, 0 to 1
 
 
 def _thumb_size(page_size: tuple[float, float], thumb_width: int = THUMB_WIDTH) -> tuple[float, float]:
@@ -33,6 +34,10 @@ class ThumbnailModel(QAbstractListModel):
     thumbnail is that rendering with the page's annotations painted over it.
     """
 
+    # A page that arrives has faded a step further: the list is to be painted again. Not dataChanged, which has a
+    # list of rows of different heights measure every one of them again, at every step.
+    fading = Signal(int)
+
     def __init__(self, document: Document, renderer: RenderPool, device_pixel_ratio: float, store=None, parent=None):
         super().__init__(parent)
         self._document = document
@@ -47,6 +52,8 @@ class ThumbnailModel(QAbstractListModel):
         self._stale: set[int] = set()  # drawn at an earlier width: shown stretched until drawn again
         self._labels: dict[int, str] = {}
         self._dirty: set[int] = set()
+        self._arrivals = Arrivals(self)  # a page drawn for the first time fades in, rather than appearing
+        self._arrivals.changed.connect(self.fading)
         self._redraw = QTimer(self)
         self._redraw.setSingleShot(True)
         self._redraw.setInterval(150)
@@ -98,6 +105,7 @@ class ThumbnailModel(QAbstractListModel):
         self._pending.clear()
         self._stale.clear()
         self._labels.clear()
+        self._arrivals.clear()
         self.endResetModel()
 
     def set_thumb_width(self, width: int) -> None:
@@ -134,14 +142,19 @@ class ThumbnailModel(QAbstractListModel):
             return self._pixmaps.get(row)
         if role == PAGE_SIZE_ROLE:
             return self._document.page_size(row)
+        if role == ARRIVAL_ROLE:
+            return self._arrivals.level(row)
         return None
 
     def _on_rendered(self, key, scale, image) -> None:
         if not isinstance(key, tuple) or key[0] is not self._token:
             return
         row = key[1]
+        first = row not in self._pixmaps  # not a page drawn again at another size
         self._bases[row] = image
         self._pixmaps[row] = self._compose(row)
+        if first:
+            self._arrivals.arrive(row)
         self._pending.discard(row)
         self._stale.discard(row)
         index = self.index(row)
@@ -154,6 +167,10 @@ class ThumbnailModel(QAbstractListModel):
 
 
 class ThumbnailDelegate(QStyledItemDelegate):
+    def __init__(self, view: QListView):
+        super().__init__(view)
+        self._fades = RowFades(view)  # the ring round a page comes and goes gently
+
     def sizeHint(self, option, index) -> QSize:
         size, width = index.data(PAGE_SIZE_ROLE), index.model().thumb_width
         height = _thumb_size(size, width)[1] if size is not None else width * TALLEST
@@ -172,8 +189,10 @@ class ThumbnailDelegate(QStyledItemDelegate):
 
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
-        if selected or hovered:
-            painter.setPen(QPen(QColor((t.focus or t.accent) if selected else t.text_muted), 2))
+        want = QColor(t.focus or t.accent) if selected else QColor(t.text_muted) if hovered else CLEAR
+        ring_colour = self._fades.colour(index.row(), want)
+        if ring_colour.alpha():
+            painter.setPen(QPen(ring_colour, 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             ring = max(t.look.item - 1, 0)  # 1 px nearer the page than the page manager's ring, so 1 px less round
             painter.drawRoundedRect(thumb.adjusted(-4, -4, 4, 4), ring, ring)
@@ -181,7 +200,9 @@ class ThumbnailDelegate(QStyledItemDelegate):
         painter.fillRect(thumb, Qt.GlobalColor.white)
         pixmap = index.data(Qt.ItemDataRole.DecorationRole)
         if pixmap is not None:
+            painter.setOpacity(index.data(ARRIVAL_ROLE))  # a page just drawn comes in from the blank one
             painter.drawPixmap(thumb, pixmap, QRectF(pixmap.rect()))
+            painter.setOpacity(1.0)
         painter.setPen(QPen(QColor(t.border), 1))  # the page's edge: a white page on the light panel has none
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRect(thumb.adjusted(-0.5, -0.5, 0.5, 0.5))
@@ -207,15 +228,17 @@ class ThumbnailPanel(QWidget):
         self.list.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.selectionModel().currentChanged.connect(self._on_current_changed)
+        self.model.fading.connect(self._repaint)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 12, 0, 0)
-        layout.setSpacing(6)
-        title = panel_title("Pages")
-        title.setContentsMargins(16, 0, 16, 0)
-        layout.addWidget(title)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(panel_header("Pages"))
         layout.addWidget(self.list)
         self.set_current_page(0)
+
+    def _repaint(self, _row: int) -> None:
+        self.list.viewport().update()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

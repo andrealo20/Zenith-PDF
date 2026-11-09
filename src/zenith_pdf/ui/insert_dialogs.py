@@ -46,6 +46,7 @@ from ..core.i18n import tr
 from ..core.platforms import WINDOWS, math_font, mono_font, settings_place, ui_font
 from ..icons import icon
 from ..theme import outline, themes
+from . import messages, motion
 from .page_actions import IMAGE_FILES
 from .widgets import Segmented, Switch, muted_label
 
@@ -89,6 +90,7 @@ def _intro(text: str) -> QLabel:
 
 def _layout(dialog: QDialog, title: str, intro: str = "") -> QVBoxLayout:
     """The dialog's column, with its heading and intro already in it."""
+    messages.house(dialog)
     dialog.setWindowTitle(tr(title))
     dialog.setMinimumWidth(DIALOG_WIDTH)
     layout = QVBoxLayout(dialog)
@@ -167,7 +169,7 @@ class LinkDialog(QDialog):
         self.number.setValue(target + 1 if target >= 0 else 1)
         self.number.setMinimumWidth(96)
         self.ensurePolished()  # measure with the style sheet's font
-        width = max(self.fontMetrics().horizontalAdvance(text) for text in ("Address", "Page")) + 4
+        width = max(self.fontMetrics().horizontalAdvance(tr(text)) for text in ("Address", "Page")) + 4
         web = QWidget()
         web_row = QHBoxLayout(web)
         web_row.setContentsMargins(0, 0, 0, 0)
@@ -202,7 +204,10 @@ class LinkDialog(QDialog):
 
     def _sync(self, *_) -> None:
         on_page = self.page.isChecked()
+        before = self.fields.currentIndex()
         self.fields.setCurrentIndex(1 if on_page else 0)
+        if self.fields.currentIndex() != before:
+            motion.appear(self.fields.currentWidget(), 4)
         self.address.setEnabled(not on_page)
         self.number.setEnabled(on_page)
         self.ok_button.setEnabled(on_page or bool(self.address.text().strip()))
@@ -324,7 +329,8 @@ class EquationDialog(QDialog):
         self.problem = ""  # why the source can't be drawn, shown in the preview's place
         snippets = QWidget()
         # Symbols read better in the maths font, and short labels never clip; the name is in the tooltip.
-        snippets.setStyleSheet(f'QPushButton {{ font-family: "{math_font()}"; font-size: 16px; padding: 3px 4px; }}')
+        snippets.setStyleSheet(f'QPushButton {{ font-family: "{math_font()}"; font-size: 16px; padding: 3px 4px; '
+                               "min-width: 0; min-height: 0; }")  # not a dialog button's size: seven to a row
         grid = QGridLayout(snippets)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setSpacing(4)
@@ -520,7 +526,7 @@ class SignatureDialog(QDialog):
         self._picture: QImage | None = None
         fonts = [f for f in SCRIPT_FONTS if f in QFontDatabase.families()] or [ui_font()]
         self.ensurePolished()  # measure with the style sheet's font
-        width = max(self.fontMetrics().horizontalAdvance(text) for text in ("Name", "Style", "Ink", "Save as")) + 4
+        width = max(self.fontMetrics().horizontalAdvance(tr(text)) for text in ("Name", "Style", "Ink", "Save as")) + 4
         self.mode = Segments(["Type", "Draw", "Picture"])
         self.pages = QStackedWidget()
 
@@ -601,13 +607,17 @@ class SignatureDialog(QDialog):
         footnote.setWordWrap(True)
         layout.addWidget(footnote)
         self.ok_button = _footer(self, layout, "Save signature")
-        self.mode.changed.connect(self.pages.setCurrentIndex)
+        self.mode.changed.connect(self._show_page)
         self.mode.changed.connect(self._refresh_ok)
         self.name.textChanged.connect(self._show_typed)
         self.style_box.currentIndexChanged.connect(self._show_typed)
         self.pad.changed.connect(self._refresh_ok)
         self._show_typed()
         self.name.setFocus()
+
+    def _show_page(self, index: int) -> None:
+        self.pages.setCurrentIndex(index)
+        motion.appear(self.pages.currentWidget(), 4)
 
     def _ink(self):
         return self.colour.currentData()

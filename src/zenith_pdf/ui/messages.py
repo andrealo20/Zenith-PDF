@@ -9,8 +9,10 @@ messages.ask(...), so tests can monkeypatch them.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QSize, Qt
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QRectF, QSize, Qt
+from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -19,15 +21,21 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
+    QRadioButton,
     QSpinBox,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from ..core.i18n import tr
 from ..icons import icon as theme_icon
 from ..theme import themes
+from . import motion
+from .widgets import focus_ring, keyboard_focus
 
 Button = tuple[str, str, str]  # (key, label, role): role "primary", "danger" or ""
 CANCEL = "cancel"  # the key of a button that dismisses: the answer is None, as for Esc
@@ -35,6 +43,114 @@ OK_CANCEL: list[Button] = [("ok", "OK", "primary"), (CANCEL, "Cancel", "")]
 MIN_WIDTH = 440
 ICON_SIZE = 28
 INT_RANGE = 2_147_483_647
+RING_GAP = 3  # px from a control's edge to the outside of its focus ring: one of air, then the ring's two
+
+
+class FocusRing(QWidget):
+    """The keyboard focus ring of a dialog's buttons and tick boxes, drawn round them as the app's own controls draw
+    theirs (widgets.focus_ring). Qt shows the focus of a button as a faint box inside it, or not at all under the
+    style sheet; a ring outside also shows on the accent fill of the main button. It follows the focus only when the
+    keyboard put it there, so a click leaves no ring."""
+
+    TARGETS = (QPushButton, QToolButton, QCheckBox, QRadioButton)
+
+    def __init__(self, dialog: QWidget):
+        super().__init__(dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._target: QWidget | None = None
+        self._watched: list[QWidget] = []  # the control and what holds it: where any of them moves, the ring goes
+        self.hide()
+        dialog.setStyleSheet(f"{dialog.styleSheet()} QPushButton:focus, QToolButton:focus, QCheckBox:focus, "
+                             "QRadioButton:focus { outline: 0; }")  # the box Qt draws inside, which the ring replaces
+        QApplication.instance().focusChanged.connect(self._focused)
+        themes.changed.connect(self.update)
+
+    def _focused(self, _before, now) -> None:
+        if now is self._target:
+            self._place()
+            return
+        for widget in self._watched:
+            if isValid(widget):
+                widget.removeEventFilter(self)
+        self._target, self._watched = None, []
+        if isinstance(now, self.TARGETS) and now.window() is self.window():
+            self._target = now
+            holder = now
+            while holder is not None and holder is not self.parentWidget():
+                holder.installEventFilter(self)
+                self._watched.append(holder)
+                holder = holder.parentWidget()
+        self._place()
+
+    def eventFilter(self, watched, event) -> bool:
+        if event.type() in (QEvent.Type.Move, QEvent.Type.Resize, QEvent.Type.Show, QEvent.Type.Hide):
+            self._place()
+        return False
+
+    def _place(self) -> None:
+        target = self._target
+        if target is None or not isValid(target) or not target.isVisible() or not keyboard_focus(target):
+            self.hide()
+            return
+        whole = target.size()
+        if target.visibleRegion().boundingRect().size() != whole:  # scrolled partly out of its area: no ring half cut
+            self.hide()
+            return
+        size = whole
+        if isinstance(target, (QCheckBox, QRadioButton)):  # a tick box's label ends where its text does, not its cell
+            size = QSize(min(whole.width(), target.sizeHint().width()) + RING_GAP, whole.height())  # air after the word
+        box = QRect(target.mapTo(self.parentWidget(), QPoint(0, 0)), size)
+        self.setGeometry(box.adjusted(-RING_GAP, -RING_GAP, RING_GAP, RING_GAP))
+        self.raise_()
+        self.show()
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        look = themes.current.look
+        if isinstance(self._target, QPushButton):
+            radius = 15 if look.pill_buttons else look.control
+        elif isinstance(self._target, QToolButton):
+            radius = look.item
+        else:
+            radius = look.check
+        painter = QPainter(self)
+        focus_ring(painter, QRectF(self.rect()), radius + RING_GAP)
+
+
+class _Recentre(QObject):
+    """The entrance moves a dialog, which Qt takes for a place chosen on purpose: shown again, a dialog would open
+    where it was instead of centring on its parent. When it goes, that mark goes with it."""
+
+    def __init__(self, dialog: QDialog):
+        super().__init__(dialog)
+        self._dialog = dialog  # held to see when it is gone
+        dialog.installEventFilter(self)
+
+    def eventFilter(self, watched, event) -> bool:
+        # Not for a minimised window (that is spontaneous), nor for a dialog being deleted: it is hidden first.
+        if event.type() == QEvent.Type.Hide and not event.spontaneous() and isValid(self._dialog):
+            motion.appear(self._dialog)  # hidden: it starts nothing, and ends an entrance that would go on moving it
+            self._dialog.setAttribute(Qt.WidgetAttribute.WA_Moved, False)
+        return False
+
+
+def house(dialog: QDialog, rise: int = motion.RISE) -> None:
+    """What every dialog of the app shares: it comes in as it is shown, the keyboard's focus shows as a ring, and its
+    buttons are as tall as everywhere (the style sheet sizes them by the name MessageDialog)."""
+    if not dialog.objectName():
+        dialog.setObjectName("MessageDialog")
+    motion.appear_on_show(dialog, rise)
+    if dialog.findChild(FocusRing) is None:  # once, however many layers of a dialog ask
+        FocusRing(dialog)
+        _Recentre(dialog)
+
+
+def style_progress(bar: QProgressBar) -> None:
+    """The thin bar of a job's progress, in the colours of the theme."""
+    t = themes.current
+    rounding = min(3, t.look.item)
+    bar.setStyleSheet(f"QProgressBar {{ background: {t.border}; border: none; border-radius: {rounding}px; }}"
+                      f"QProgressBar::chunk {{ background: {t.accent}; border-radius: {rounding}px; }}")
 
 
 class MessageDialog(QDialog):
@@ -116,13 +232,15 @@ class MessageDialog(QDialog):
         chosen = self._buttons.get(self.default_key)
         if chosen is not None:
             chosen.setDefault(True)
-            chosen.setFocus()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(20)
         layout.addLayout(top)
         layout.addLayout(row)
+        if chosen is not None:
+            chosen.setFocus()  # once the button is in the dialog: before, the tick box took the focus instead
+        house(self)
 
     def sizeHint(self) -> QSize:
         # Wrapped text guesses its height for a narrow width: measure it at the width the dialog opens with.

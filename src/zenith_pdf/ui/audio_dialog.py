@@ -8,7 +8,7 @@ import math
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, QTimer, QUrl
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, QTimer, QUrl, QVariantAnimation
 from PySide6.QtGui import QColor, QCursor, QDesktopServices, QGuiApplication, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -31,9 +31,10 @@ from ..core.i18n import tr
 from ..core.platforms import MAC, WINDOWS, settings_place
 from ..icons import icon
 from ..theme import themes
-from . import messages
+from . import messages, motion
 from .widgets import FloatingBar, IconButton, muted_label
 
+PULSE_MS = 1600  # one breath of the ring round Stop
 LARGE_FILE = 50 * 1024 * 1024  # bytes; a bigger file makes a heavy PDF, so ask first
 QUIET_SECONDS = 2.0  # this long with no sound and the dialog says so
 ASK_DISCARD_SECONDS = 5.0  # a take this long is confirmed before Cancel drops it; a shorter one just goes
@@ -122,6 +123,24 @@ class _RoundButton(QAbstractButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.set_kind(kind)
         themes.changed.connect(self.update)
+        # While Stop is on screen the microphone is open: its ring breathes in red, so it is plain that it records.
+        self._breath = QVariantAnimation(self)
+        self._breath.setStartValue(0.0)
+        self._breath.setEndValue(1.0)
+        self._breath.setDuration(PULSE_MS)
+        self._breath.setLoopCount(-1)
+        self._breath.valueChanged.connect(self.update)
+        self._lit = motion.Smooth(self)  # how far the pointer's lift of the colour has come
+        self._lit.changed.connect(self.update)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if self.kind == "stop" and motion.enabled():
+            self._breath.start()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self._breath.stop()
 
     def set_kind(self, kind: str) -> None:
         self.kind = kind
@@ -139,12 +158,15 @@ class _RoundButton(QAbstractButton):
         mark = QColor(RECORD_RED if self.kind in ("record", "stop") else t.accent)
         if self.isDown():
             mark = mark.darker(115)
-        elif self.underMouse():
-            mark = mark.lighter(112)
+        else:  # the pointer lifts the colour as it comes and lets it down as it goes
+            mark = motion.mixed(mark, mark.lighter(112), self._lit.value)
         ring = QRectF(self.rect()).adjusted(2, 2, -2, -2)
         ring_color = QColor(t.accent if self.hasFocus() and self.isEnabled() else t.border)
         if self.hasFocus():
             ring_color.setAlpha(150)
+        if self._breath.state() == QVariantAnimation.State.Running:
+            breath = 0.5 - 0.5 * math.cos(self._breath.currentValue() * math.tau)
+            ring_color = motion.mixed(ring_color, QColor(RECORD_RED), breath)
         painter.setPen(QPen(ring_color, 2.0))
         painter.setBrush(QColor(t.raised))
         painter.drawEllipse(ring)
@@ -169,11 +191,11 @@ class _RoundButton(QAbstractButton):
             painter.drawPolygon(QPolygonF([QPointF(x - 7, y - 13), QPointF(x + 14, y), QPointF(x - 7, y + 13)]))
 
     def enterEvent(self, event) -> None:
-        self.update()
+        self._lit.go(1.0, motion.FAST)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self.update()
+        self._lit.go(0.0, motion.NORMAL, motion.EASE_IN)
         super().leaveEvent(event)
 
 
@@ -186,6 +208,7 @@ class RecordDialog(QDialog):
 
     def __init__(self, parent=None, recorder: Recorder | None = None, player_factory=Player, start_dir: str = ""):
         super().__init__(parent)
+        messages.house(self)
         self.setWindowTitle(tr("Audio note"))
         self.setFixedWidth(DIALOG_WIDTH)
         self._real_device = recorder is None
@@ -283,6 +306,12 @@ class RecordDialog(QDialog):
         layout.addWidget(status_box)
         layout.addSpacing(20)  # as in the other dialogs, 20 above the buttons
         layout.addLayout(buttons)
+        # The width is fixed, so it is the longest row of buttons a take can show (the start's or a take's), in the
+        # language in use, that sets it: a longer language would squeeze the words of the buttons.
+        margins = layout.contentsMargins()
+        row = max(self.again_button.sizeHint().width(), self.attach_button.sizeHint().width())
+        row += self.add_button.sizeHint().width() + cancel.sizeHint().width() + 2 * buttons.spacing()
+        self.setFixedWidth(max(DIALOG_WIDTH, row + margins.left() + margins.right()))
 
         self._timer = QTimer(self)
         self._timer.setInterval(50)
@@ -716,6 +745,7 @@ class AudioPopover(FloatingBar):
             y = max(area.top(), min(y, area.bottom() - self.height()))
         self.move(x, y)
         self.show()
+        self.appear()
 
     def toggle(self) -> None:
         try:

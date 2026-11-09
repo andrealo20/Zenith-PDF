@@ -10,8 +10,8 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QSize, Qt, Signal
-from PySide6.QtGui import QPainter, QTextDocument
+from PySide6.QtCore import QEvent, QObject, QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QFont, QFontMetrics, QPainter, QTextDocument
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 from ..core.i18n import tr
 from ..core.library_index import MATCH_END, MATCH_START, Hit, LibraryIndex, query_terms
 from ..settings import Settings
-from ..theme import qcolor, themes
+from ..theme import outline, qcolor, themes
 from .widgets import muted_label
 
 RESULTS = 40  # pages listed at most
@@ -103,27 +103,39 @@ class Indexer(QObject):
 
 
 class _HitDelegate(QStyledItemDelegate):
-    """A result: the file's name and the page, then the words around the match, the match in bold."""
+    """A result: the file's name in bold and the page quietly after it, then the words around the match, the match
+    in bold and in the text colour among the muted words."""
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
         hit: Hit = index.data(Qt.ItemDataRole.UserRole)
         t = themes.current
         painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if option.state & QStyle.StateFlag.State_MouseOver:
-            painter.fillRect(option.rect, qcolor(t.hover))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(qcolor(t.hover))
+            painter.drawPath(outline(QRectF(option.rect).adjusted(2, 1, -2, -1), t.look.item, t.look))
         rect = option.rect.adjusted(10, 6, -10, -6)
-        painter.setPen(qcolor(t.text))
-        bold = painter.font()
-        bold.setWeight(bold.Weight.DemiBold)
+        line = rect.adjusted(0, 0, 0, -rect.height() // 2)
+        bold = QFont(option.font)
+        bold.setWeight(QFont.Weight.DemiBold)
+        page = "   ·   " + tr(f"p. {hit.page + 1}")
+        name = QFontMetrics(bold).elidedText(hit.path.stem, Qt.TextElideMode.ElideMiddle,
+                                             max(rect.width() - QFontMetrics(option.font).horizontalAdvance(page), 0))
         painter.setFont(bold)
-        painter.drawText(rect.adjusted(0, 0, 0, -rect.height() // 2), Qt.AlignmentFlag.AlignLeft,
-                         tr(f"{hit.path.stem}   ·   p. {hit.page + 1}"))
+        painter.setPen(qcolor(t.text))
+        painter.drawText(line, Qt.AlignmentFlag.AlignLeft, name)
+        painter.setFont(option.font)
+        painter.setPen(qcolor(t.text_muted))
+        painter.drawText(QRect(line).adjusted(QFontMetrics(bold).horizontalAdvance(name), 0, 0, 0),
+                         Qt.AlignmentFlag.AlignLeft, page)
         painter.restore()
         painter.save()
         words = hit.snippet.replace("&", "&amp;").replace("<", "&lt;")
         words = words.replace(MATCH_START, "<b>").replace(MATCH_END, "</b>")
         text = QTextDocument()
         text.setDefaultFont(option.font)
+        text.setDefaultStyleSheet(f"b {{ color: {t.text}; }}")
         text.setHtml(tr(f'<span style="color:{t.text_muted}">{words}</span>'))
         text.setTextWidth(rect.width())
         painter.translate(rect.left() - 4, rect.top() + rect.height() // 2 - 4)
@@ -144,7 +156,7 @@ class InsideResults(QFrame):
         self.indexer = indexer
         self.query = ""
         title = QLabel(tr("Inside the documents"))
-        title.setObjectName("HomeSection")
+        title.setObjectName("SectionTitle")  # the files above are the page's subject: this is a part of it
         self.count = muted_label()
         row = QHBoxLayout()
         row.addWidget(title, 0, Qt.AlignmentFlag.AlignBottom)
@@ -159,9 +171,11 @@ class InsideResults(QFrame):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.itemClicked.connect(self._open)
         self.list.setFrameShape(QFrame.Shape.NoFrame)
+        self._viewport = self.list.viewport()
+        self._viewport.installEventFilter(self)  # a result is a thing to click: it shows a hand
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 8, 0, 0)
-        layout.setSpacing(8)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(6)
         layout.addLayout(row)
         layout.addWidget(self.list, 1)
         self.hide()
@@ -183,6 +197,12 @@ class InsideResults(QFrame):
         self.count.setText(tr(f"{len(hits)} page{'s' if len(hits) != 1 else ''} in {files} file{'s' if files != 1 else ''}"
                            if hits else "No page holds all these words"))
         self.show()
+
+    def eventFilter(self, watched, event) -> bool:
+        if watched is self._viewport and event.type() == QEvent.Type.MouseMove:
+            over = self.list.itemAt(event.position().toPoint()) is not None
+            watched.setCursor(Qt.CursorShape.PointingHandCursor if over else Qt.CursorShape.ArrowCursor)
+        return super().eventFilter(watched, event)
 
     def _open(self, item: QListWidgetItem) -> None:
         hit: Hit = item.data(Qt.ItemDataRole.UserRole)

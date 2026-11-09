@@ -47,12 +47,54 @@ from ..core.annotations import (
     squiggle,
 )
 from ..icons import icon
-from ..theme import themes
+from ..theme import Look, luminance, outline, themes
+from . import motion
 
 HIT_SLOP = 5.0  # points of tolerance around thin strokes
 Z_ANNOTATION = 2
 Z_HANDLE = 10
 MAX_TIP = 500  # characters of a comment shown when pointing at marked text
+MARK_CONTRAST = 3.0  # what the marks over a page (outlines, handles, guides) hold against its paper (WCAG, graphics)
+HOVER_WASH, HOVER_LINE = 26, 140  # 0-255: the tint and the hairline of what the pointer is on, before a click picks it
+SELECTION_HALO = 48  # 0-255: the faint band the selection's hairline stands in
+SEPIA = QColor(244, 233, 210)  # the paper of a sepia page: the tint multiplies the white of the page by it
+_paper: dict[tuple[bool, bool], tuple] = {}  # (inverted, sepia) -> (the theme it was worked out for, the accent)
+
+
+def page_accent(inverted: bool = False, sepia: bool = False) -> QColor:
+    """The accent as it reads on a page, which is white paper in either scheme (black when inverted, SEPIA when
+    tinted): the one of the style's palette made for light surfaces (for dark ones, when inverted), so a page is
+    marked alike in the dark scheme and the light one; and darkened (lightened) until it holds MARK_CONTRAST against
+    the paper, for a style with no palette for it, or an accent that is not far enough from it."""
+    theme = themes.current
+    known = _paper.get((inverted, sepia))
+    if known is None or known[0] is not theme:
+        colour = QColor(themes.tone("dark" if inverted else "light").accent)
+        paper = 0.0 if inverted else luminance(SEPIA) if sepia else 1.0
+        for _ in range(40):
+            light = luminance(colour)
+            if (max(light, paper) + 0.05) / (min(light, paper) + 0.05) >= MARK_CONTRAST:
+                break
+            colour = colour.lighter(106) if inverted else colour.darker(106)
+        known = _paper[inverted, sepia] = (theme, colour)
+    return QColor(known[1])
+
+
+def accent_on(page_item) -> QColor:
+    """The accent as it reads on `page_item`, a page of the canvas (or None), whatever its tint is."""
+    tint = getattr(page_item, "tint", "normal")
+    return page_accent(tint == "dark", tint == "sepia")
+
+
+def frame(painter: QPainter, rect: QRectF, thickness: float, colour: QColor) -> None:
+    """`rect` outlined `thickness` thick, centred on its edge, as four filled strips. A hairline stroked with a
+    cosmetic pen costs several times as much, for every annotation selected, at every frame of dragging them."""
+    half = thickness / 2
+    wide = rect.width() + thickness
+    painter.fillRect(QRectF(rect.left() - half, rect.top() - half, wide, thickness), colour)
+    painter.fillRect(QRectF(rect.left() - half, rect.bottom() - half, wide, thickness), colour)
+    painter.fillRect(QRectF(rect.left() - half, rect.top() + half, thickness, rect.height() - thickness), colour)
+    painter.fillRect(QRectF(rect.right() - half, rect.top() + half, thickness, rect.height() - thickness), colour)
 
 
 class _LinkDisplay:
@@ -628,6 +670,8 @@ class AnnotationItem(QGraphicsItem):
     def __init__(self, annotation: Annotation, page_item: QGraphicsItem, interactive: bool = True):
         super().__init__(page_item)
         self._bounds: tuple[Annotation, QRectF] | None = None  # boundingRect() of the annotation shown
+        self._hit: tuple[Annotation, QPainterPath] | None = None  # where a click lands, kept while the hover mark shows
+        self.hover = 0.0  # how much of the mark for "a click here picks this" shows, 0 to 1
         self.annotation = annotation
         self.preview: Annotation | None = None
         self.on_resized: Callable[[Annotation, Annotation], None] | None = None
@@ -701,6 +745,24 @@ class AnnotationItem(QGraphicsItem):
     def shape(self) -> QPainterPath:
         return hit_path(self.shown)
 
+    def accent(self) -> QColor:
+        """The accent as it reads on this item's page: what marks a selection, a hover and a handle are drawn in."""
+        return accent_on(self.parentItem())
+
+    def recolour(self) -> None:
+        """The theme or the page's tint changed: the handles are drawn in the accent again."""
+        for handle in self._handles:
+            handle.recolour()
+        self.update()
+
+    def set_hover(self, amount: float) -> None:
+        """The pointer is on this item (1) or not (0), or somewhere between while the mark eases in."""
+        if amount != self.hover:
+            self.hover = amount
+            if not amount:
+                self._hit = None  # the shape kept for the mark goes with it
+            self.update()
+
     def paint(self, painter: QPainter, option, widget=None) -> None:
         stretch = _stretch(self.annotation, self.preview)
         if stretch is not None:  # resizing a drawing of varying width: stretch the outline already built
@@ -711,30 +773,54 @@ class AnnotationItem(QGraphicsItem):
         else:
             paint_annotation(painter, self.shown)
         if isinstance(self.shown, Link) and (links.visible or self.isSelected()) and self._marks:
-            outline = QPen(QColor(themes.current.accent), 1, Qt.PenStyle.DashLine)
-            outline.setCosmetic(True)
-            painter.setPen(outline)
-            painter.setBrush(QColor(42, 140, 255, 30))
+            accent = self.accent()
+            frame = QPen(accent, 1, Qt.PenStyle.DashLine)
+            frame.setCosmetic(True)
+            painter.setPen(frame)
+            accent.setAlpha(30)
+            painter.setBrush(accent)
             painter.drawRect(QRectF(*self.shown.rect))
         if self.isSelected() and self._marks:
             self._paint_selection(painter)
+        elif self.hover > 0.0 and self._marks:
+            self._paint_hover(painter)
+
+    def _paint_hover(self, painter: QPainter) -> None:
+        """What a click here would pick, in a wash of the accent and a hairline: the very shape that is hit, so a thin
+        stroke shows how wide its target is."""
+        if self._hit is None or self._hit[0] is not self.shown:
+            self._hit = (self.shown, hit_path(self.shown))
+        line, wash = self.accent(), self.accent()
+        line.setAlpha(round(HOVER_LINE * self.hover))
+        wash.setAlpha(round(HOVER_WASH * self.hover))
+        hairline = QPen(line, 1)
+        hairline.setCosmetic(True)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(hairline)
+        painter.setBrush(wash)
+        painter.drawPath(self._hit[1])
+        painter.restore()
 
     def _paint_selection(self, painter: QPainter) -> None:
-        """A solid 1 px accent outline: through the handles when they frame the annotation, a little
-        outside it when there are none. A line's two end handles show its selection on their own."""
+        """A solid 1 px accent outline in a faint halo of the accent, so it stands apart from a border of the
+        annotation's own: through the handles when they frame the annotation, a little outside it when there are
+        none. A line's two end handles show its selection on their own."""
         roles = {handle.role for handle in self._handles}
         if "start" in roles:
             return
-        pen = QPen(QColor(themes.current.accent), 1)  # a hairline, at any zoom
-        pen.setCosmetic(True)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
+        accent = self.accent()
+        halo = QColor(accent)
+        halo.setAlpha(SELECTION_HALO)
+        t = painter.deviceTransform()
+        ratio = max(1, round(painter.device().devicePixelRatioF()))  # whole device pixels: all four sides alike
+        pixel = ratio / max(abs(t.m11()) + abs(t.m12()), 1e-6)  # a screen pixel, in points: a hairline at any zoom
         rect = QRectF(*selection_rect(self.shown))
         if "tl" not in roles:
-            t = painter.worldTransform()
-            pad = min(3 / max(abs(t.m11()) + abs(t.m12()), 1e-6), HIT_SLOP)  # 3 px, inside boundingRect
+            pad = min(3 * pixel, HIT_SLOP)  # 3 px, inside boundingRect
             rect.adjust(-pad, -pad, pad, pad)
-        painter.drawRect(rect)
+        frame(painter, rect, 3 * pixel, halo)
+        frame(painter, rect, pixel, accent)
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene() is not None:
@@ -799,35 +885,79 @@ class AnnotationItem(QGraphicsItem):
             self.set_preview(None)
 
 
+@lru_cache(maxsize=64)
+def handle_look(accent: int, state: int, size: float, look: Look) -> tuple[QPen, QColor, QPainterPath]:
+    """The ring, the fill and the shape of a handle `size` pixels across, ring included, in `accent` (an rgba): at
+    rest (state 0) a white dot with an accent ring, or in a style with chamfered corners a square with two cut; under
+    the pointer (1) larger, with a tint of the accent; pressed (2) with the accent for its fill."""
+    colour = QColor.fromRgba(accent)
+    fill, edge = QColor("white"), colour
+    if state == 2:
+        fill, edge = colour, QColor("white")
+    elif state == 1:
+        fill = motion.mixed(fill, colour, 0.22)
+    ring = Handle.RING + (0.5 if state else 0.0)
+    half = (size - Handle.RING) / 2 + (Handle.SWELL if state else 0.0)
+    rect = QRectF(-half, -half, 2 * half, 2 * half)
+    return QPen(edge, ring), fill, outline(rect, look.chip if look.chamfer else half, look)
+
+
 class Handle(QGraphicsEllipseItem):
-    """A resize handle: a white dot with an accent ring, the same size at any zoom."""
+    """A resize handle, the same size at any zoom: a white dot with an accent ring, or in a style with chamfered
+    corners a square with two cut. Under the pointer it swells and takes a tint of the accent; pressed, it is the
+    accent. A selection of many has hundreds: what a paint needs is kept (handle_look) until something changes."""
 
     SIZE = 10.0  # screen pixels, ring included
     TOUCH_SIZE = 18.0  # in touch mode: a fingertip's worth
+    RING = 1.5  # the ring is centred on the edge of the dot
+    SWELL = 1.0  # screen pixels it grows by on every side under the pointer
     touch = False  # touch mode is on: new handles are TOUCH_SIZE
 
     def __init__(self, owner: AnnotationItem, role: str):
-        ring = 1.5
         size = self.TOUCH_SIZE if Handle.touch else self.SIZE
-        half = (size - ring) / 2  # the ring is centred on the edge: the whole dot is `size` wide
+        half = (size - self.RING) / 2  # the whole dot is `size` wide
         super().__init__(-half, -half, 2 * half, 2 * half, owner)
         self.owner = owner
         self.role = role
+        self._under = self._pressed = False  # the pointer is on it; the mouse button is down on it
+        self._look: tuple[QPen, QColor, QPainterPath] | None = None
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
+        self.setAcceptHoverEvents(True)
         self.setZValue(Z_HANDLE)
-        self.setPen(QPen(QColor(themes.current.accent), ring))
+        self.setPen(QPen(owner.accent(), self.RING))
         self.setBrush(QBrush(Qt.GlobalColor.white))
         self.setCursor(CURSORS.get(role, Qt.CursorShape.CrossCursor))
 
+    def boundingRect(self) -> QRectF:
+        return self.rect().adjusted(-2.5, -2.5, 2.5, 2.5)  # room for it swollen, ring and all
+
+    def recolour(self) -> None:
+        """The theme or the page's tint changed, or the pointer or the mouse button did: look again."""
+        self._look = None
+        self.update()
+
     def paint(self, painter: QPainter, option, widget=None) -> None:
-        painter.save()
+        if self._look is None:
+            state = 2 if self._pressed else 1 if self._under else 0
+            self._look = handle_look(self.owner.accent().rgba(), state, self.rect().width() + self.RING,
+                                     themes.current.look)
+        pen, fill, shape = self._look
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)  # a round dot, not a jagged one
-        painter.setPen(self.pen())
-        painter.setBrush(self.brush())
-        painter.drawEllipse(self.rect())
-        painter.restore()
+        painter.setPen(pen)
+        painter.setBrush(fill)
+        painter.drawPath(shape)
+
+    def hoverEnterEvent(self, event) -> None:
+        self._under = True
+        self.recolour()
+
+    def hoverLeaveEvent(self, event) -> None:
+        self._under = False
+        self.recolour()
 
     def mousePressEvent(self, event) -> None:
+        self._pressed = True
+        self.recolour()
         event.accept()
 
     def mouseMoveEvent(self, event) -> None:
@@ -840,6 +970,8 @@ class Handle(QGraphicsEllipseItem):
         self.owner.set_preview(resized(self.owner.annotation, self.role, point, constrain))
 
     def mouseReleaseEvent(self, event) -> None:
+        self._pressed = False  # first: finishing the resize may take this handle away
+        self.recolour()
         views = self.scene().views() if self.scene() is not None else []
         if views and hasattr(views[0], "snapper"):
             views[0].snapper.hide()
@@ -866,7 +998,7 @@ class LockBadge(QGraphicsItem):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(QColor(255, 255, 255), 1.5))
-        painter.setBrush(QColor(themes.current.accent))
+        painter.setBrush(self.parentItem().accent())
         disc = QRectF(self.OFFSET - self.SIZE / 2, -self.OFFSET - self.SIZE / 2, self.SIZE, self.SIZE)
         painter.drawEllipse(disc)
         glyph = disc.adjusted(3.5, 3.5, -3.5, -3.5)

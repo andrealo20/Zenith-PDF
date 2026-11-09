@@ -10,6 +10,7 @@ os.environ.setdefault("ZENITH_LANGUAGE", "en")  # the tests read the English tex
 if sys.platform == "win32":  # the offscreen platform finds no fonts of its own there
     os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ.get("WINDIR", "C:/Windows"), "Fonts"))
 os.environ.setdefault("ZENITH_RENDER_PROCESSES", "0")  # test_render.py covers the processes
+os.environ.setdefault("ZENITH_NO_MOTION", "1")  # animations land at once; test_motion.py runs them with motion_on
 # The home page's thumbnails go to a folder of the run's own, never the user's cache.
 CACHE = tempfile.mkdtemp(prefix="zenith-tests-cache-")
 os.environ["ZENITH_CACHE_DIR"] = CACHE
@@ -38,6 +39,16 @@ def qt_app():
 def private_cache():
     yield CACHE
     shutil.rmtree(CACHE, ignore_errors=True)
+
+
+@pytest.fixture
+def motion_on():
+    """Animations really run in this test: the suite has motion off, so a test of a fade or a slide asks for it."""
+    from zenith_pdf.ui import motion
+
+    motion.force(True)
+    yield
+    motion.force(None)
 
 
 def settle(ms=30):

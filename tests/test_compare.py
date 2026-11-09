@@ -1,17 +1,22 @@
 """Comparing two versions of a PDF: words with their place, and what was added, removed or changed."""
 
 import pypdfium2 as pdfium
-from PySide6.QtCore import QEvent
+import pytest
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 
-from conftest import _add_text
+from conftest import _add_text, wait_for
 from zenith_pdf.core import compare
 from zenith_pdf.core.annotations import Shape
 from zenith_pdf.core.i18n import tr
 from zenith_pdf.core.document import Document
-from zenith_pdf.ui.compare import CompareWindow
+from zenith_pdf.theme import qcolor, themes
+from zenith_pdf.ui import motion
+from zenith_pdf.ui.compare import COLOURS, CompareWindow, _ink, _ring
+from zenith_pdf.ui.widgets import contrast, luminance
 
 
 def make_pdf(path, pages):
@@ -78,6 +83,69 @@ def test_the_window_lights_the_changes_on_both_sides(qt_app, tmp_path):
     QApplication.processEvents()
     assert window.right.spot()[0] == 1 and window.left.spot()[0] == 1  # the older version follows to the same page
     window.close()
+
+
+def test_the_change_picked_in_the_list_is_outlined_on_both_sides(qt_app, tmp_path, motion_on):
+    old = Document(make_pdf(tmp_path / "old.pdf", [["Alpha beta gamma delta epsilon zeta eta theta."]]))
+    new = Document(make_pdf(tmp_path / "new.pdf", [["Alpha BETA gamma delta epsilon zeta eta THETA."]]))
+    window = CompareWindow(old, new)
+    window.resize(1400, 600)
+    assert not window.busy.isHidden() and not window.previous.isEnabled()  # working: nothing to step through yet
+    window.show()
+    for _ in range(300):
+        QApplication.processEvents()
+        if window.changes:
+            break
+        QTest.qWait(10)
+    assert window.changes and window.busy.isHidden() and window.previous.isEnabled()
+
+    def outlined(column):
+        return {number for number, items in column._lit.items()
+                if items and all(rect.pen().style() != Qt.PenStyle.NoPen for rect, _ in items)}
+
+    window.step(1)
+    first = window.list.currentRow()
+    assert outlined(window.right) == {first} or outlined(window.left) == {first}
+    window.step(1)
+    second = window.list.currentRow()
+    assert second != first
+    assert (outlined(window.right) | outlined(window.left)) == {second}  # the first is put out
+    window.right.lay_out()  # a resize lays the marks out again: the picked change is still outlined
+    assert second in outlined(window.right) | outlined(window.left)
+    window.close()
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_the_busy_bar_stops_when_the_comparison_fails(qt_app, tmp_path, motion_on, monkeypatch):
+    def unreadable(document, stop=None):
+        raise RuntimeError("a page that could not be read")
+
+    monkeypatch.setattr(compare, "words", unreadable)
+    old = Document(make_pdf(tmp_path / "old.pdf", [["One two three."]]))
+    new = Document(make_pdf(tmp_path / "new.pdf", [["One two three four."]]))
+    window = CompareWindow(old, new)
+    window.show()
+    assert wait_for(lambda: window.busy.isHidden(), 5)  # no light running on for ever behind a thread that is gone
+    assert not window.busy._run.state().name == "Running"
+    window.close()
+
+
+def test_the_kind_of_a_change_and_the_ring_round_the_picked_words_read_in_every_style(qt_app):
+    before = themes.current.name, themes.style.key
+    try:
+        for style in ("zenith", "dot", "neon", "material"):
+            for scheme in ("dark", "light"):
+                themes.choose(scheme, "blue", style)
+                t = themes.current
+                window = QColor(t.window)
+                for fill in (None, qcolor(t.hover), qcolor(t.selection)):  # a row at rest, under the pointer, picked
+                    ground = window if fill is None else motion.mixed(window, QColor(fill.rgb()), fill.alphaF())
+                    for kind in COLOURS:
+                        assert contrast(luminance(_ink(kind, ground)), luminance(ground)) >= 4.4, (style, scheme, kind)
+                # the pages are white in every theme: the ring is read on that
+                assert contrast(luminance(_ring()), luminance(QColor("white"))) >= 3.0, (style, scheme)
+    finally:
+        themes.choose(before[0], "blue", before[1])
 
 
 def shown_colour(column, page, point):

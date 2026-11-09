@@ -9,7 +9,7 @@ from PySide6.QtGui import QCursor, QKeySequence, QMouseEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
-from conftest import settle
+from conftest import settle, wait_for
 from zenith_pdf.app import create_app
 from zenith_pdf.core.annotations import Shape
 from zenith_pdf.core.platforms import key
@@ -101,6 +101,16 @@ def test_only_the_pages_show_and_everything_comes_back(window, workspace):
     faded()
     assert workspace.side.current is None and workspace.side.isVisible()
     assert all(bar.isVisible() and bar.graphicsEffect() is None for bar in (workspace.toolbar, workspace.zoom_bar))
+
+
+def test_the_top_bar_goes_at_once_and_comes_back_with_the_bars(window, workspace, motion_on):
+    window.reading_mode.enter()
+    assert not window.top_bar.isVisible() and window.top_bar.graphicsEffect() is None
+    faded()
+    window.reading_mode.leave()
+    assert window.top_bar.isVisible() and window.top_bar.graphicsEffect() is not None  # in place, its picture on its way
+    assert wait_for(lambda: window.top_bar.graphicsEffect() is None, 5)
+    faded()
 
 
 def test_one_shortcut_and_three_ways_in(window, workspace):
@@ -240,7 +250,7 @@ def test_the_exit_chip_shows_at_the_top_edge_and_hides_again(window, workspace, 
     settle()
     assert not chip.isVisible()
     move_to(2)  # the top edge
-    settle(FADE_MS + 120)  # shown, before its short time is up
+    settle(60)  # shown, before its short time is up
     assert chip.isVisible() and chip.geometry().top() < 40
     assert abs(chip.geometry().center().x() - canvas.width() // 2) <= 1
     move_to(300)  # away from it, then still

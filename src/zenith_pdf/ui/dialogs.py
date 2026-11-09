@@ -34,8 +34,8 @@ from ..core.annotations import ENDINGS
 from ..core.i18n import tr
 from ..core.pages import PAPER_SIZES, TEMPLATES
 from ..theme import outline, qcolor, themes
-from . import messages
-from .widgets import muted_label
+from . import messages, motion
+from .widgets import focus_ring, keyboard_focus, muted_label
 
 FORM_WIDTH = 480  # as the PDF tools' forms
 NEW_DOCUMENT_WIDTH = 520  # four paper cards side by side
@@ -323,7 +323,7 @@ class WatermarkDialog(FormDialog):
         self.preview = WatermarkPreview(self.options())
         opacity, self.opacity_label = _value_row(self.opacity_slider)
 
-        self.add_row("", self.preview)
+        self.form.addRow(self.preview)  # the whole width, so the page is in the middle of the dialog
         self.add_row("Text", self.text_field)
         self.add_row("Size", self.size_box)
         self.add_row("Angle", self.angle_box)
@@ -426,6 +426,7 @@ class ApplyToPagesDialog(FormDialog):
         if not chosen:  # say so here, and let the user fix it, instead of closing on nonsense
             self.problem.setText(tr(f"No such pages: the document has {self._count}. Write them like 1-3, 7."))
             self.problem.show()
+            motion.appear(self.problem, 4)
             self.range.setFocus()
             return
         super().accept()
@@ -684,23 +685,39 @@ class PaperCard(QAbstractButton):
         self.landscape = False
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         themes.changed.connect(self.update)
+        self._lit = motion.Smooth(self)  # how far the pointer's fill has come, 0 to 1
+        self._chosen = motion.Smooth(self)  # how far the ring and tint of the chosen card have come
+        self._lit.changed.connect(self.update)
+        self._chosen.changed.connect(self.update)
+        self.toggled.connect(self._on_toggled)
 
     def sizeHint(self) -> QSize:
         return CARD
+
+    def _on_toggled(self, checked: bool) -> None:
+        self._chosen.go(1.0 if checked else 0.0, motion.FAST)
+
+    def enterEvent(self, event) -> None:
+        self._lit.go(1.0, motion.FAST)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._lit.go(0.0, motion.NORMAL, motion.EASE_IN)
+        super().leaveEvent(event)
 
     def paintEvent(self, event) -> None:
         t = themes.current
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         frame = QRectF(self.rect()).adjusted(1, 1, -1, -1)
-        if self.isChecked():
-            fill = QColor(t.accent)
-            fill.setAlphaF(0.16)
-            painter.setPen(QPen(QColor(t.accent), 2.0))
-            painter.setBrush(fill)
-        else:
-            painter.setPen(QPen(QColor(t.border), 1.0))
-            painter.setBrush(qcolor(t.hover) if self.underMouse() else Qt.BrushStyle.NoBrush)
+        # Idle, the card has a hairline and, under the pointer, the hover fill; chosen, a ring and a tint of the accent.
+        chosen = self._chosen.value if self._chosen.running else float(self.isChecked())
+        accent = QColor(t.accent)
+        tint = QColor(accent)
+        tint.setAlphaF(0.16)
+        fill = motion.mixed(motion.mixed(QColor(0, 0, 0, 0), qcolor(t.hover), self._lit.value), tint, chosen)
+        painter.setPen(QPen(motion.mixed(QColor(t.border), accent, chosen), 1.0 + chosen))
+        painter.setBrush(fill)
         painter.drawPath(outline(frame, max(t.look.card - 2, 0), t.look))
 
         label_height = self.fontMetrics().height() + 12
@@ -720,6 +737,8 @@ class PaperCard(QAbstractButton):
         painter.setPen(QColor(t.text if self.isChecked() else t.text_muted))
         painter.drawText(QRectF(frame.left(), frame.bottom() - label_height, frame.width(), label_height - 4),
                          Qt.AlignmentFlag.AlignCenter, self.text())
+        if keyboard_focus(self):
+            focus_ring(painter, QRectF(self.rect()), max(t.look.card - 2, 0) + 1)
 
 
 class NewDocumentDialog(FormDialog):

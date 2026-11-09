@@ -17,12 +17,13 @@ from __future__ import annotations
 
 from PySide6.QtCore import QByteArray, QEvent, QMimeData, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QActionGroup, QColor, QCursor, QDrag, QIcon, QPainter
-from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QMenu, QToolButton, QWidget
+from PySide6.QtWidgets import QApplication, QBoxLayout, QFrame, QGraphicsEffect, QMenu, QToolButton, QWidget
 from shiboken6 import isValid
 
 from ..core.i18n import tr, tr_in
 from ..icons import hue_colour, icon, readable
-from ..theme import outline, qcolor as token_color, themes
+from ..theme import bar_radius, outline, qcolor as token_color, themes
+from . import motion
 from .document_view import DocumentView
 from .help import attach_help
 from .tool_catalog import ALWAYS, BY_KEY, DEFAULT_TOOLBAR, TOOL_MIME, base_of, instance_title, is_valid_key, toolbar_keys
@@ -33,6 +34,9 @@ from .widgets import FloatingBar, IconButton, cached_icon, focus_ring, keyboard_
 SHORTCUTS = {"select": "V", "hand": "H, or hold Space"}
 LONG_PRESS_MS = 500
 REPLAY_MS = 400  # what follows a press that closed a menu on its own button comes this soon after it
+GLIDE_MAX = 480  # px: tools the layout moved further than this (a different toolbar) are not glided
+LIFTED = 0.4  # how much of a tool shows in its place while it is dragged along the toolbar
+CLEAR = QColor(0, 0, 0, 0)
 VIEW_TOOLS = {"select", "hand", "lasso", "laser", "snapshot"}  # for documents that can only be viewed
 SIDES = {"top": "Top", "bottom": "Bottom", "left": "Left", "right": "Right"}
 
@@ -66,10 +70,18 @@ class ToolButton(QToolButton):
         self._toolbar = toolbar
         self.active = False
         self.locked = False
+        self.lifted = False  # being dragged along the toolbar: what shows here is only where it came from
         self.tint: str | None = None
         self._press: QPoint | None = None
         self._long = False
         self._icons: dict[tuple, QIcon] = {}
+        # What is painted of the state, which is final at once: the fill, how far the tool is on, and its padlock.
+        self._fill = motion.Fill(self)
+        self._clear = True  # the fill is sent to nothing: with the pointer away, there is nothing to look up
+        self._lit = motion.Smooth(self)
+        self._padlock = motion.Smooth(self)
+        for animated in (self._fill, self._lit, self._padlock):
+            animated.changed.connect(self.update)
         self.setCheckable(not self.spec.action)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
@@ -92,6 +104,10 @@ class ToolButton(QToolButton):
         self.setChecked(active)
         if resized:
             self.setFixedSize(self.ACTIVE if active else self.INACTIVE)
+        self._lit.go(1.0 if active else 0.0, motion.NORMAL, motion.EASE_IN_OUT)  # as the tools beside it glide
+        self._padlock.go(1.0 if locked else 0.0, motion.FAST)
+        bar = self._glass()
+        self._refill(bar.theme() if bar is not None else themes.current)  # a button not shown yet starts as it is
         self.update()
         return resized
 
@@ -112,48 +128,95 @@ class ToolButton(QToolButton):
             cached = self._icons[(name, color)] = cached_icon(name, color)  # drawn once per size and screen
         return cached
 
+    def _wanted(self, t) -> QColor:
+        """The fill the state asks for: the tool that is on, a press, the pointer; clear for none. The tool that is on
+        takes a little more of its fill under the pointer and the press, as clicking it again opens its menu."""
+        hot = self.underMouse() and self.isEnabled()
+        if self.active:
+            fill = token_color(t.glass_checked)
+            fill.setAlpha(min(255, fill.alpha() + (36 if self.isDown() else 18 if hot else 0)))
+            return fill
+        if self.isDown():
+            return token_color(t.glass_pressed)  # the tokens of the other glass bars' buttons
+        return token_color(t.glass_hover) if hot else CLEAR
+
+    def _refill(self, t) -> None:
+        """Send the fill to what the state asks for: the pointer and the press answer at once and all of it goes
+        quietly; the fill of a tool that turns on comes with the tool."""
+        want = self._wanted(t)
+        pointed = self.underMouse() or self.isDown()
+        self._clear = not want.alpha()
+        if want.alpha():
+            self._fill.go(want, motion.FAST if pointed else motion.NORMAL)
+        elif self._lit.target == 0.0 and self._lit.running:
+            self._fill.go(CLEAR, motion.FAST)  # a tool that was on has given its width back: its fill is gone quickly
+        else:
+            self._fill.go(CLEAR, motion.NORMAL, motion.EASE_IN)  # the pointer leaves: it lingers
+
+    def _inks(self, t, bar: FloatingBar | None) -> tuple[str, str]:
+        """The icon's colour while the tool is off and while it is on. A tool with an ink shows it, made readable on
+        the bar (on glass, on what shows through it); the others take the colour of what they do, in the bar's own
+        tone, and the accent once they are on."""
+        if self.tint:
+            surface = bar.surface().name() if bar is not None else t.raised
+            ink = readable(QColor(self.tint).getRgbF()[:3], surface, t.text)
+            return ink, ink
+        return hue_colour(self.spec.icon, t.name) or t.text, self._on_colour(t)
+
+    @staticmethod
+    def _on_colour(t) -> str:
+        """What marks the tool that is on: its caret and padlock, and its icon when it has no ink."""
+        return t.text if t.look.checked_icon == "text" else t.accent
+
     def paintEvent(self, event) -> None:
         bar = self._glass()
         t = bar.theme() if bar is not None else themes.current
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        # Round like the bar's ends, the same 4 px in from them; on a bar with corners, its corners 4 px in.
-        radius = self.height() / 2 if t.look.capsules else max(t.look.panel - 4, 0)
-        fill = None
-        if self.active:
-            fill = t.glass_checked
-        elif self.isDown():
-            fill = t.glass_pressed
-        elif self.underMouse() and self.isEnabled():
-            fill = t.glass_hover  # the tokens of the other glass bars' buttons
-        if fill is not None:
+        shown = LIFTED if self.lifted else 1.0
+        if self.lifted:
+            painter.setOpacity(shown)
+        lit = self._lit.value  # 0 off, 1 on: what is painted of the state, which the button has at once
+        # The tool that is on grows from a round button to the wide one (the box is wide at once, the fill follows).
+        wide = min(self.width(), self.INACTIVE.width() + (self.ACTIVE.width() - self.INACTIVE.width()) * lit)
+        # Idle, which is almost always (a scroll repaints every tool): no fill to look up or to paint.
+        if self.active or not self._clear or self._fill.running or self.underMouse() or self.isDown():
+            self._refill(t)
+            colour = self._fill.colour
+            if colour.alpha():
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(colour)
+                # Round like the bar's ends, the same 4 px in from them; on a bar with corners, its corners 4 px in.
+                corner = min(bar_radius(t.look), wide / 2, self.height() / 2)
+                painter.drawPath(outline(QRectF(0, 0, wide, self.height()), corner, t.look))
+        if lit > 0.0 and t.look.on_mark:  # the style's own sign of the tool that is on
+            mark = QColor(t.accent)
+            mark.setAlphaF(lit)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(token_color(fill))
-            painter.drawPath(outline(QRectF(self.rect()), radius, t.look))
-        if self.active and t.look.on_mark:  # the style's own sign of the tool that is on
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(t.accent))
+            painter.setBrush(mark)
             if t.look.on_mark == "dot":
-                painter.drawEllipse(QPointF(self.width() / 2, self.height() - 5), 2, 2)
-            else:
-                painter.drawRect(QRectF(8, self.height() - 3, self.width() - 16, 2))
-        # A tool with an ink shows it, made readable on the bar (on glass, on what shows through it); the others
-        # take the colour of what they do, in the bar's own tone.
-        on = t.text if t.look.checked_icon == "text" else t.accent
-        hue = hue_colour(self.spec.icon, t.name) if not self.active else None
-        color = self.tint or hue or (on if self.active else t.text)
-        if self.tint:
-            surface = bar.surface().name() if bar is not None else t.raised
-            color = readable(QColor(self.tint).getRgbF()[:3], surface, t.text)
+                painter.drawEllipse(QPointF(wide / 2, self.height() - 5), 2 * lit, 2 * lit)
+            else:  # the line grows from its middle
+                reach = (wide - 16) / 2 * lit
+                painter.drawRect(QRectF(wide / 2 - reach, self.height() - 3, 2 * reach, 2))
+        rest, on = self._inks(t, bar)
         mode = QIcon.Mode.Normal if self.isEnabled() else QIcon.Mode.Disabled
-        self._icon(self.spec.icon, color).paint(painter, QRect(8, 8, self.ICON, self.ICON),
-                                                Qt.AlignmentFlag.AlignCenter, mode)
-        if self.active:
-            self._icon("caret-down-bold", on).paint(painter, QRect(35, 13, 10, 10))
-            if self.locked:
-                self._icon("z-lock-badge", on).paint(painter, QRect(28, 4, 9, 9))
+        glyph, centre = QRect(8, 8, self.ICON, self.ICON), Qt.AlignmentFlag.AlignCenter
+        if lit < 1.0 or on == rest:  # turning on, the icon takes the accent over its own colour
+            self._icon(self.spec.icon, rest).paint(painter, glyph, centre, mode)
+        if lit > 0.0 and on != rest:
+            painter.setOpacity(shown * lit)
+            self._icon(self.spec.icon, on).paint(painter, glyph, centre, mode)
+        if lit > 0.0:
+            accent = self._on_colour(t)
+            painter.setOpacity(shown * lit)
+            self._icon("caret-down-bold", accent).paint(painter, QRect(round(33 + 2 * lit), 13, 10, 10))
+            if self._padlock.value > 0.0:
+                painter.setOpacity(shown * lit * self._padlock.value)
+                self._icon("z-lock-badge", accent).paint(painter, QRect(28, 4, 9, 9))
+            painter.setOpacity(shown)
         if keyboard_focus(self):
-            focus_ring(painter, QRectF(self.rect()), radius)
+            focus_ring(painter, QRectF(self.rect()), min(bar_radius(t.look), self.width() / 2, self.height() / 2))
 
     def keyPressEvent(self, event) -> None:
         if not self._toolbar.key_on(self, event):
@@ -217,18 +280,40 @@ class _Grip(QToolButton):
         self._dragging = False
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCursor(Qt.CursorShape.SizeAllCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)  # the dots answer the pointer
         self.setToolTip(tr("Drag to move the toolbar to another side. Right-click for more."))
-        themes.changed.connect(self.update)
+        self._hot = motion.Smooth(self)  # from the muted colour of the dots (0) to the text colour (1)
+        self._hot.changed.connect(self.update)
+        self._icons: dict[tuple, QIcon] = {}
+        themes.changed.connect(self._theme)
+
+    def _theme(self, *_) -> None:
+        self._icons.clear()
+        self.update()
 
     def orient(self, vertical: bool) -> None:
         self.setFixedSize(QSize(self.BREADTH, self.LENGTH) if vertical else QSize(self.LENGTH, self.BREADTH))
 
+    def _icon(self, name: str, color: str) -> QIcon:
+        cached = self._icons.get((name, color))
+        if cached is None:
+            cached = self._icons[(name, color)] = cached_icon(name, color)
+        return cached
+
     def paintEvent(self, event) -> None:
+        t = self._toolbar.theme()  # the bar's tone, on glass
+        hot = self.underMouse() or self._dragging
+        self._hot.go(1.0 if hot else 0.0, motion.FAST if hot else motion.NORMAL,
+                     motion.EASE_OUT if hot else motion.EASE_IN)
         painter = QPainter(self)
         name = "dots-six" if self.width() > self.height() else "dots-six-vertical"
         side = min(self.width(), self.height(), 16)
         box = QRect((self.width() - side) // 2, (self.height() - side) // 2, side, side)
-        cached_icon(name, self._toolbar.theme().text_muted).paint(painter, box)  # the bar's tone, on glass
+        if self._hot.value < 1.0:
+            self._icon(name, t.text_muted).paint(painter, box)
+        if self._hot.value > 0.0:
+            painter.setOpacity(self._hot.value)
+            self._icon(name, t.text).paint(painter, box)
 
     def mousePressEvent(self, event) -> None:
         self._dragging = event.button() == Qt.MouseButton.LeftButton
@@ -241,6 +326,7 @@ class _Grip(QToolButton):
 
     def mouseReleaseEvent(self, event) -> None:
         self._dragging = False
+        self.update()
         event.accept()
 
     def contextMenuEvent(self, event) -> None:
@@ -249,11 +335,30 @@ class _Grip(QToolButton):
 
 
 class _DropMark(QFrame):
-    """Where a dragged tool would land on the toolbar."""
+    """Where a dragged tool would land on the toolbar. It glides from one place to the next."""
 
     def __init__(self, parent):
         super().__init__(parent)
+        self._from = self._aim = QRect()
+        self._travel = motion.Smooth(self, 1.0)  # how far along from `_from` to `_aim`
+        self._travel.changed.connect(self._step)
         self.hide()
+
+    def aim(self, rect: QRect) -> None:
+        """Show the mark at `rect`: where it was, if it was showing already, it glides to."""
+        if self.isVisible() and rect == self._aim:
+            return
+        self._from = self.geometry() if self.isVisible() else QRect(rect)
+        self._aim = QRect(rect)
+        self._travel.set(0.0)
+        self.setGeometry(self._from)
+        self.show()
+        self.raise_()
+        self._travel.go(1.0, motion.FAST)
+
+    def _step(self, share: float) -> None:
+        first, last = self._from.getRect(), self._aim.getRect()
+        self.setGeometry(QRect(*(round(a + (b - a) * share) for a, b in zip(first, last))))
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -262,6 +367,30 @@ class _DropMark(QFrame):
         painter.setBrush(QColor(themes.current.accent))
         radius = min(1.5, themes.current.look.item)  # round ends, or square with square items
         painter.drawRoundedRect(QRectF(self.rect()), radius, radius)
+
+
+class _Glide(QGraphicsEffect):
+    """Paints a widget where it was and eases it to the place the layout gave it. The widget is in that place from the
+    first frame, so the keys, the menu and the tests find it there: only its picture catches up."""
+
+    def __init__(self, widget: QWidget, start: QPoint):
+        super().__init__(widget)
+        self._start = start  # how far from its place it was painted
+        self.shift = QPoint(start)  # and how far it is now
+
+    def progress(self, share: float) -> None:
+        """0 where it was, 1 in its place."""
+        left = 1.0 - share
+        self.shift = QPoint(round(self._start.x() * left), round(self._start.y() * left))
+        self.update()
+
+    def boundingRectFor(self, rect):
+        return rect.united(rect.translated(self._start.x(), self._start.y()))  # takes in the whole way
+
+    def draw(self, painter) -> None:
+        offset = QPoint()
+        picture = self.sourcePixmap(Qt.CoordinateSystem.LogicalCoordinates, offset, QGraphicsEffect.PixmapPadMode.NoPad)
+        painter.drawPixmap(offset + self.shift, picture)
 
 
 class AnnotationToolbar(FloatingBar):
@@ -287,6 +416,9 @@ class AnnotationToolbar(FloatingBar):
         self._unsaved_keys: list[str] | None = None  # the toolbar's tools when there are no settings to keep them
         self._unsaved_place = {"toolbar_side": "top", "toolbar_docked": False}  # likewise its side and fixing
         self._menu: ToolMenu | None = None
+        self._gliding: list[_Glide] = []  # the tools the layout just moved, painted on their way to their places
+        self._glide_by = motion.Smooth(self)
+        self._glide_by.changed.connect(self._glide_step)
         self._swallow: str | None = None  # the tool whose menu a click on its button just closed
         self._swallow_timer = QTimer(self)
         self._swallow_timer.setSingleShot(True)
@@ -305,7 +437,9 @@ class AnnotationToolbar(FloatingBar):
         self.overflow = IconButton("caret-double-right", "More tools")
         self.overflow.setFixedSize(36, 36)
         self.overflow.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.overflow.setMenu(QMenu(self.overflow))
+        more = QMenu(self.overflow)
+        motion.appear_on_show(more, -motion.RISE)  # it hangs from its button
+        self.overflow.setMenu(more)
         self.add_button = IconButton("plus-circle", "Add tools", help="add_tools")
         self.add_button.setFixedSize(36, 36)
         self.add_button.clicked.connect(self.chooser_requested.emit)
@@ -340,11 +474,11 @@ class AnnotationToolbar(FloatingBar):
             self._view.settings.set("toolbar_tools", keys)  # every open toolbar rebuilds itself
         else:
             self._unsaved_keys = keys
-            self.rebuild()
+            self.rebuild(glide=True)
 
     def _on_setting(self, key: str) -> None:
         if key == "toolbar_tools":
-            self.rebuild()
+            self.rebuild(glide=True)
         elif key in ("toolbar_side", "toolbar_docked"):
             self.orient()
 
@@ -416,6 +550,7 @@ class AnnotationToolbar(FloatingBar):
     def place_menu(self) -> QMenu:
         """The handle's menu: the four sides, and fixing the toolbar to the edge."""
         menu = QMenu(self)
+        motion.appear_on_show(menu, motion.RISE if self.side == "bottom" else -motion.RISE)  # out of the handle
         group = QActionGroup(menu)
         for side, title in SIDES.items():
             action = menu.addAction(tr_in("side", title), lambda s=side: self._set_place("toolbar_side", s))
@@ -447,7 +582,11 @@ class AnnotationToolbar(FloatingBar):
             self._read_only = read_only
             self.rebuild()
 
-    def rebuild(self) -> None:
+    def rebuild(self, glide: bool = False) -> None:
+        """Make the buttons again. With `glide` (the same toolbar with other tools on it: one added, taken off or
+        moved) the tools that stay, move or make room for it glide there, and a tool that is new fades in."""
+        seen = self._seen() if glide and motion.enabled() else {}
+        self._end_glide()
         while self._row.count():
             item = self._row.takeAt(0)
             widget = item.widget()
@@ -483,7 +622,9 @@ class AnnotationToolbar(FloatingBar):
         if self._docked:
             self._row.addStretch()
         self._sync(relayout=False)
-        self._relayout()
+        self._relayout(glide=False)
+        if seen:
+            self._settle_in(seen)
 
     def _details(self, key: str) -> list[str]:
         """What a tool's tooltip adds to its name: its lock, and its subject if it is the user's."""
@@ -581,12 +722,73 @@ class AnnotationToolbar(FloatingBar):
         else:
             self.use(key)
 
-    def _relayout(self) -> None:
-        """Fit again, and the canvas places the toolbar again: the active tool is wider."""
+    def _relayout(self, glide: bool = True) -> None:
+        """Fit again, and the canvas places the toolbar again: the active tool is wider. The tools that move for it
+        glide, unless it is a new set of them (a rebuild) that is being laid out."""
+        before = self._places() if glide and motion.enabled() else {}
         self.fit(self._max_width)
+        self._glide(before)
         self.reshaped.emit()
         if self._menu is not None and self._menu.isVisible():
             self._menu.reposition()
+
+    def _places(self) -> dict[QWidget, QPoint]:
+        """Where the widgets of the row are painted now. The layout only moves them when it next runs, so before
+        that these are the old places; one that is still gliding is where it is seen, not where it is."""
+        widgets = (self._row.itemAt(i).widget() for i in range(self._row.count()))
+        return {w: w.pos() + (e.shift if isinstance(e := w.graphicsEffect(), _Glide) else QPoint())
+                for w in widgets if w is not None and w.isVisible()}
+
+    def _seen(self) -> dict[object, QPoint]:
+        """_places() for a toolbar about to be made again: its tools by their keys, the other widgets as they are."""
+        names = {button: key for key, button in self._buttons.items()}
+        return {names.get(w, w): place for w, place in self._places().items()}
+
+    def _settle_in(self, seen: dict[object, QPoint]) -> None:
+        """The tools of a toolbar that was just made again go to their places from where `seen` had them; one that
+        was not there comes in by fading."""
+        places = {}
+        for key, place in seen.items():
+            widget = self._buttons.get(key) if isinstance(key, str) else key
+            if widget is not None:  # a tool that is gone has no place to go to
+                places[widget] = place
+        self._glide(places)
+        for key, button in self._buttons.items():
+            if key not in seen and button.isVisible() and self.isVisible():
+                motion.appear(button, 0, motion.NORMAL)
+
+    def _glide(self, before: dict[QWidget, QPoint]) -> None:
+        """The widgets the layout moved glide to their new places instead of jumping there, as the tool that was on
+        gives its width back and the one that is on takes it."""
+        self._end_glide()
+        if not before or not self.isVisible():
+            return
+        self._row.activate()  # the places the layout gives them, now and not on its next pass
+        for widget, old in before.items():
+            moved = old - widget.pos()
+            if isValid(widget) and widget.isVisible() and 0 < moved.manhattanLength() <= GLIDE_MAX:
+                effect = _Glide(widget, moved)
+                widget.setGraphicsEffect(effect)
+                self._gliding.append(effect)
+        if self._gliding:
+            self._glide_by.set(0.0)
+            self._glide_by.go(1.0, motion.NORMAL, motion.EASE_IN_OUT)
+
+    def _glide_step(self, share: float) -> None:
+        for effect in self._gliding:
+            if isValid(effect):
+                effect.progress(share)
+        if share >= 1.0:
+            self._end_glide()
+
+    def _end_glide(self) -> None:
+        """At once: every tool where the layout put it, with nothing left on it."""
+        effects, self._gliding = self._gliding, []
+        for effect in effects:
+            if isValid(effect):
+                effect.parent().setGraphicsEffect(None)
+        if effects:
+            self._glide_by.set(1.0)
 
     # State -----------------------------------------------------------------
 
@@ -857,7 +1059,14 @@ class AnnotationToolbar(FloatingBar):
         mime.setData(TOOL_MIME, QByteArray(key.encode("ascii")))
         drag.setMimeData(mime)
         drag.setPixmap(button.grab())
-        drag.exec(Qt.DropAction.MoveAction)
+        button.lifted = True
+        button.update()
+        try:
+            drag.exec(Qt.DropAction.MoveAction)
+        finally:
+            if isValid(button):  # a drop rebuilds the toolbar, and the button goes with it
+                button.lifted = False
+                button.update()
 
     def _drop_position(self, point) -> int:
         """Where among the visible tool buttons a drop at `point` goes."""
@@ -884,12 +1093,7 @@ class AnnotationToolbar(FloatingBar):
         else:
             last = (self._buttons[visible[-1]] if visible else self.add_button).geometry()
             at = (last.bottom() if self.vertical else last.right()) + 1
-        if self.vertical:
-            self._mark.setGeometry(8, at, self.width() - 16, 3)
-        else:
-            self._mark.setGeometry(at, 8, 3, self.height() - 16)
-        self._mark.show()
-        self._mark.raise_()
+        self._mark.aim(QRect(8, at, self.width() - 16, 3) if self.vertical else QRect(at, 8, 3, self.height() - 16))
 
     def dragLeaveEvent(self, event) -> None:
         self._mark.hide()

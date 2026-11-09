@@ -7,7 +7,7 @@ import pytest
 from PySide6.QtCore import QPoint, QPointF, QRect, QSettings, Qt
 from PySide6.QtTest import QTest
 
-from conftest import settle
+from conftest import settle, wait_for
 from zenith_pdf.app import create_app
 from zenith_pdf.core import textclean
 from zenith_pdf.core.annotations import Shape, TextMarkup
@@ -383,3 +383,22 @@ def test_redacting_the_selected_text(workspace):
     x, y, w, h = needle(workspace.document)
     [(rx, ry, rw, rh)] = mark.rects
     assert rx <= x + 1 and rx + rw >= x + w - 1 and mark.fill == DEFAULT_STYLES["redact"].fill
+
+
+def test_the_bars_come_in_as_the_text_or_the_annotations_are_picked_and_leave_no_effect_behind(workspace, motion_on):
+    drag_over_needle(workspace)
+    bar = workspace.text_bar
+    assert bar.isVisible() and bar.graphicsEffect() is not None  # in its place, its picture on its way
+    assert wait_for(lambda: bar.graphicsEffect() is None, 5)
+    workspace.view.clear_text_selection()
+    settle()
+    assert not bar.isVisible()  # leaving is at once
+
+    shape = Shape(page=0, rect=(100.0, 200.0, 120.0, 60.0))
+    workspace.view.add_annotations([shape], "Shape")
+    workspace.view.select([shape])
+    selection = workspace.selection_bar
+    assert selection.isVisible() and selection.graphicsEffect() is not None
+    shadow = selection._cast_shadow()
+    assert shadow is not None and shadow.graphicsEffect() is not None  # the shadow comes with it
+    assert wait_for(lambda: selection.graphicsEffect() is None and shadow.graphicsEffect() is None, 5)

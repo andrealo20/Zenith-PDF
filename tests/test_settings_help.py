@@ -8,7 +8,7 @@ from PySide6.QtGui import QHelpEvent, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QPushButton, QSpinBox, QWidget
 
-from conftest import settle
+from conftest import settle, wait_for
 from zenith_pdf.app import create_app
 from zenith_pdf.settings import Settings
 from zenith_pdf.theme import themes
@@ -281,6 +281,19 @@ def test_about_names_the_app_once_with_real_versions(window):
     assert dialog.logo.pixmap() is not None and not dialog.logo.pixmap().isNull()
     assert "PDFium, through pypdfium2: ?" not in version_details() and "/ ?" not in version_details()
     dialog.close()
+
+
+def test_a_help_card_comes_out_of_its_button_once_and_only_moves_between_buttons(window, workspace, motion_on):
+    card = help_card()
+    first = workspace.toolbar._buttons["highlight"]._help_hook
+    second = workspace.toolbar._buttons["rectangle"]._help_hook
+    card.show_for(first, pinned=False)
+    assert card.isVisible() and card.windowOpacity() < 1.0  # in its place, its picture on its way
+    assert wait_for(lambda: card.windowOpacity() == 1.0, 5)
+    card.show_for(second, pinned=False)  # the pointer went on to the next button
+    assert card.windowOpacity() == 1.0 and card.title.text() == TOPICS["tool_rectangle"].title
+    card.close_card()
+    assert card.how_title.indent() == 0 and card.detail.indent() == 0  # the headings start with the text
 
 
 def test_help_cards_fit_their_text(window, workspace):

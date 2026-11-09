@@ -27,7 +27,7 @@ from ..core.store import AnnotationStore
 from ..icons import icon, readable
 from ..theme import qcolor, themes
 from . import messages
-from .widgets import IconButton, muted_label, panel_title
+from .side_panel import CLEAR, HANG, PAD, FadingButton, RowFades, empty_state, panel_header
 
 ANNOTATION_ROLE = Qt.ItemDataRole.UserRole + 1
 HEADER_ROLE = Qt.ItemDataRole.UserRole + 2  # a page heading: its page index
@@ -80,9 +80,10 @@ def when(moment: datetime | None, now: datetime | None = None) -> str:
 
 
 class AnnotationDelegate(QStyledItemDelegate):
-    def __init__(self, panel: AnnotationsPanel):
+    def __init__(self, panel: AnnotationsPanel, view: QListWidget):
         super().__init__(panel)
         self._panel = panel
+        self.fades = RowFades(view)  # the fill under the pointer or the choice comes and goes gently
 
     def sizeHint(self, option, index) -> QSize:
         if index.data(HEADER_ROLE) is not None:
@@ -96,24 +97,29 @@ class AnnotationDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if page is not None:
             font = QFont(option.font)
+            font.setFamily(t.look.label_font())  # as the style sets its small headings
             font.setPointSizeF(max(font.pointSizeF() - 1, 7.5))
             font.setWeight(QFont.Weight.DemiBold)
+            font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, t.look.label_spacing)
             painter.setFont(font)
             painter.setPen(QColor(t.text_muted))
-            painter.drawText(option.rect.adjusted(8, 10, -6, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            painter.drawText(option.rect.adjusted(PAD, 10, -6, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                              tr(f"PAGE {page + 1}"))
             painter.restore()
             return
 
         a: Annotation = index.data(ANNOTATION_ROLE)
-        rect = option.rect.adjusted(6, 2, -6, -2)
+        rect = option.rect.adjusted(HANG, 2, -4, -2)
         if option.state & QStyle.StateFlag.State_Selected:
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(qcolor(t.selection))
-            painter.drawRoundedRect(rect, t.look.item, t.look.item)
+            want = qcolor(t.selection)
         elif option.state & QStyle.StateFlag.State_MouseOver:
+            want = qcolor(t.hover)
+        else:
+            want = CLEAR
+        shade = self.fades.colour(index.row(), want)
+        if shade.alpha():
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(qcolor(t.hover))
+            painter.setBrush(shade)
             painter.drawRoundedRect(rect, t.look.item, t.look.item)
 
         icon(icon_name(a), icon_color(a)).paint(painter, QRect(rect.x() + 8, rect.y() + 8, 18, 18))
@@ -144,12 +150,8 @@ class AnnotationsPanel(QWidget):
         self._marked_text: dict[tuple, str] = {}
         self._touched: dict[str, datetime] = {}  # annotations added or changed since the document was read
 
-        export = IconButton("export", "Export annotations (CSV or text)", icon_size=18, help="export_annotations")
+        export = FadingButton("export", "Export annotations (CSV or text)", icon_size=18, help="export_annotations")
         export.clicked.connect(self.export)
-        header = QHBoxLayout()
-        header.addWidget(panel_title("Annotations"))
-        header.addStretch()
-        header.addWidget(export)
 
         # Links are mostly the document's own (a table of contents, page references): off unless asked for.
         self.links_chip = QToolButton()
@@ -160,26 +162,26 @@ class AnnotationsPanel(QWidget):
         self.links_chip.setToolTip(tr("Show the document's links in the list"))
         self.links_chip.toggled.connect(self.refresh)
         chips = QHBoxLayout()
-        chips.setContentsMargins(0, 0, 0, 0)
+        chips.setContentsMargins(PAD, 0, PAD, 8)
         chips.addWidget(self.links_chip)
         chips.addStretch()
 
         self.list = QListWidget()
-        self.list.setItemDelegate(AnnotationDelegate(self))
+        self._delegate = AnnotationDelegate(self, self.list)
+        self.list.setItemDelegate(self._delegate)
         self.list.setMouseTracking(True)
         self.list.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.itemClicked.connect(self._clicked)
-        self.empty = muted_label("No annotations yet. Pick a tool in the toolbar.")
-        self.empty.setWordWrap(True)
+        self.empty = empty_state("chat-centered-text", "No annotations yet. Pick a tool in the toolbar.")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 8, 6, 0)
-        layout.setSpacing(8)
-        layout.addLayout(header)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(panel_header("Annotations", export))
         layout.addLayout(chips)
-        layout.addWidget(self.empty)
-        layout.addWidget(self.list)
+        layout.addWidget(self.empty, 1)
+        layout.addWidget(self.list, 1)
 
         # Several store signals can fire for one edit; rebuild once afterwards.
         self._refresh_timer = QTimer(self)
@@ -229,6 +231,7 @@ class AnnotationsPanel(QWidget):
         return sorted(shown, key=position)
 
     def refresh(self) -> None:
+        self._delegate.fades.reset()  # the list is made again: nothing is chosen, and no old highlight lingers
         self.list.clear()
         annotations = self.ordered()
         links = sum(1 for a in self._store.all() if isinstance(a, Link))

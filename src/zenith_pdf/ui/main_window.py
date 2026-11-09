@@ -6,8 +6,8 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QEventLoop, QPoint, Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence
+from PySide6.QtCore import QEventLoop, QPoint, QRectF, Qt, QTimer, QUrl
+from PySide6.QtGui import QAction, QActionGroup, QColor, QDesktopServices, QKeySequence, QPainter
 from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (
     QApplication,
@@ -51,9 +51,10 @@ from .home import HomePage
 from .reading import SHORTCUT as READING_SHORTCUT
 from .reading import ReadingMode
 from .settings_page import SettingsWindow
+from .side_panel import FadingButton
 from .tab_drag import TabDragger
 from .tools import ToolSettings
-from .widgets import IconButton, set_glass, set_glass_adaptive
+from .widgets import set_glass, set_glass_adaptive
 from .workspace import Workspace
 
 APP_NAME = "Zenith PDF"
@@ -75,6 +76,32 @@ DEFAULT_APP_BY_HAND = {
               "Change All.",
     "": "Choose it in your file manager: right-click a PDF, Open With, and make Zenith PDF the default there.",
 }
+
+
+class _TabClose(FadingButton):
+    """The close button of a tab. While the tab has unsaved changes it shows a dot in place of its cross, until the
+    pointer comes to it, as a browser's tabs do: the mark can't be cut off the end of a long, elided title."""
+
+    def __init__(self):
+        super().__init__("x", "Close (Ctrl+W)", icon_size=12, radius=lambda look: min(look.item, 10))
+        self._dirty = False
+
+    def set_dirty(self, dirty: bool) -> None:
+        if dirty != self._dirty:
+            self._dirty = dirty
+            self.update()
+
+    def paintEvent(self, event) -> None:
+        if not self._dirty or self.underMouse() or self.isDown():
+            super().paintEvent(event)
+            return
+        self._paint_shade()  # a fill that is still fading out, after the pointer left
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(themes.current.text))
+        painter.drawEllipse(QRectF(self.rect()).center(), 3.5, 3.5)
+        painter.end()
 
 
 class MainWindow(QMainWindow):
@@ -114,7 +141,7 @@ class MainWindow(QMainWindow):
         if first and settings.window_geometry is not None:
             self.restoreGeometry(settings.window_geometry)
 
-        self.home_button = IconButton("house", "Home", checkable=True, help="home")
+        self.home_button = FadingButton("house", "Home", checkable=True, help="home")
         self.home_button.clicked.connect(self.show_home)
         self.tabs = QTabBar()
         self.tabs.setDocumentMode(True)
@@ -128,12 +155,12 @@ class MainWindow(QMainWindow):
         self.tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tabs.customContextMenuRequested.connect(self._tab_menu)
         self._dragger = TabDragger(self)  # a tab pulled out of the strip opens in a window of its own
-        self.open_button = open_button = IconButton("plus", "Open, new document, templates, Doc Builder", help="new")
+        self.open_button = open_button = FadingButton("plus", "Open, new document, templates, Doc Builder", help="new")
         open_button.clicked.connect(self.show_new_file_panel)
-        self.menu_button = IconButton("dots-three", "More", help="more")
-        self.menu_button.setPopupMode(IconButton.ToolButtonPopupMode.InstantPopup)
+        self.menu_button = FadingButton("dots-three", "More", help="more")
+        self.menu_button.setPopupMode(FadingButton.ToolButtonPopupMode.InstantPopup)
         self.menu_button.setMenu(self._build_menu())
-        self.tools_button = IconButton("wrench", "PDF tools", help="tools")
+        self.tools_button = FadingButton("wrench", "PDF tools", help="tools")
         self.tools_button.clicked.connect(self.show_tools_panel)
         self._assistant: AssistantPanel | None = None
         self.assistant_button = AccentButton("sparkle", "Assistant (Ctrl+K)", help="assistant")
@@ -146,11 +173,11 @@ class MainWindow(QMainWindow):
             ("export", "Save as (Ctrl+Shift+S)", lambda: self.save_current(save_as=True), "save_as"),
             ("printer", "Print (Ctrl+P)", self.print_current, "print"),
         ):
-            button = IconButton(icon_name, tip, help=help)
+            button = FadingButton(icon_name, tip, help=help)
             button.clicked.connect(slot)
             self.document_buttons.append(button)
             right.append(button)
-        self.full_screen_button = IconButton("corners-out", "Full screen (F11)", help="full_screen")
+        self.full_screen_button = FadingButton("corners-out", "Full screen (F11)", help="full_screen")
         self.full_screen_button.clicked.connect(self._toggle_full_screen)
         right += [self.full_screen_button, self.menu_button]
         self._spare_buttons = [*self.document_buttons[1:], self.full_screen_button]  # in the More menu too
@@ -418,14 +445,19 @@ class MainWindow(QMainWindow):
         if isinstance(widget, Workspace) and not isValid(widget.undo_stack):  # being torn down, as the app quits
             return
         index = self.workspaces.index(widget)
+        dirty = False
         if isinstance(widget, DocBuilder):
             title, tip, window = "Doc Builder", "Combine PDF files", "Doc Builder"
         else:
             path = widget.document.path
-            marker = " •" if widget.dirty else ""
-            title, tip, window = path.stem + marker, str(path), f"{path.name}{marker}"
+            dirty = widget.dirty
+            marker = " •" if dirty else ""
+            title, tip, window = path.stem, str(path), f"{path.name}{marker}"  # the tab shows it on its close button
         self.tabs.setTabText(index, title)
         self.tabs.setTabToolTip(index, tip)
+        close = self.tabs.tabButton(index, QTabBar.ButtonPosition.RightSide)
+        if isinstance(close, _TabClose):
+            close.set_dirty(dirty)
         if self.stack.currentWidget() is widget:
             self.setWindowTitle(tr(f"{window} - {APP_NAME}"))
 
@@ -687,7 +719,7 @@ class MainWindow(QMainWindow):
         self.workspaces.insert(index, widget)
         self.stack.addWidget(widget)
         index = self.tabs.insertTab(index, "")
-        close = IconButton("x", "Close (Ctrl+W)", icon_size=12)
+        close = _TabClose()
         close.clicked.connect(lambda: self.close_tab(self.workspaces.index(widget)))
         self.tabs.setTabButton(index, QTabBar.ButtonPosition.RightSide, close)
         self.tabs.show()

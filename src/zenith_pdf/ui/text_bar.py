@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QApplication, QHBoxLayout, QMenu, QToolButton
 from ..core.i18n import tr
 from ..icons import icon, readable
 from ..theme import themes
-from . import messages
+from . import messages, motion
 from .help import attach_help, explain_menu
 from .tool_catalog import BY_KEY
 from .tool_menu import HIGHLIGHTER, nearest
@@ -109,6 +109,7 @@ class TextSelectionBar(FloatingBar):
         self.colour.setToolTip(tr("Highlight colour"))
         self.colour_menu = QMenu(self)
         self.colour_menu.setToolTipsVisible(True)
+        motion.appear_on_show(self.colour_menu, -motion.RISE)  # the menus hang from their buttons
         for name, color in zip(COLOUR_NAMES, HIGHLIGHTER):
             action = self.colour_menu.addAction(_dot(color), tr(name))
             action.setData(color)
@@ -121,6 +122,7 @@ class TextSelectionBar(FloatingBar):
         self.proofread = IconButton("pencil-line", "Insert, replace or redact", icon_size=ICON, help="text_proofread")
         self.proofread.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(self)
+        motion.appear_on_show(menu, -motion.RISE)
         self.insert = menu.addAction(icon("z-note-insert"), tr("Insert text after it…"), self.insert_text)
         self.replace = menu.addAction(icon("swap"), tr("Replace the text…"), lambda: self.insert_text(replacing=True))
         self.redact = menu.addAction(icon(BY_KEY["redact"].icon), tr("Redact"),
@@ -158,6 +160,12 @@ class TextSelectionBar(FloatingBar):
     def _on_style(self, key: str, _style=None) -> None:
         if key in self.markups:
             self._recolour()
+
+    def setVisible(self, visible: bool) -> None:
+        rising = visible and not self.isVisible()
+        super().setVisible(visible)
+        if rising:  # as the text is selected (or comes back into view), not each time the tab is shown again
+            self.appear()
 
     def tone_changed(self) -> None:
         super().tone_changed()

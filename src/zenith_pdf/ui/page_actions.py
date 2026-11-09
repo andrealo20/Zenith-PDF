@@ -16,7 +16,7 @@ from ..core.i18n import tr
 from ..core import ocr, textlayout
 from ..core.annotations import FreeText
 from ..core.pages import TEMPLATES
-from . import clipboard, messages
+from . import clipboard, messages, motion
 from .dialogs import WatermarkDialog
 
 if TYPE_CHECKING:
@@ -252,6 +252,7 @@ class PageActions(QObject):
         progress = QProgressDialog(tr("Recognising text…"), tr("Cancel"), 0, len(pages), self._view)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
+        motion.appear_on_show(progress)
         results: dict[int, list] = {}
         failure: list[Exception] = []
         cancelled = threading.Event()
@@ -272,7 +273,7 @@ class PageActions(QObject):
             QApplication.processEvents()
             if progress.wasCanceled():
                 cancelled.set()
-            worker.join(0.05)
+            worker.join(0.016)  # a frame: the dialog's fade-in and its bar move as smoothly as the work allows
         progress.close()
         progress.deleteLater()
         if failure:

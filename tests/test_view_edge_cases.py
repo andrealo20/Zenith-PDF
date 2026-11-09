@@ -131,7 +131,7 @@ def test_search_hits_survive_a_layout_change(workspace):
     assert view.current_page == 1 and visible.intersects(view._hit_items[hits[0]][0].sceneBoundingRect())
 
 
-def test_a_zoom_glide_renders_only_where_it_lands(workspace, monkeypatch):
+def test_a_zoom_glide_renders_only_where_it_lands(workspace, monkeypatch, motion_on):
     view = workspace.view
     view.set_zoom(1.0)
     settle(60)
@@ -160,7 +160,7 @@ def test_a_zoom_glide_renders_only_where_it_lands(workspace, monkeypatch):
     assert view.missing_tiles() == 0
 
 
-def test_closing_a_tab_mid_glide_leaves_the_closed_document_alone(window, workspace):
+def test_closing_a_tab_mid_glide_leaves_the_closed_document_alone(window, workspace, motion_on):
     view, document = workspace.view, workspace.document
     view.zoom_in()
     QTest.qWait(20)

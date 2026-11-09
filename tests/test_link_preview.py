@@ -9,7 +9,7 @@ from PySide6.QtCore import QPoint, QPointF, QSettings, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QToolTip
 
-from conftest import settle
+from conftest import settle, wait_for
 from zenith_pdf.app import create_app
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui.link_preview import CAPTION_BELOW, COLUMN, HEIGHT, LINE_CLEARANCE, preview_area, whole_lines
@@ -187,3 +187,22 @@ def test_a_link_to_a_page_this_document_lacks(workspace, monkeypatch):
         assert view.current_page == 0
     view.follow_link("page", 15, (0, 400))
     assert view.current_page == 0 and not errors
+
+
+def test_the_card_fades_in_and_out_and_turns_round_when_another_link_is_pointed_at(workspace, motion_on):
+    view, card = workspace.view, workspace.link_preview
+    point_at(view, *NAMED)
+    assert wait_for(card.isVisible, 5)
+    assert card.fade.showing
+    assert wait_for(lambda: card.graphicsEffect() is None, 5)  # in, and nothing left on it
+
+    point_at(view, 400, 400)
+    assert card.isVisible() and not card.fade.showing  # on its way out: shown until it has gone
+    assert wait_for(lambda: not card.isVisible(), 5)
+
+    point_at(view, *NAMED)
+    assert wait_for(card.isVisible, 5)
+    point_at(view, 400, 400)
+    point_at(view, *EXPLICIT)  # another link while the card leaves: it stays, with the new one
+    assert card.fade.showing and card.title.text() == "Page 3"
+    assert wait_for(lambda: card.graphicsEffect() is None, 5) and card.isVisible()

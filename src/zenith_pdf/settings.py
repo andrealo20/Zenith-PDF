@@ -37,6 +37,7 @@ DEFAULTS: dict[str, object] = {
     "side_panel_width": 264,  # px: the panel's right edge drags it wider or narrower, in every tab
     "zoom_bar_compact": False,  # the bar at the bottom right shows the zoom alone, in every tab
     "link_preview": True,  # pointing at a link to a page shows a card of the spot it goes to
+    "reduce_motion": False,  # fades and slides land at once, as when Windows' "Animation effects" is off
     # Help
     "help_badges": "hover",  # hover (a card after pointing for a moment), badges (a ? on buttons too) or never
     "help_delay": 1000,  # milliseconds of pointing before the card opens
@@ -127,6 +128,8 @@ class Settings(QObject):
         super().__init__(parent)
         self._store = store or QSettings()
         self._cache: dict[str, object] = {}  # QSettings on Windows is the registry: read each key once
+        self.changed.connect(self._follow_motion)
+        self._follow_motion("reduce_motion")
 
     # Generic access -----------------------------------------------------
 
@@ -151,6 +154,13 @@ class Settings(QObject):
         self._store.remove(key)
         self._cache.pop(key, None)
         self.changed.emit(key)
+
+    def _follow_motion(self, key: str) -> None:
+        """ui.motion.enabled() follows "reduce_motion" the moment it changes."""
+        if key == "reduce_motion":
+            from .ui import motion  # not at the top: this module is read before the windows are
+
+            motion.set_reduced(bool(self.get("reduce_motion")))
 
     def upgrade(self) -> None:
         """Once, what an older version's default would leave behind: unlocked tools went back to Pan before

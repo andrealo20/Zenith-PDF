@@ -5,18 +5,19 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from ..core.i18n import tr
 from ..settings import Settings
 from ..theme import themes
+from . import motion
 from .widgets import FloatingBar, IconButton, icon_pixmap
 
 PANEL_WIDTH = 380
 
 
 class Row(QFrame):
-    """A large clickable row: icon, label, optional small buttons on the right."""
+    """A large clickable row: icon, label, optional small buttons on the right, shown while the pointer is on it."""
 
     clicked = Signal()
 
@@ -35,11 +36,33 @@ class Row(QFrame):
         layout.addWidget(glyph)
         layout.addWidget(label, 1)
         self._trailing = layout
+        self._reach = motion.Smooth(self)  # how far the pointer has come: the small buttons fade in with it
+        self._reach.changed.connect(self._show_buttons)
+        self._buttons: list[QGraphicsOpacityEffect] = []
 
     def add_button(self, icon_name: str, tip: str, slot) -> None:
         button = IconButton(icon_name, tip, icon_size=16)
         button.clicked.connect(slot)
+        effect = QGraphicsOpacityEffect(button)
+        effect.setOpacity(self._reach.value)
+        button.setGraphicsEffect(effect)
+        button.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, self._reach.value == 0.0)
+        self._buttons.append(effect)
         self._trailing.addWidget(button)
+
+    def _show_buttons(self, level: float) -> None:
+        for effect in self._buttons:
+            effect.setOpacity(level)
+            # Unseen, a button is not there for the pointer: a tap on it is the row's, and cannot delete anything.
+            effect.parent().setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, level == 0.0)
+
+    def enterEvent(self, event) -> None:
+        self._reach.go(1.0, motion.FAST)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._reach.go(0.0, motion.NORMAL)
+        super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.position().toPoint()):
@@ -65,7 +88,7 @@ class Section(QWidget):
         header = QHBoxLayout(self._header)
         header.setContentsMargins(4, 6, 4, 2)
         label = QLabel(tr(title))
-        label.setObjectName("SectionTitle")
+        label.setObjectName("HomeNavHeading")  # a small heading over its rows, as the home page's column has them
         self._chevron = QLabel()
         header.addWidget(label, 1)
         header.addWidget(self._chevron)
@@ -150,3 +173,4 @@ class NewFilePanel(FloatingBar):
         self.move(anchor.mapToGlobal(QPoint(0, anchor.height() + 6)))
         self.set_backdrop(anchor.window())
         self.show()
+        self.appear(-motion.RISE)  # it drops from the button it hangs from

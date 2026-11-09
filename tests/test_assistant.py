@@ -3,24 +3,28 @@
 import shutil
 
 import pytest
-from PySide6.QtCore import QPoint, QPointF, QSettings, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QLabel
 
-from conftest import settle
+from conftest import settle, wait_for
 from zenith_pdf.app import create_app
 from zenith_pdf.core import spelling, writing
-from zenith_pdf.core.annotations import FreeText, Note, TextMarkup
+from zenith_pdf.core.annotations import FreeText, Note, Shape, TextMarkup
 from zenith_pdf.core.finder import Entry, Finder, distance, expand
 from zenith_pdf.core.i18n import set_language
 from zenith_pdf.settings import Settings
 from zenith_pdf.ui import writing_dialogs
 from zenith_pdf.ui.context_menu import build_context_menu
+from zenith_pdf.theme import themes
+from zenith_pdf.ui.assistant import ResultRow
 from zenith_pdf.ui.dialogs import SHORTCUTS
 from zenith_pdf.ui.help import TOPICS
 from zenith_pdf.core.platforms import native_keys
 from zenith_pdf.ui.tips import FIRST_TIP, TOOL_TIPS
 from zenith_pdf.ui.tool_catalog import CATALOG
+from zenith_pdf.ui.widgets import IconButton
 
 HAS_ENGLISH = spelling.available("en")
 needs_english = pytest.mark.skipif(not HAS_ENGLISH, reason="the system has no English dictionary here")
@@ -263,6 +267,55 @@ def test_the_assistant_without_a_question_suggests_and_remembers(window, workspa
     panel.close()
 
 
+def test_a_row_says_what_it_is_once_and_only_what_is_not_available_says_so(qt_app):
+    command = Entry("cmd:rotate", "command", "Rotate page 1 clockwise", "Command · This page", keys="Ctrl+R")
+    note = Entry("write:model", "info", "Translate or explain text", "Writing", enabled=False, note="Not here.")
+
+    def small(entry):
+        row = ResultRow(entry)  # kept: its labels go with it
+        return [label.text() for label in row.findChildren(QLabel) if label.objectName() == "AssistantKind"]
+
+    assert small(command) == ["Command · This page"]  # the line under the name; no "Command" again on the right
+    assert small(note) == ["Writing", "Not available"]
+
+
+def test_the_highlight_glides_to_the_row_chosen_and_the_new_results_start_with_it_in_place(window, workspace,
+                                                                                         motion_on):
+    window.show_assistant()
+    panel = window._assistant
+    results = panel.list
+    panel.search.setText("page")
+    first = results.currentRow()
+    assert results._at.value == results._top_of(first) and not results._at.running
+    QTest.keyClick(panel.search, Qt.Key.Key_Down)
+    chosen = results.currentRow()
+    assert chosen > first and panel.current_key() is not None  # the choice is made at once
+    target = results._top_of(chosen)
+    assert results._at.target == target and results._at.value < target  # the highlight is on its way
+    assert wait_for(lambda: results._at.value == target, 5)
+    QTest.keyClick(panel.search, Qt.Key.Key_Down)
+    panel.search.setText("zoom")  # other results: no glide through them
+    assert not results._at.running and results._at.value == results._top_of(results.currentRow())
+    panel.close()
+
+
+def test_the_row_under_the_pointer_fades_a_fill_in_unless_it_is_the_chosen_one(window, workspace, motion_on):
+    window.show_assistant()
+    panel = window._assistant
+    results = panel.list
+    panel.search.setText("page")
+    other = next(r for r in range(results.count()) if r != results.currentRow()
+                 and results.item(r).flags() & Qt.ItemFlag.ItemIsSelectable)
+    QApplication.sendEvent(results.itemWidget(results.item(other)), QEvent(QEvent.Type.Enter))
+    assert results._washed == other and results._wash.target == 1.0
+    QApplication.sendEvent(results.itemWidget(results.item(other)), QEvent(QEvent.Type.Leave))
+    assert results._wash.target == 0.0
+    chosen = results.itemWidget(results.item(results.currentRow()))
+    QApplication.sendEvent(chosen, QEvent(QEvent.Type.Enter))
+    assert results._wash.target == 0.0  # the chosen row has its own highlight
+    panel.close()
+
+
 def test_what_cant_run_now_says_why(window, workspace):
     window.show_assistant()
     panel = window._assistant
@@ -368,6 +421,61 @@ def test_spelling_is_in_the_menu_of_text_boxes_and_notes(window, workspace):
         menu = build_context_menu(view, 0, QPointF(80, 80), annotation)
         assert "Check spelling…" in [a.text() for a in menu.actions()]
         menu.deleteLater()
+
+
+def test_the_quick_row_of_the_context_menu_shares_its_width_and_the_delete_is_red(window, workspace):
+    menu = build_context_menu(workspace.view, 0, QPointF(80, 80), None)
+    menu.popup(QPoint(300, 300))
+    settle()
+    row = next(a.defaultWidget() for a in menu.actions() if a.defaultWidget() is not None)
+    buttons = row.findChildren(IconButton)
+    assert len(buttons) == 4 and max(b.width() for b in buttons) - min(b.width() for b in buttons) <= 1
+    assert buttons[0].geometry().left() < 8 and buttons[-1].geometry().right() > row.width() - 8  # edge to edge
+    assert buttons[-1]._color == QColor(themes.current.danger).name() and buttons[0]._color is None
+    menu.close()
+    menu.deleteLater()
+
+
+def test_the_red_delete_of_the_quick_row_fills_deeper_when_pressed_as_the_other_buttons_do(window, workspace):
+    view = workspace.view
+    shape = Shape(page=0, rect=(100.0, 200.0, 120.0, 60.0))
+    view.add_annotations([shape], "Shape")
+    view.select([shape])
+    menu = build_context_menu(view, 0, QPointF(120, 220), shape)
+    menu.popup(QPoint(400, 300))
+    settle()
+    row = next(a.defaultWidget() for a in menu.actions() if a.defaultWidget() is not None)
+    copy, delete = row.findChildren(IconButton)[0], row.findChildren(IconButton)[-1]
+    assert delete.isEnabled()
+    for button in (copy, delete):
+        middle = button.rect().center()
+        QTest.mouseMove(button, middle)
+        settle()
+        hovered = button.grab().toImage().pixelColor(4, 4).alpha()
+        QTest.mousePress(button, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, middle)
+        settle()
+        pressed = button.grab().toImage().pixelColor(4, 4).alpha()
+        QTest.mouseMove(button, middle + QPoint(-40, -40))  # slid off: the release is no click
+        QTest.mouseRelease(button, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, middle + QPoint(-40, -40))
+        assert 0 < hovered < pressed
+    menu.close()
+    menu.deleteLater()
+
+
+def test_the_hover_fill_goes_to_the_row_that_scrolls_under_a_still_pointer(window, workspace):
+    window.show_assistant()
+    panel = window._assistant
+    panel.search.setText("page")
+    results = panel.list
+    where = QPoint(300, 150)
+    QTest.mouseMove(results.viewport(), where)
+    settle()
+    assert results._under == results.row(results.itemAt(where)) >= 0
+    before = results._under
+    bar = results.verticalScrollBar()
+    bar.setValue(bar.value() + 3)  # no Enter or Leave comes of rows moving under a pointer that does not
+    assert results._under == results.row(results.itemAt(where)) != before
+    panel.close()
 
 
 def test_key_points_become_a_note(window, workspace, monkeypatch):

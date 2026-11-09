@@ -8,7 +8,7 @@ screen, even if another tab opened it.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QByteArray, QMimeData, QPoint, QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QByteArray, QEvent, QMimeData, QPoint, QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QDrag, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -18,24 +18,35 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QScrollArea,
+    QSizePolicy,
     QStackedWidget,
     QToolButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
 
 from ..core.i18n import tr
 from ..icons import icon
-from ..theme import themes
+from ..theme import outline, themes
+from . import motion
 from .help import TOPICS
 from .tool_catalog import ALWAYS, CATALOG, GROUPS, TOOL_MIME, ToolSpec, base_of
+from .tool_menu import Levels
 from .toolbar import tool_colour
-from .widgets import FloatingBar, IconButton, muted_label
+from .widgets import FloatingBar, IconButton
 
 COLUMNS = 5
 TILE = QSize(124, 138)
 CIRCLE = 78
 BADGE = 26
+
+
+def _shape(rect: QRectF, round_: float):
+    """A round shape (a well, a badge) as the style draws its surfaces: round, or a square with two corners cut,
+    each cut about a third of the radius."""
+    look = themes.current.look
+    return outline(rect, round_ * 0.36 if look.chamfer else round_, look)
 
 
 class ToolTile(QWidget):
@@ -48,6 +59,13 @@ class ToolTile(QWidget):
         self._on_toolbar = on_toolbar  # callable: is it on the toolbar now?
         self._colour = colour  # callable: the colour of a tool's icon; the catalog's without it
         self._press: QPoint | None = None
+        # What is painted of the state: how far the pointer is on the tile, how hard it is pressed, and how far the
+        # tool is on the toolbar (the badge).
+        self._hot = motion.Smooth(self)
+        self._down = motion.Smooth(self)
+        self._listed: motion.Smooth | None = None
+        for animated in (self._hot, self._down):
+            animated.changed.connect(self.update)
         self.setFixedSize(TILE)
         self.setMouseTracking(True)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
@@ -66,44 +84,79 @@ class ToolTile(QWidget):
         circle = self._circle()
         return QRectF(circle.right() - BADGE * 0.75, circle.top() - BADGE * 0.2, BADGE, BADGE)
 
+    def _over_badge(self) -> bool:
+        return self.spec.key not in ALWAYS and self.underMouse() and \
+            self._badge().contains(self.mapFromGlobal(self.cursor().pos()).toPointF())
+
+    def _well(self, t) -> QColor:
+        """The disc the icon stands on: soft, lighter (or darker) under the pointer, and again under a press."""
+        well = QColor(t.canvas)
+        if t.name != "dark":  # halfway between the panel and the canvas: a soft grey that dark icons stand out on
+            panel = QColor(t.raised)
+            well = QColor((well.red() + panel.red()) // 2, (well.green() + panel.green()) // 2,
+                          (well.blue() + panel.blue()) // 2)
+        ink = QColor(t.text)  # toward the text colour, to a step you see but short of the panel's own tone
+        over = motion.mixed(well, ink, 0.055)
+        pressed = motion.mixed(well, ink, 0.09)
+        return motion.mixed(motion.mixed(well, over, self._hot.value), pressed, self._down.value)
+
     def paintEvent(self, event) -> None:
         t = themes.current
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         circle = self._circle()
         hovered = self.underMouse()
-        well = QColor(t.canvas)
-        if t.name != "dark":  # halfway between the panel and the canvas: a soft grey that dark icons stand out on
-            panel = QColor(t.raised)
-            well = QColor((well.red() + panel.red()) // 2, (well.green() + panel.green()) // 2,
-                          (well.blue() + panel.blue()) // 2)
-        if hovered:
-            well = well.lighter(125) if t.name == "dark" else well.darker(104)
+        pressed = self._press is not None and not self._badge().contains(self._press.toPointF())
+        self._hot.go(1.0 if hovered else 0.0, motion.FAST if hovered else motion.NORMAL,
+                     motion.EASE_OUT if hovered else motion.EASE_IN)
+        self._down.go(1.0 if pressed else 0.0, motion.FAST)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(well)
-        painter.drawEllipse(circle)
+        painter.setBrush(self._well(t))
+        painter.drawPath(_shape(circle, CIRCLE / 2))
         size = 38
-        icon(self.spec.icon, self.colour()).paint(
-            painter, circle.adjusted((CIRCLE - size) / 2, (CIRCLE - size) / 2, -(CIRCLE - size) / 2,
-                                     -(CIRCLE - size) / 2).toRect())
-        badge = self._badge()
-        on = self._on_toolbar(self.spec.key)
-        over_badge = hovered and badge.contains(self.mapFromGlobal(self.cursor().pos()).toPointF())
-        if self.spec.key in ALWAYS:
-            pass  # always on the toolbar: no badge
-        else:
-            painter.setBrush(QColor(t.raised))
-            painter.setPen(QPen(QColor(t.accent if on else t.text_muted), 1.2))
-            painter.drawEllipse(badge)
-            glyph = "minus" if on and over_badge else "check" if on else "plus"
-            color = t.danger if on and over_badge else t.accent if on else t.text_muted
-            icon(glyph, color).paint(painter, badge.adjusted(6, 6, -6, -6).toRect())
+        painter.save()  # the icon comes up to meet the pointer, and gives under a press
+        painter.translate(circle.center())
+        grow = 1.0 + 0.07 * self._hot.value - 0.1 * self._down.value
+        painter.scale(grow, grow)
+        icon(self.spec.icon, self.colour()).paint(painter, QRect(-size // 2, -size // 2, size, size))
+        painter.restore()
+        if self.spec.key not in ALWAYS:  # these are always on the toolbar: no badge
+            self._paint_badge(painter, t)
         painter.setPen(QColor(t.text))
         font = QFont(self.font())
         painter.setFont(font)
         painter.drawText(QRectF(0, circle.bottom() + 8, self.width(), 40),
                          Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
                          tr(self.spec.title))
+
+    def _paint_badge(self, painter: QPainter, t) -> None:
+        """The + that adds the tool to the toolbar, or the tick that says it is there (and, under the pointer, the
+        minus that takes it off); the ring and the mark change colour as the tool comes and goes."""
+        on = bool(self._on_toolbar(self.spec.key))
+        if self._listed is None:
+            self._listed = motion.Smooth(self, float(on))
+            self._listed.changed.connect(self.update)
+        self._listed.go(1.0 if on else 0.0, motion.NORMAL, motion.EASE_OUT)
+        mark = motion.mixed(QColor(t.text_muted), QColor(t.accent), self._listed.value)
+        glyph = "plus"
+        if on and self._over_badge():
+            glyph, mark = "minus", QColor(t.danger)
+        elif on and self._listed.value > 0.5:
+            glyph = "check"
+        badge = self._badge()
+        painter.setBrush(QColor(t.raised))
+        painter.setPen(QPen(mark, 1.2))
+        painter.drawPath(_shape(badge, BADGE / 2))
+        icon(glyph, mark.name()).paint(painter, badge.adjusted(6, 6, -6, -6).toRect())
+
+    def event(self, event) -> bool:
+        if event.type() == QEvent.Type.ToolTip and self.spec.key not in ALWAYS and \
+                self._badge().contains(event.pos().toPointF()):
+            # The badge says what it does: the tile's own tip says what the tool is.
+            QToolTip.showText(event.globalPos(), tr("Remove from the toolbar" if self._on_toolbar(self.spec.key)
+                                                    else "Add it to the toolbar"), self)
+            return True
+        return super().event(event)
 
     def mouseMoveEvent(self, event) -> None:
         self.update()
@@ -115,6 +168,7 @@ class ToolTile(QWidget):
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self._press = event.position().toPoint()
+            self.update()
 
     def mouseReleaseEvent(self, event) -> None:
         if self._press is None or event.button() != Qt.MouseButton.LeftButton:
@@ -142,7 +196,7 @@ class ToolTile(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(themes.current.raised))
-        painter.drawEllipse(QRectF(0, 0, CIRCLE, CIRCLE))
+        painter.drawPath(_shape(QRectF(0, 0, CIRCLE, CIRCLE), CIRCLE / 2))
         icon(self.spec.icon, self.colour()).paint(painter, QRectF(20, 20, CIRCLE - 40, CIRCLE - 40).toRect())
         painter.end()
         drag.setPixmap(pixmap)
@@ -159,6 +213,7 @@ class _Dots(QWidget):
         super().__init__(parent)
         self._count = count
         self.current = 0
+        self._lit = Levels(self, motion.FAST)  # how far each dot has come to being the current one
         self.setFixedSize(count * 20, 16)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
@@ -170,16 +225,40 @@ class _Dots(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
+        t = themes.current
         for i in range(self._count):
-            lit = i == self.current
-            painter.setBrush(QColor(themes.current.accent) if lit else QColor(themes.current.border))
-            radius = 5 if lit else 4
+            self._lit.go(i, i == self.current)
+            lit = self._lit.value(i)
+            painter.setBrush(motion.mixed(QColor(t.border), QColor(t.accent), lit))
+            radius = 4 + lit  # the current one swells a little
             painter.drawEllipse(QRectF(i * 20 + 10 - radius, 8 - radius, 2 * radius, 2 * radius))
 
     def mouseReleaseEvent(self, event) -> None:
         index = int(event.position().x() // 20)
         if 0 <= index < self._count:
             self.clicked.emit(index)
+
+
+class _Empty(QWidget):
+    """What a search with no match leaves on the page: a mark and a line, in the middle of it."""
+
+    def __init__(self):
+        super().__init__()
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setFixedHeight(TILE.height())
+        self.setAccessibleName(tr("No tool matches."))  # painted, not a label: a screen reader reads it from here
+        themes.changed.connect(self.update)
+
+    def sizeHint(self) -> QSize:
+        return QSize(COLUMNS * TILE.width(), TILE.height())  # as wide as the tiles it stands in for
+
+    def paintEvent(self, event) -> None:
+        t = themes.current
+        painter = QPainter(self)
+        icon("magnifying-glass", t.text_muted).paint(painter, QRect((self.width() - 32) // 2, 22, 32, 32))
+        painter.setPen(QColor(t.text_muted))
+        painter.drawText(QRectF(0, 64, self.width(), 28), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                         self.accessibleName())
 
 
 def centred_x(centre: int, width: int, window: QRect, screen: QRect) -> int:
@@ -318,19 +397,24 @@ class ToolChooser(QWidget):
             tile.toggled.connect(self._toggle)
             grid.addWidget(tile, position // COLUMNS, position % COLUMNS)
             self._tiles.append(tile)
+        # The tiles stand at the left of the page; the line that says there are none is in the middle of it.
+        grid.setAlignment(Qt.AlignmentFlag.AlignTop | (Qt.AlignmentFlag.AlignLeft if specs else Qt.AlignmentFlag(0)))
         if not specs:
-            grid.addWidget(muted_label("No tool matches."), 0, 0)
+            grid.addWidget(_Empty(), 0, 0, 1, COLUMNS)
 
     def show_group(self, index: int) -> None:
         if self.search.text():
             self.search.blockSignals(True)
             self.search.clear()
             self.search.blockSignals(False)
+        before = self.pages.currentIndex()
         self.pages.setCurrentIndex(index)
         for i, tab in enumerate(self.tabs):
             tab.setChecked(i == index)
         self.dots.set_current(index)
         self.dots.show()
+        if index != before and before < len(GROUPS):  # a later group comes from the right, an earlier from the left
+            motion.slide_in(self.pages.currentWidget(), Qt.Edge.RightEdge if index > before else Qt.Edge.LeftEdge, 24)
 
     def _search(self, text: str) -> None:
         words = text.lower().split()
@@ -402,5 +486,6 @@ class ToolChooser(QWidget):
         y = min(max(y, screen.top()), screen.bottom() - self.height())
         self.move(x, y)
         self.show()
+        motion.appear(self, motion.RISE if side == "bottom" else -motion.RISE)  # from the toolbar, away from it
         self.raise_()
         self.activateWindow()

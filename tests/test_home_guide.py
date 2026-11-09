@@ -6,17 +6,19 @@ import time
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QPointF, QSettings
+from PySide6.QtCore import QPoint, QPointF, QSettings, Qt
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from conftest import wait_for
 from zenith_pdf.app import create_app
 from zenith_pdf.core.annotations import Shape
 from zenith_pdf.settings import Settings
 from zenith_pdf.theme import themes
 from zenith_pdf.ui import home as home_module
-from zenith_pdf.ui import messages
-from zenith_pdf.ui.guide import GuideWindow
+from zenith_pdf.ui import messages, motion
+from zenith_pdf.ui.guide import MARGIN, GuideWindow
 from zenith_pdf.ui.home import AUTHOR, FILE_ROLE, LOCATION, NAME, OPENED, TAG_COLOURS, TAGS, HomePage, ago
 
 
@@ -133,6 +135,82 @@ def test_guide_has_every_chapter_and_searches(window):
     visible = [guide.list.item(r).text() for r in range(guide.list.count()) if not guide.list.item(r).isHidden()]
     assert "Redaction and security" in visible and "Doc Builder" not in visible
     guide.close()
+
+
+def test_a_chapter_comes_in_and_the_same_one_drawn_again_does_not(window, motion_on):
+    guide = GuideWindow(window)
+    guide.show()
+    wait()
+    guide.show_chapter("tools")
+    assert guide.text.graphicsEffect() is not None  # in its place, its picture on its way
+    assert wait_for(lambda: guide.text.graphicsEffect() is None, 5)
+    guide._build()  # a new theme draws the chapter on the page again
+    assert guide.text.graphicsEffect() is None
+    guide.show_chapter("forms")
+    assert guide.text.graphicsEffect() is not None
+    guide.close()
+
+
+def test_the_guides_text_keeps_to_a_readable_width_in_a_wide_window(window):
+    guide = GuideWindow(window)
+    guide.resize(1040, 740)
+    guide.show()
+    wait()
+    assert guide.text.viewport().x() == 0  # the usual window: the text fills it
+    guide.resize(1900, 740)
+    wait()
+    viewport = guide.text.viewport()
+    assert viewport.x() > 0 and viewport.width() <= 780 + 2 * 40 + 1  # and the rest is left on both sides
+    assert guide.text.width() - viewport.geometry().right() - 1 >= viewport.x() - 1  # the same on each
+    guide.close()
+
+
+def test_the_copy_button_keeps_to_the_text_of_a_wide_guide_and_does_not_hold_it_wide(window):
+    guide = GuideWindow(window)
+    guide.show_chapter("problem")  # the chapter with the button under its text
+    guide.resize(1040, 740)
+    guide.show()
+    wait()
+    guide.resize(1900, 740)
+    wait()
+    starts = guide.text.mapTo(guide, guide.text.viewport().pos()).x() + MARGIN
+    assert guide.copy.mapTo(guide, QPoint(0, 0)).x() == starts  # under the text, not at the edge of the window
+    guide.resize(1040, 740)
+    wait()
+    assert guide.width() == 1040  # the room it leaves on each side is no width the window must keep
+    guide.close()
+
+
+def test_the_wheel_scrolls_the_guide_over_its_side_margins_too(window):
+    guide = GuideWindow(window)
+    guide.show_chapter("tools")
+    guide.resize(1900, 740)
+    guide.show()
+    wait()
+    bar, viewport = guide.text.verticalScrollBar(), guide.text.viewport()
+    assert viewport.x() > 40 and bar.maximum() > 0
+    point = QPoint(viewport.x() // 2, 200)  # in the margin: not on the viewport, which alone takes the wheel
+    QApplication.sendEvent(guide.text, QWheelEvent(
+        QPointF(point), QPointF(guide.text.mapToGlobal(point)), QPoint(), QPoint(0, -120),
+        Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False))
+    assert bar.value() > 0
+    guide.close()
+
+
+def test_the_guide_opens_where_a_dialog_does_with_its_entrance_as_without_it(window):
+    places = []
+    for on in (False, True):
+        motion.force(on)
+        try:
+            guide = GuideWindow(window)
+            guide.show()
+            assert wait_for(lambda: guide.windowOpacity() == 1.0, 5)
+            places.append(guide.pos())
+            guide.close()
+            guide.deleteLater()
+        finally:
+            motion.force(None)
+    assert places[0] == places[1]  # the entrance's first move must not stop the dialog from centring over its parent
 
 
 def test_thumbnails_show_annotations(window, pdf):

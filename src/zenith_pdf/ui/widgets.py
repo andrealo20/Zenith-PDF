@@ -44,7 +44,8 @@ from PySide6.QtWidgets import (
 from ..core.i18n import tr
 from ..core.platforms import native_keys
 from ..icons import hue_colour, icon
-from ..theme import Look, Theme, outline, qcolor, themes, tone_sheet
+from ..theme import Look, Theme, bar_radius, outline, qcolor, themes, tone_sheet
+from . import motion
 
 GLASS_BLEED = 24  # logical px of backdrop sampled beyond the bar: the blur reaches its edges from what is there
 CAPSULE_MAX = 48  # px: a floating bar this tall or less is a capsule, its ends half circles
@@ -69,7 +70,7 @@ GLASS_STYLES = ("clear", "balanced", "solid")
 SATURATION = {"clear": 1.3, "balanced": 1.2}  # colours behind the glass, lifted so the tint never turns them grey
 NOISE_ALPHA = 4  # 0-255: the faint grain on the glass, which keeps its smooth gradients from banding
 NOISE_SIZE = 64  # device px of the grain's tile
-FADE_MS = 150  # floating bars and chips come and go this fast
+FADE_MS = motion.NORMAL  # floating bars and chips take this long to come, and less to go
 # A bar in the dark theme turns light where what is behind it is brighter than this (relative luminance), and
 # dark again below the second; in the light theme it turns dark under the third and light above the fourth. The
 # gap between each pair keeps a bar from flickering at the edge of a page.
@@ -401,10 +402,14 @@ def icon_pixmap(name: str, size: int, color: str | None = None) -> QPixmap:
     return icon(name, color).pixmap(QSize(size, size), app.devicePixelRatio() if app is not None else 1.0)
 
 
+_CLEAR = QColor(0, 0, 0, 0)
+
+
 class IconButton(QToolButton):
     """A flat tool button whose icon follows the active theme.
 
-    On a glass bar an icon-only button is a BAR_BUTTON square.
+    On a glass bar an icon-only button is a BAR_BUTTON square. A plain one there (no name of its own) paints its
+    hover and pressed fills itself, so they fade in and out where the style sheet would snap them.
     """
 
     def __init__(
@@ -421,6 +426,9 @@ class IconButton(QToolButton):
         super().__init__(parent)
         self._icon_name = icon_name
         self._color = color
+        self._fill = motion.Fill(self)
+        self._fill.changed.connect(self.update)
+        self.setProperty("fade", True)  # the sheet (theme.py) leaves its hover and pressed fills to paintEvent
         self.setToolTip(tr(tooltip))
         self.setCheckable(checkable)
         self.setAutoRaise(True)
@@ -465,14 +473,67 @@ class IconButton(QToolButton):
         return hint
 
     def _on_glass(self) -> bool:
+        bar = self._bar()
+        return bar is not None and not bar.solid
+
+    def _bar(self, through_windows: bool = False) -> FloatingBar | None:
+        """The floating bar the button is on, if any. With `through_windows` also one that owns the window the
+        button is in (a popup it opened), which is as far as the style sheet's rules for a bar's buttons reach."""
         widget = self.parentWidget()
         while widget is not None:
             if isinstance(widget, FloatingBar):
-                return not widget.solid
-            if widget.isWindow():
-                return False
+                return widget
+            if widget.isWindow() and not through_windows:
+                return None
             widget = widget.parentWidget()
-        return False
+        return None
+
+    def setObjectName(self, name: str) -> None:
+        super().setObjectName(name)
+        # A named button has fills of its own in the sheet (a danger button's red, a chip's); it keeps them.
+        fades = not name
+        if bool(self.property("fade")) != fades:
+            self.setProperty("fade", fades)
+            if self.testAttribute(Qt.WidgetAttribute.WA_WState_Polished):  # the sheet read it already
+                self.style().unpolish(self)
+                self.style().polish(self)
+
+    def enterEvent(self, event) -> None:
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event) -> None:
+        fill = self._fill
+        # Idle, which is almost always (a scroll repaints every bar's buttons): nothing to look up or paint.
+        if self.property("fade") and (self.underMouse() or self.isDown() or fill.running or fill.target.alpha()):
+            bar = self._bar(through_windows=True)
+            if bar is not None:
+                self._paint_fill(bar)
+        super().paintEvent(event)
+
+    def _paint_fill(self, bar: FloatingBar) -> None:
+        """The fill under the pointer or the press, under the icon: in the bar's own colours (light over a bright
+        page) and the shape of its buttons (cut at two corners where the style chamfers). A checked button keeps
+        the sheet's fill."""
+        t = bar.theme()
+        pressed = self.isDown()
+        hot = self.isEnabled() and not self.isChecked() and (pressed or self.underMouse())
+        fill = qcolor(t.glass_pressed if pressed else t.glass_hover) if hot else _CLEAR
+        self._fill.go(fill, motion.FAST if hot else motion.NORMAL)  # it lingers a little as the pointer leaves
+        colour = self._fill.colour
+        if colour.alpha() == 0:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(colour)
+        radius = min(bar_radius(t.look), self.width() / 2, self.height() / 2)
+        painter.drawPath(outline(QRectF(self.rect()), radius, t.look))
+        painter.end()
 
 
 # Shadows ----------------------------------------------------------------------------
@@ -600,15 +661,17 @@ class Fade(QObject):
     """Shows or hides a widget with a short change of opacity; a floating bar's shadow fades with it.
 
     Only while it runs does the widget paint through a QGraphicsOpacityEffect: once over, the effect
-    goes, so a bar that stays costs nothing more on every frame of a scroll.
+    goes, so a bar that stays costs nothing more on every frame of a scroll. It comes in over `ms`
+    (motion.NORMAL) and goes in less (motion.FAST), easing out and in; a bar fading out stays shown until it has
+    gone. With motion off it shows and hides at once.
     """
 
-    def __init__(self, widget: QWidget, ms: int = FADE_MS):
+    def __init__(self, widget: QWidget, ms: int | None = None):
         super().__init__(widget)
         self._widget = widget
+        self._ms = ms
         self._showing = True
         self._animation = QVariantAnimation(self)
-        self._animation.setDuration(ms)
         self._animation.valueChanged.connect(self._step)
         self._animation.finished.connect(self._finish)
 
@@ -646,12 +709,20 @@ class Fade(QObject):
 
     def _run(self, start: float, end: float) -> None:
         self._animation.stop()
+        if not motion.enabled():
+            self._finish()
+            return
         effect = self._widget.graphicsEffect()
         if not isinstance(effect, QGraphicsOpacityEffect):
             effect = QGraphicsOpacityEffect(self._widget)
             self._widget.setGraphicsEffect(effect)
+        entering = end > start
+        self._animation.blockSignals(True)  # a stopped animation reports the values of its old time as its ends change
+        self._animation.setDuration(self._ms or (motion.NORMAL if entering else motion.FAST))
+        self._animation.setEasingCurve(motion.EASE_OUT if entering else motion.EASE_IN)
         self._animation.setStartValue(start)
         self._animation.setEndValue(end)
+        self._animation.blockSignals(False)
         self._step(start)
         self._animation.start()
 
@@ -938,6 +1009,16 @@ class FloatingBar(QFrame):
         if (shadow := self._cast_shadow()) is not None:
             shadow.hide()
 
+    def appear(self, rise: int = motion.RISE, ms: int = motion.NORMAL) -> None:
+        """motion.appear() for a bar just shown: its shadow, a sibling, rises and fades with it."""
+        shadow = self._cast_shadow()
+        motion.appear(self, rise, ms, along=[shadow] if shadow is not None else [])
+
+    def slide_in(self, edge: Qt.Edge = Qt.Edge.LeftEdge, distance: int | None = None, ms: int = motion.SLOW) -> None:
+        """motion.slide_in() for a bar just shown: its shadow comes with it."""
+        shadow = self._cast_shadow()
+        motion.slide_in(self, edge, distance, ms, along=[shadow] if shadow is not None else [])
+
     # Painting -------------------------------------------------------------------
 
     def paintEvent(self, event) -> None:
@@ -1046,10 +1127,8 @@ class Switch(QAbstractButton):
         self.setCheckable(True)
         self.setChecked(checked)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._position = 1.0 if checked else 0.0  # knob: 0 left, 1 right
-        self._animation = QVariantAnimation(self)
-        self._animation.setDuration(140)
-        self._animation.valueChanged.connect(self._move_knob)
+        self._travel = motion.Smooth(self, 1.0 if checked else 0.0)  # 0 left, 1 right
+        self._travel.changed.connect(self.update)
         self.toggled.connect(self._on_toggled)
         themes.changed.connect(self.update)
 
@@ -1057,14 +1136,9 @@ class Switch(QAbstractButton):
         return QSize(40, 22)
 
     def _on_toggled(self, checked: bool) -> None:
-        self._animation.stop()
-        self._animation.setStartValue(self._position)
-        self._animation.setEndValue(1.0 if checked else 0.0)
-        self._animation.start()
-
-    def _move_knob(self, value) -> None:
-        self._position = float(value)
-        self.update()
+        if not self._travel.running:
+            self._travel.set(0.0 if checked else 1.0)  # it starts from the other end, also after a silent setChecked()
+        self._travel.go(1.0 if checked else 0.0, motion.FAST, motion.EASE_IN_OUT)
 
     def paintEvent(self, event) -> None:
         t = themes.current
@@ -1077,9 +1151,7 @@ class Switch(QAbstractButton):
             track = track.adjusted(3, 3, -3, -3)
         # Mid-animation the knob is where the animation put it; otherwise where the state says,
         # which also covers setChecked() with signals blocked.
-        running = self._animation.state() == QVariantAnimation.State.Running
-        mix = self._position if running else (1.0 if self.isChecked() else 0.0)
-        self._position = mix
+        mix = self._travel.value if self._travel.running else (1.0 if self.isChecked() else 0.0)
         faded = 1.0 if self.isEnabled() else 0.45
         draw = {"material": self._material, "dot": self._dot, "neon": self._neon}.get(t.look.switch)
         if draw is not None:
@@ -1293,6 +1365,8 @@ class _Segment(QAbstractButton):
     def __init__(self, text: str, control: Segmented):
         super().__init__(control)
         self._control = control
+        self._hover = motion.Fill(self)
+        self._hover.changed.connect(self.update)
         self.setText(tr(text))
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1308,27 +1382,26 @@ class _Segment(QAbstractButton):
 
     def paintEvent(self, event) -> None:
         t = themes.current
-        _, fill, edge = segment_colours(t)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(self.rect())
         radius = t.look.item
         font = QFont(self.font())
-        hot = self.underMouse() and self.isEnabled()
-        if self.isChecked():
-            painter.setPen(QPen(edge, 1.0))
-            painter.setBrush(fill)
-            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
+        chosen = QColor(t.segment_text or t.text)
+        # The fill of the chosen segment is the control's (Segmented.paintEvent): it slides here, and the label
+        # takes its colours and weight as the fill comes under it.
+        lit = self._control.lit(self)
+        hot = self.underMouse() and self.isEnabled() and lit < 0.5
+        self._hover.go(qcolor(t.hover) if hot else _CLEAR, motion.FAST if hot else motion.NORMAL)
+        if self._hover.colour.alpha():
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(self._hover.colour)
+            painter.drawRoundedRect(rect, radius, radius)
+        if lit >= 0.5:
             font.setWeight(QFont.Weight.DemiBold)
-            color = QColor(t.segment_text or t.text)
-        else:
-            if hot:
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(qcolor(t.hover))
-                painter.drawRoundedRect(rect, radius, radius)
-            color = QColor(t.text if hot else t.text_muted)
+        color = motion.mixed(QColor(t.text if hot else t.text_muted), chosen, lit)
         if not self.isEnabled():
-            color = QColor(t.segment_text or t.text) if self.isChecked() else QColor(t.text_muted)
+            color = chosen if lit >= 0.5 else QColor(t.text_muted)
             color.setAlpha(140)  # on the chosen segment's fill, which may be the text colour itself
         if self._control.ring_on(self):
             focus_ring(painter, rect, radius)
@@ -1369,6 +1442,8 @@ class Segmented(QWidget):
         self.value = self.items[0][0] if self.items else None
         self._before = self.value  # the value when a segment was pressed
         self._cursor = 0  # the segment the keys point at
+        self._thumb = motion.Smooth(self)  # where the chosen fill is, in segments from the first: it slides
+        self._thumb.changed.connect(self._repaint)
         self._group = QButtonGroup(self)
         self.buttons: list[_Segment] = []
         row = QHBoxLayout(self)
@@ -1428,8 +1503,13 @@ class Segmented(QWidget):
 
     def _toggled(self, index: int, checked: bool) -> None:
         if checked:
+            slide = self._index(self.value) >= 0  # from one segment to another; from none, the fill just appears
             self.value = self.items[index][0]
             self._cursor = index
+            if slide:
+                self._thumb.go(index, motion.NORMAL, motion.EASE_IN_OUT)
+            else:
+                self._thumb.set(index)
             self._repaint()
             self.changed.emit(index)
 
@@ -1474,14 +1554,39 @@ class Segmented(QWidget):
         for button in self.buttons:
             button.update()
 
+    def lit(self, button: _Segment) -> float:
+        """How much of the chosen fill is under `button`: 1 once it is there, 0 when the fill is a segment or more
+        away, and between while it slides."""
+        if self.current() < 0:
+            return 0.0
+        return max(0.0, 1.0 - abs(self._thumb.value - self.buttons.index(button)))
+
+    def _thumb_rect(self) -> QRectF | None:
+        """Where the chosen fill is now: over the chosen segment, or between two while it slides."""
+        if self.current() < 0:
+            return None
+        place = min(max(self._thumb.value, 0.0), len(self.buttons) - 1)
+        low = int(place)
+        first = QRectF(self.buttons[low].geometry())
+        second = QRectF(self.buttons[min(low + 1, len(self.buttons) - 1)].geometry())
+        share = place - low
+        return QRectF(first.x() + (second.x() - first.x()) * share, first.y() + (second.y() - first.y()) * share,
+                      first.width() + (second.width() - first.width()) * share,
+                      first.height() + (second.height() - first.height()) * share)
+
     def paintEvent(self, event) -> None:
         t = themes.current
-        track, _, _ = segment_colours(t)
+        track, fill, edge = segment_colours(t)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(track)
         painter.drawRoundedRect(QRectF(self.rect()), t.look.control, t.look.control)
+        thumb = self._thumb_rect()
+        if thumb is not None:
+            painter.setPen(QPen(edge, 1.0))
+            painter.setBrush(fill)
+            painter.drawRoundedRect(thumb.adjusted(0.5, 0.5, -0.5, -0.5), t.look.item, t.look.item)
 
 
 def separator(vertical: bool = True) -> QFrame:

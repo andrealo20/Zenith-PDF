@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtGui import QCursor
-from PySide6.QtWidgets import QHBoxLayout, QMenu, QWidget, QWidgetAction
+from PySide6.QtGui import QColor, QCursor
+from PySide6.QtWidgets import QHBoxLayout, QMenu, QSizePolicy, QWidget, QWidgetAction
 
 from ..core.annotations import (Annotation, Attachment, Caret, FreeText, ImageStamp, Link, Note, Redaction, Tape,
                                 TextStamp)
 from ..core.i18n import tr
 from ..core.pages import TEMPLATES
 from ..icons import icon
-from . import clipboard
+from ..theme import themes
+from . import clipboard, motion
 from .help import explain_menu
-from .widgets import IconButton
+from .widgets import BAR_BUTTON, IconButton
 
 if TYPE_CHECKING:
     from .document_view import DocumentView
@@ -30,17 +31,27 @@ def _action(menu: QMenu, icon_name: str | None, text: str, slot, enabled: bool =
 
 
 def _quick_row(menu: QMenu, buttons) -> None:
-    """A row of icon buttons across the top of the menu: copy, cut, paste, delete."""
+    """A row of icon buttons across the top of the menu, sharing its width: copy, cut, paste, delete (red)."""
     row = QWidget()
     layout = QHBoxLayout(row)
-    layout.setContentsMargins(8, 4, 8, 4)
-    layout.setSpacing(4)
-    for icon_name, tip, slot, enabled in buttons:
+    layout.setContentsMargins(4, 4, 4, 4)
+    layout.setSpacing(2)
+    for icon_name, tip, slot, enabled, *danger in buttons:
         button = IconButton(icon_name, tip)
         button.setEnabled(enabled)
+        button.setFixedHeight(BAR_BUTTON)
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         button.clicked.connect(lambda _=False, s=slot: (menu.close(), s()))
-        layout.addWidget(button)
-    layout.addStretch()
+        if danger:  # the menu is made for each right click, so the colours read now are the theme's
+            red = QColor(themes.current.danger)
+            rgb = f"{red.red()}, {red.green()}, {red.blue()}"
+            button._color = red.name()
+            button._refresh()
+            # Soft red under the pointer, as the selection bar's delete button; its own sheet outranks the app's
+            # pressed fill, so the press needs a rule here too.
+            button.setStyleSheet(f"QToolButton:hover {{ background: rgba({rgb}, 34); }} "
+                                 f"QToolButton:pressed {{ background: rgba({rgb}, 62); }}")
+        layout.addWidget(button, 1)
     action = QWidgetAction(menu)
     action.setDefaultWidget(row)
     menu.addAction(action)
@@ -114,7 +125,7 @@ def build_context_menu(view: DocumentView, page: int, pos, annotation: Annotatio
         ("copy", "Copy (Ctrl+C)", view.copy, selected or has_text),
         ("scissors", "Cut (Ctrl+X)", view.cut_annotations, unlocked and editable),
         ("clipboard-text", "Paste (Ctrl+V)", lambda: view.paste(page, at), view.can_paste() and editable),
-        ("trash", "Delete (Del)", view.delete_selected, unlocked and editable),
+        ("trash", "Delete (Del)", view.delete_selected, unlocked and editable, True),
     ])
     menu.addSeparator()
 
@@ -179,4 +190,8 @@ def build_context_menu(view: DocumentView, page: int, pos, annotation: Annotatio
 
     _action(menu, "selection-all", "Select all annotations", lambda: view.select_all_annotations(page))
     _action(menu, "text-aa", "Select all text", lambda: view.select_all_text(page))
+    # It drops out of the pointer; a submenu, opened by pointing at its entry, comes faster.
+    motion.appear_on_show(menu, -motion.RISE)
+    for submenu in (special, pages, insert):
+        motion.appear_on_show(submenu, -motion.RISE, motion.FAST)
     return explain_menu(menu)

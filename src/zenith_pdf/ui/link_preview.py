@@ -14,7 +14,7 @@ from ..core.annotations import Rect
 from ..core.document import DocumentClosed, PdfiumError
 from ..core.i18n import tr
 from ..theme import outline, themes
-from .widgets import FloatingBar
+from .widgets import Fade, FloatingBar
 
 DELAY_MS = 450  # pointing this long at a link shows its card
 CACHE = 16  # pictures kept, for going back and forth over the links of a page
@@ -144,6 +144,7 @@ class LinkPreview(FloatingBar):
         self._timer.setSingleShot(True)
         self._timer.setInterval(DELAY_MS)
         self._timer.timeout.connect(self._appear)
+        self.fade = Fade(self)  # it comes and goes with the pointer, which is quicker than a card to follow
         self._target: tuple[int, tuple[float, float] | None] | None = None  # the page and spot pointed at
         self._anchor = QPoint()
         self.area: Rect | None = None  # the part of the page shown last, in display points
@@ -173,7 +174,7 @@ class LinkPreview(FloatingBar):
     def leave(self) -> None:
         self._timer.stop()
         self._target = None
-        self.hide()
+        self.fade.fade_out()
 
     def _forget(self, *_) -> None:
         self._pictures.clear()
@@ -197,7 +198,7 @@ class LinkPreview(FloatingBar):
         self.layout().activate()
         self.adjustSize()
         self._place(self, self._anchor)
-        self.show()
+        self.fade.fade_in()  # also turns round a card that was on its way out
         self.raise_()
         self.refresh_backdrop()
 
