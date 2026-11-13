@@ -35,7 +35,9 @@ GRAIN = widgets._noise_tile  # the glass's grain, which floating() takes away
 
 def test_liquid_is_a_glass_style_and_clear_stays_the_default():
     assert widgets.GLASS_STYLES == stored.CHOICES["glass"] == STYLES
-    assert widgets.glass_style("liquid") == "liquid" and widgets.glass_style("nonsense") == "clear"
+    # Liquid is a style where the lens can run; elsewhere a stored "liquid" is the Clear glass.
+    assert widgets.glass_style("liquid") == ("liquid" if lens.supported() else "clear")
+    assert widgets.glass_style("nonsense") == "clear"
     assert widgets.glass_style(True) == "clear" and widgets.glass_style(False) == "solid"  # the old switch
     assert stored.DEFAULTS["glass"] == "clear"
 
@@ -63,6 +65,7 @@ def test_liquid_reads_like_clear(qt_app, monkeypatch):
                 assert widgets.glass.liquid is (style == "liquid" and can and bars), (style, can, bars)
 
 
+@needs_lens
 def test_without_a_lens_a_liquid_bar_is_painted_as_a_clear_one(window, workspace, monkeypatch):
     monkeypatch.setattr(lens, "available", lambda: False)
     view, bar = workspace.view, workspace.toolbar
@@ -124,6 +127,7 @@ def cut_short(control) -> list[str]:
     return cut
 
 
+@needs_lens
 def test_the_glass_row_offers_liquid_first_and_every_label_fits_in_every_language(window, monkeypatch):
     assert GLASS_CHOICES == (("liquid", "Liquid"), ("clear", "Clear"), ("balanced", "Balanced"), ("solid", "Solid"))
     style = window.settings.get("style")
@@ -170,6 +174,7 @@ def test_the_glass_row_offers_liquid_first_and_every_label_fits_in_every_languag
         set_language("en")
 
 
+@needs_lens
 def test_choosing_liquid_in_settings_reaches_every_bar(window, workspace, tmp_path):
     before = window.settings.get("glass")
     bars = [bar for bar in workspace.canvas._glass() if bar.isVisible()]

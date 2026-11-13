@@ -129,7 +129,7 @@ def test_settings_window_search_and_controls(window):
     dialog.search.setText("no such setting anywhere")
     assert dialog.empty.isVisible()
     dialog.search.clear()
-    glass = next(w for w in dialog.findChildren(widgets.Segmented) if [v for v, _ in w.items][0] == "liquid")
+    glass = next(w for w in dialog.findChildren(widgets.Segmented) if [v for v, _ in w.items][-1] == "solid")
     assert glass.value == "clear"
     window.settings.set("glass", "solid")  # the window follows changes made elsewhere
     assert glass.value == "solid"
