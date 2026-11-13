@@ -32,7 +32,7 @@ from ..core.platforms import MAC, SYSTEM_NAME, WINDOWS, mono_font, native_keys, 
 from ..core.releases import EARLIER, RELEASES
 from ..icons import icon
 from ..theme import themes
-from . import motion
+from . import lens, motion
 from .dialogs import SHORTCUTS
 from .help import TOPICS
 from .tool_catalog import CATALOG, GROUPS
@@ -116,6 +116,36 @@ def _shortcuts() -> str:
                        for keys, action in entries)
         parts.append(f"<h3>{tr(group)}</h3><table cellpadding='4'>{rows}</table>")
     return "".join(parts)
+
+
+# The Settings chapter where the lens can run, and as it was before Liquid where it cannot: both are translated.
+_SETTINGS_WITH_LIQUID = """
+<h1>Settings</h1>
+<p>Settings (the gear at the foot of the side panel, or the menu at the top right) apply as soon as you change
+them. The search box finds a setting by name.</p>
+<ul>
+<li><b>View &amp; Layout</b>: style (Zenith, Dot, Neon or Material), theme, accent colour, the glass
+of the bars (Liquid, Clear, Balanced or Solid), how documents open, whether reading mode fills the screen.
+With Liquid each bar is clear glass that bends the pages like a lens.</li>
+<li><b>Templates</b>: new-document templates, and where new documents go.</li>
+<li><b>Annotation</b>: your name, where unlocked tools go back to, locks, snapping, and every tool's menu.</li>
+<li><b>Canvas Navigation</b>: what the mouse wheel does and how fast it scrolls.</li>
+<li><b>Files &amp; Saving</b>: autosave, reopening documents, the home page's list.</li>
+<li><b>Performance</b>, <b>Text Recognition</b>, <b>Keyboard Shortcuts</b>, <b>Help</b>, <b>About</b>.</li>
+</ul>"""
+_SETTINGS = """
+<h1>Settings</h1>
+<p>Settings (the gear at the foot of the side panel, or the menu at the top right) apply as soon as you change
+them. The search box finds a setting by name.</p>
+<ul>
+<li><b>View &amp; Layout</b>: style (Zenith, Dot, Neon or Material), theme, accent colour, the glass
+of the bars (Clear, Balanced or Solid), how documents open, whether reading mode fills the screen.</li>
+<li><b>Templates</b>: new-document templates, and where new documents go.</li>
+<li><b>Annotation</b>: your name, where unlocked tools go back to, locks, snapping, and every tool's menu.</li>
+<li><b>Canvas Navigation</b>: what the mouse wheel does and how fast it scrolls.</li>
+<li><b>Files &amp; Saving</b>: autosave, reopening documents, the home page's list.</li>
+<li><b>Performance</b>, <b>Text Recognition</b>, <b>Keyboard Shortcuts</b>, <b>Help</b>, <b>About</b>.</li>
+</ul>"""
 
 
 def chapters(document: QTextDocument) -> list[tuple[str, str, str, str]]:
@@ -371,19 +401,7 @@ makes the rest searchable again.</p>
 printing, copying and editing. Keep the password safe: without it nobody can open the file.</p>
 <h2>Sanitize</h2>
 <p>Removes what a PDF can carry besides its pages: scripts, embedded files, author details, links to websites.</p>"""),
-        ("settings", "Settings", "gear-six", """
-<h1>Settings</h1>
-<p>Settings (the gear at the foot of the side panel, or the menu at the top right) apply as soon as you change
-them. The search box finds a setting by name.</p>
-<ul>
-<li><b>View &amp; Layout</b>: style (Zenith, Dot, Neon or Material), theme, accent colour, the glass
-of the bars (Clear, Balanced or Solid), how documents open, whether reading mode fills the screen.</li>
-<li><b>Templates</b>: new-document templates, and where new documents go.</li>
-<li><b>Annotation</b>: your name, where unlocked tools go back to, locks, snapping, and every tool's menu.</li>
-<li><b>Canvas Navigation</b>: what the mouse wheel does and how fast it scrolls.</li>
-<li><b>Files &amp; Saving</b>: autosave, reopening documents, the home page's list.</li>
-<li><b>Performance</b>, <b>Text Recognition</b>, <b>Keyboard Shortcuts</b>, <b>Help</b>, <b>About</b>.</li>
-</ul>"""),
+        ("settings", "Settings", "gear-six", _SETTINGS_WITH_LIQUID if lens.supported() else _SETTINGS),
         ("shortcuts", "Keyboard shortcuts", "keyboard", f"<h1>Keyboard shortcuts</h1>{_shortcuts()}"),
         ("whats-new", "What's new", "sparkle", _whats_new()),
         ("problem", "Report a problem", "first-aid-kit", """

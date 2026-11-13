@@ -129,7 +129,7 @@ def test_settings_window_search_and_controls(window):
     dialog.search.setText("no such setting anywhere")
     assert dialog.empty.isVisible()
     dialog.search.clear()
-    glass = next(w for w in dialog.findChildren(widgets.Segmented) if [v for v, _ in w.items][0] == "clear")
+    glass = next(w for w in dialog.findChildren(widgets.Segmented) if [v for v, _ in w.items][0] == "liquid")
     assert glass.value == "clear"
     window.settings.set("glass", "solid")  # the window follows changes made elsewhere
     assert glass.value == "solid"
@@ -360,6 +360,33 @@ def test_the_view_page_fits_the_settings_window_in_every_style(window):
     finally:
         window.settings.set("style", style)
         dialog.close()
+
+
+@pytest.mark.parametrize("supported", [False, True])
+def test_liquid_is_offered_and_described_only_where_the_lens_can_run(window, monkeypatch, supported):
+    from PySide6.QtGui import QTextDocument
+
+    from zenith_pdf.ui import guide, lens
+    from zenith_pdf.ui.settings_page import SettingsWindow
+
+    monkeypatch.setattr(lens, "supported", lambda: supported)
+    dialog = SettingsWindow(window.settings, window.tool_settings, window)
+    try:
+        row = next(row for row in dialog.sections["view"].rows if row.title == "Glass")
+        glass = row.findChild(widgets.Segmented)
+        values = [value for value, _ in glass.items]
+        settings = dict((key, page) for key, _, _, page in guide.chapters(QTextDocument()))["settings"]
+        if supported:
+            assert values == ["liquid", "clear", "balanced", "solid"]
+            assert row.description.startswith("Liquid makes each floating bar a lens")
+            assert "With Liquid each bar is clear glass that bends the pages like a lens." in settings
+            assert "graphics card" not in settings
+        else:  # the three choices, words and chapter of before, all of them already translated
+            assert values == ["clear", "balanced", "solid"]
+            assert row.description.startswith("Clear lets the pages show through the floating bars")
+            assert "Liquid" not in settings
+    finally:
+        dialog.deleteLater()
 
 
 def test_a_pinned_help_card_goes_with_its_tab(window, workspace, sample_pdf, tmp_path):

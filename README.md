@@ -44,9 +44,14 @@ In continuous development: new versions come out often.
 ### Light or dark
 
 Pick a theme, or let Zenith PDF follow the system, and an accent colour of your own. The floating bars are
-frosted glass: the pages show through, blurred, and the text on them stays easy to read. A style changes the whole
-look: Dot in black and white with one red and dot-matrix titles, Neon with glowing edges, or Material, with every
-colour drawn from the accent.
+glass, and you choose which. Liquid glass, on Windows, makes each bar one lens of clear glass: the page shows
+through it sharp and bent, and every icon and number takes its ink from what lies behind it, dark over a bright
+page and light over the dark canvas, also within one bar. Clear and Balanced are frosted glass, the pages
+blurred behind them; Solid makes the bars opaque. On every glass the text stays easy to read. A style changes
+the whole look: Dot in black and white with one red and dot-matrix titles, Neon with glowing edges, or Material,
+with every colour drawn from the accent.
+
+<img src="docs/images/liquid-glass.png" alt="The Liquid glass in the dark theme: the toolbar bends the heading and the first line of the page under it, and the page counter and the zoom bar are dark over the page and light past its edge" width="100%">
 
 <img src="docs/images/editor-light.png" alt="The same lecture in the light theme" width="100%">
 
@@ -140,16 +145,17 @@ PDFs side by side, with what was added, removed or changed marked on both and li
   </tr>
 </table>
 
-### New in 0.6.1
+### New in 0.6.8
 
-- On the [Microsoft Store](https://apps.microsoft.com/detail/9NJGJ107P1K6), which keeps it up to date.
-- The logo shows the moment it starts, and the window opens on the documents you had open, already drawn.
-- Icons in the text colour again, more contrast in grey text, and glass that lets less of the page through.
-- The side panel widens from its right edge, with bigger page thumbnails; the zoom bar folds to the zoom alone;
-  the assistant is a field at the top, to click and type in.
-- Report a problem, in the More menu and in Settings: GitHub's page for a new issue opens, filled in.
-- Compare two versions shows the annotations on the pages; links inside a PDF open only web pages and email;
-  and more than forty fixes.
+- Liquid glass, on Windows: a fourth choice in Settings > View & Layout > Glass. Each floating bar is one lens
+  of clear glass, with no frost over the page: the page shows through sharp, bent most at the bar's edges, and
+  each icon and number reads dark over a bright page and light over the dark canvas, also within one bar that
+  crosses a page's edge.
+- Settings > View & Layout fits its window in every style: the four style tiles are narrower.
+
+The toolbar, the page counter and the zoom bar up close, in the Clear glass above and in the Liquid glass below:
+
+<img src="docs/images/liquid-glass-detail.png" alt="The toolbar, the page counter and the zoom bar up close: in the Clear glass the page under them is blurred and the counter turns dark all over; in the Liquid glass the heading and the first line show through sharp and bent, and the icons are dark over the page and light past its edge" width="100%">
 
 ### New in 0.6
 
@@ -228,7 +234,7 @@ every change, and publishes them with each new version.
 | Search in every PDF | SQLite's full-text index (FTS5), kept on the computer |
 | Comparing versions | the words of both versions, lined up with Python's difflib |
 | Updates | GitHub's releases API; each download checked against the release's SHA256SUMS |
-| Tests | pytest on Qt's offscreen platform: 717 tests, run on Windows, macOS and Linux |
+| Tests | pytest on Qt's offscreen platform: 970 tests, run on Windows, macOS and Linux |
 | Downloads | PyInstaller, then an NSIS installer, a .dmg or an AppImage (`tools/build.py`), built by GitHub Actions |
 
 ```
@@ -245,8 +251,10 @@ src/zenith_pdf/
 tests/        pytest suite; the UI tests run on Qt's offscreen platform
 tools/        build.py makes the download of the system it runs on;
               screenshots.py the pictures of this README; make_icon.py the
-              icon; bench_zoom.py times zooming; snapshot.py renders the
-              window to a PNG; i18n.py gathers the texts to translate
+              icon; shaders.py bakes the two shader packs of the Liquid
+              glass under src/zenith_pdf/assets; bench_zoom.py times
+              zooming; snapshot.py renders the window to a PNG; i18n.py
+              gathers the texts to translate
 packaging/    the Windows installer script and the Linux desktop entry
 .github/      the workflow that tests and builds on the three systems
 docs/images/  the pictures of this README
@@ -293,10 +301,10 @@ Qt can't blur what lies behind a widget, so each floating bar samples it
 (`ui/widgets.py`, `FloatingBar`).
 
 - The pages under the bar and 24 px round it are grabbed, reduced to one texel
-  every 2 logical px, blurred with a gaussian (sigma 3.5 px, as three box passes)
+  every 2 logical px, blurred with a gaussian (sigma 6 px, as three box passes)
   and given back some of the colour a tint takes away. The painter stretches
-  the texels smoothly: lines of text show through as soft strokes, as through
-  Apple's Liquid Glass, but too soft to read under the icons.
+  the texels smoothly: lines of text behind melt into an even wash, never
+  strokes to read under the icons.
 - A scroll moves the picture with the pages at once, so it never lags a frame;
   a fresh sample follows at most once a frame, and at once after a jump past
   the area sampled. A zoom or newly rendered tiles under a bar resample it too.
@@ -307,6 +315,21 @@ Qt can't blur what lies behind a widget, so each floating bar samples it
   The faint grain that keeps the glass from banding is counted in.
 - The edge and the line of light along the top are drawn in device pixels,
   whole pixels wide at every scaling from 100% to 200%.
+
+The Liquid glass (`ui/lens.py`) draws each bar on the graphics card instead.
+One device of Qt's rendering interface (QRhi) on Direct3D 11 serves the whole
+program, off screen. A fragment shader bends the sharp sample of the page by
+Snell's law across the whole bar, most at its edges, through a rim as wide as
+half the bar (up to 24 px); each bar's picture is read back and painted
+clipped to its outline, with the edge and the light on the rim already in it.
+The device is
+made from the event loop, never in a paint, since that takes 0.1 to 0.2 s, and
+it is freed, with its textures, when another glass is chosen. Each icon, label
+and number takes its ink from what lies behind it alone, so one bar can read
+dark over a page and light past its edge. Wherever the lens cannot run (before
+the device is up, or after it fails) the bar is drawn as the Clear glass. For
+now it runs on Windows only. `tools/shaders.py` bakes the vertex and fragment
+shaders into the two packs the app loads.
 
 The pictures in this README are made by `tools/screenshots.py`: it writes a demo lecture, marks it up with
 the app's own tools and draws each screen offscreen, so they show no one's files.

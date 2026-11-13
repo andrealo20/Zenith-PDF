@@ -96,8 +96,8 @@ def test_a_window_in_italian(qt_app, tmp_path):
         page = window._settings_window
         labels = {label.text() for label in page.findChildren(QLabel)}
         assert {"Lingua", "Vetro", "Aggiornamenti"} <= labels
-        glass = next(s for s in page.findChildren(Segmented) if s.items and s.items[0][0] == "clear")
-        assert [b.text() for b in glass.buttons] == ["Trasparente", "Bilanciato", "Pieno"]
+        glass = next(s for s in page.findChildren(Segmented) if s.items and s.items[0][0] == "liquid")
+        assert [b.text() for b in glass.buttons] == ["Liquid", "Trasparente", "Bilanciato", "Pieno"]
         nav = [page.nav.item(row).text() for row in range(page.nav.count())]
         assert "Vista e layout" in nav and "File e salvataggio" in nav
         window.open_guide("start")

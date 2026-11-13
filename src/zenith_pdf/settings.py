@@ -26,7 +26,7 @@ DEFAULTS: dict[str, object] = {
     "style": "zenith",  # how the whole app looks: a key of styles.STYLES
     "style_accent": "",  # the accent the style brought in place of the default, until the user picks one
     "print_options": {},  # the choices of the last print, but its pages and copies (print_dialog.PrintDialog)
-    "glass": "clear",  # the floating bars: "clear" or "balanced" frosted glass, or "solid"
+    "glass": "clear",  # the floating bars: "liquid", "clear" or "balanced" glass, or "solid"
     "icon_colours": False,  # icons coloured by what they do, as Acrobat's tools are; off: the text colour
     "glass_adaptive": True,  # the bars turn light over a bright page and dark over dark content
     "reading_full_screen": False,  # reading mode also fills the screen
@@ -116,7 +116,7 @@ FILE_STATES = 300  # documents whose last position is remembered
 RECENT_KEEP = 200  # recent files stored; "recent_limit" only says how many are shown, so lowering it loses none
 # Stored values of older versions, and what they mean now. Anything else not in CHOICES reads as the default.
 MIGRATIONS = {"after_drawing": {"keep": "pan"}, "glass": {"true": "clear", "false": "solid"}}
-CHOICES = {"after_drawing": ("select", "pan"), "glass": ("clear", "balanced", "solid"),
+CHOICES = {"after_drawing": ("select", "pan"), "glass": ("liquid", "clear", "balanced", "solid"),
            "style": ("zenith", "dot", "neon", "material"),
            "toolbar_side": ("top", "bottom", "left", "right")}
 

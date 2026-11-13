@@ -45,6 +45,7 @@ from zenith_pdf.settings import Settings  # noqa: E402
 from zenith_pdf.ui import writing_dialogs  # noqa: E402
 from zenith_pdf.ui.compare import CompareWindow  # noqa: E402
 from zenith_pdf.ui.flashcards import FlashcardsDialog, StudyDialog  # noqa: E402
+from zenith_pdf.ui.widgets import FloatingBar, glass  # noqa: E402
 
 W, H = 595.0, 842.0  # A4 in points
 LEFT, RIGHT = 72.0, 72.0
@@ -581,6 +582,45 @@ def settle(ms=120):
     QApplication.processEvents()
 
 
+def through_lens(window, settings) -> bool:
+    """Set the bars to the Liquid glass and wait until the lens draws every one of them; False where the lens
+    cannot run (it is made from the event loop, a moment after the setting changes)."""
+    settings.set("glass", "liquid")
+    for _ in range(100):
+        settle(50)
+        if glass.liquid:
+            break
+    else:
+        return False
+    bars = [bar for bar in window.findChildren(FloatingBar) if bar.isVisible() and bar._backdrop is not None]
+    for _ in range(40):  # each paint draws through the lens the bars whose sample is in
+        window.grab()
+        settle(100)
+        if all(bar._lensed is not None for bar in bars):
+            return True
+    return False
+
+
+def bars_close(window, picture: Image.Image, top, bottom, pad=14) -> Image.Image:
+    """`picture` (the window, grabbed) round the bars `top` and `bottom`, `pad` logical px beyond them, with the
+    rows between the two rows of bars cut out."""
+    ratio = picture.width / window.width()
+
+    def box(bars):
+        rects = [bar.geometry().translated(bar.parentWidget().mapTo(window, QPoint(0, 0))) for bar in bars]
+        return (min(r.left() for r in rects), min(r.top() for r in rects) - pad,
+                max(r.right() for r in rects), max(r.bottom() for r in rects) + pad)
+
+    upper, lower = box(top), box(bottom)
+    left, right = min(upper[0], lower[0]) - pad, max(upper[2], lower[2]) + pad
+    parts = [picture.crop(tuple(round(v * ratio) for v in (left, y0, right, y1)))
+             for _, y0, _, y1 in (upper, lower)]
+    joined = Image.new("RGBA", (parts[0].width, parts[0].height + parts[1].height))
+    joined.paste(parts[0], (0, 0))
+    joined.paste(parts[1], (0, parts[0].height))
+    return joined
+
+
 def main() -> None:
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs" / "images"
     out.mkdir(parents=True, exist_ok=True)
@@ -726,6 +766,25 @@ def main() -> None:
     settings.theme = "dark"
     settle(300)
     window._show_tab(window.workspaces.index(workspace))
+
+    # The Liquid glass over the heading and the figure of page 2: the toolbar bends the heading, the page counter
+    # and the zoom bar cross the page's edge, each icon inked for its own side. The detail is Clear above Liquid.
+    show_page(1, 1.15, 200)
+    top, bottom = [workspace.toolbar, workspace.page_counter], [workspace.zoom_bar]
+    clear = to_pil(window.grab())
+    if through_lens(window, settings):
+        liquid = to_pil(window.grab())
+        save(liquid, out, "liquid-glass.png", True)
+        rows = [framed(bars_close(window, picture, top, bottom), True) for picture in (clear, liquid)]
+        detail = Image.new("RGBA", (rows[0].width, rows[0].height * 2 - 40), (0, 0, 0, 0))
+        detail.alpha_composite(rows[1], (0, rows[0].height - 40))  # the two shadows overlap in the margin
+        detail.alpha_composite(rows[0])
+        detail.save(out / "liquid-glass-detail.png", optimize=True)
+        print(f"liquid-glass-detail.png: {detail.width}x{detail.height}")
+    else:
+        print("liquid-glass.png and liquid-glass-detail.png: the lens does not run here, so they are left as they are")
+    settings.set("glass", "clear")
+    settle(300)
     show_page(0, 1.0)
     marks = writing_dialogs.marks_of(view)
     texts = {page: view.document.page_text(page) for page in {mark.page for mark in marks}}

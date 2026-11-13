@@ -7,7 +7,7 @@ import random
 from functools import lru_cache
 
 import shiboken6
-from PIL import Image, ImageFilter
+from PIL import Image, ImageChops, ImageFilter
 from PySide6.QtCore import (QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, QVariantAnimation,
                             Signal)
 from PySide6.QtGui import (
@@ -23,6 +23,7 @@ from PySide6.QtGui import (
     QPainter,
     QPen,
     QPixmap,
+    QRegion,
     QTransform,
 )
 from PySide6.QtWidgets import (
@@ -45,12 +46,29 @@ from ..core.i18n import tr
 from ..core.platforms import native_keys
 from ..icons import hue_colour, icon
 from ..theme import Look, Theme, bar_radius, outline, qcolor, themes, tone_sheet
-from . import motion
+from . import lens, motion
 
 GLASS_BLEED = 24  # logical px of backdrop sampled beyond the bar: the blur reaches its edges from what is there
 CAPSULE_MAX = 48  # px: a floating bar this tall or less is a capsule, its ends half circles
 BLUR_STEP = 2  # logical px per texel of the blurred backdrop, which the painter stretches smoothly
 BLUR_SIGMA = 6.0  # logical px: lines of text behind melt into an even wash, never strokes to read
+# The Liquid glass is one clear lens over the whole bar: a veil just strong enough to tell glass from a hole,
+# under a dark bar and under a light one (whose dark text needs a little more over a dark page), and a rim as wide
+# as half the bar, so the page bends across all of it.
+LIQUID_VEIL = (0.06, 0.10)
+SMOKED = 0.6  # a look whose clear glass is tinted more than this is smoked glass by design
+LIQUID_BAND = 24  # logical px: the widest rim, so a tall panel keeps a flat middle to read through
+# With nothing laid over the page, text and icons on a Liquid bar stand on a soft halo of their own: the shape of
+# the bar's content, spread HALO_SPREAD and blurred HALO_SIGMA logical px, as dense as HALO_GAIN makes it.
+HALO_SPREAD = 2
+HALO_SIGMA = 3.0
+HALO_GAIN = 2.6
+HALO_NEAR = 0.85  # the least the halo is next to a glyph: what coloured icons are made readable on
+HALO_RECHECK_MS = 250  # after the last repaint that kept the halo, look once whether the content changed meanwhile
+# 0-255: the faint fills under a bar's buttons (hover, pressed, checked: 15 to 56 in every theme, and one over
+# another) stay under this; a child shown in the other ink leaves them out away from its glyphs, as they are
+# painted once already.
+INK_FILL_MOST = 80
 STATS_STEP = 18  # logical px per sample when judging how strong the tint must be
 SHADOW_BLUR = 14  # logical px the shadow fades over, all round the bar
 SHADOW_OFFSET = 6  # the shadow falls this far below the bar
@@ -66,8 +84,9 @@ BUSY_SPREAD = 2.0  # and this far from them, a busy one; in between the contrast
 CONTRAST_MARGIN = 0.15  # aimed above both, for the rounding of 8-bit colours and of the tint's opacity
 MOST_ALPHA = 0.92  # the glass never covers what is behind it completely
 ALPHA_STEP = 0.02
-GLASS_STYLES = ("clear", "balanced", "solid")
-SATURATION = {"clear": 1.3, "balanced": 1.2}  # colours behind the glass, lifted so the tint never turns them grey
+GLASS_STYLES = ("liquid", "clear", "balanced", "solid")
+# Colours behind the glass, lifted so the tint never turns them grey.
+SATURATION = {"liquid": 1.3, "clear": 1.3, "balanced": 1.2}
 NOISE_ALPHA = 4  # 0-255: the faint grain on the glass, which keeps its smooth gradients from banding
 NOISE_SIZE = 64  # device px of the grain's tile
 FADE_MS = motion.NORMAL  # floating bars and chips take this long to come, and less to go
@@ -85,7 +104,9 @@ class _Glass:
     """How the floating bars show what is behind them: the "Glass" setting.
 
     "clear" blurs the pages behind with a light tint, "balanced" with a stronger one, "solid"
-    paints the bars opaque.
+    paints the bars opaque. "liquid" makes each bar one piece of clear glass that bends the pages
+    behind it as a lens does, its content on a halo of its own, where the lens can run (lens.py);
+    where it cannot, it is the clear glass itself.
     """
 
     style = "clear"
@@ -94,6 +115,17 @@ class _Glass:
     @property
     def enabled(self) -> bool:
         return self.style != "solid" and themes.current.look.glass  # some styles draw every bar solid
+
+    @property
+    def clear(self) -> bool:
+        """Whether the glass reads as the Clear one. The Liquid glass does: the two share the contrast text
+        needs, the tint's least opacity, the lift of the colours and the light along the bottom."""
+        return self.style in ("liquid", "clear")
+
+    @property
+    def liquid(self) -> bool:
+        """Whether the bars are drawn through the lens now."""
+        return self.style == "liquid" and self.enabled and lens.available()
 
 
 glass = _Glass()
@@ -105,6 +137,8 @@ def glass_style(value) -> str:
         return "clear"
     if value is False or value == "false":
         return "solid"
+    if value == "liquid" and not lens.supported():
+        return "clear"  # what a Liquid bar is drawn as where the lens cannot run at all
     return value if value in GLASS_STYLES else "clear"
 
 
@@ -119,11 +153,39 @@ def set_glass_adaptive(on: bool) -> None:
 
 def set_glass(value) -> None:
     """Show every floating bar in another glass style (or the old on and off), at once."""
+    global _lens_asked
     glass.style = glass_style(value)
+    if glass.style == "liquid":
+        # Asked for now, not at a bar's first sample: at startup this runs before the window shows, so the
+        # device is made behind the splash, also when the app opens at Home.
+        _ask_for_lens()
+    else:
+        lens.shutdown()  # the device and its textures hold some 60 MB that no other style needs
+        _lens_asked = False  # so that choosing Liquid again asks again
     for widget in QApplication.allWidgets():
         if isinstance(widget, FloatingBar):
             widget.refresh_backdrop()
             widget.update()
+
+
+_lens_asked = False  # the lens's device was asked for: once, or every sample would queue another try
+
+
+def _ask_for_lens() -> None:
+    """Queue the making of the lens's device, once, when the bars are Liquid glass on a look with glass. Until
+    it is up a Liquid bar is drawn as the Clear one."""
+    global _lens_asked
+    if glass.style == "liquid" and glass.enabled and not _lens_asked and not lens.available():
+        _lens_asked = True
+        QTimer.singleShot(0, _start_lens)
+
+
+def _start_lens() -> None:
+    """Make the lens's device, from the event loop and never in a paint (it takes 0.1 to 0.2 s). Once it is up
+    every bar samples again and is drawn through it."""
+    # Another style chosen in the meantime has no use for the device.
+    if glass.style == "liquid" and lens.start():
+        set_glass(glass.style)
 
 
 # Contrast ---------------------------------------------------------------------------
@@ -151,14 +213,14 @@ def _over(top: QColor, alpha: float, bottom: QColor) -> QColor:
 
 def contrast_targets() -> tuple[float, float]:
     """The contrast text and icons on the glass need, over plain parts and over a busy spot, in the style in use."""
-    if glass.style == "clear":
+    if glass.clear:
         return CLEAR_TEXT_CONTRAST, CLEAR_BUSY_CONTRAST
     return TEXT_CONTRAST, BUSY_CONTRAST
 
 
 def least_alpha(theme: Theme) -> float:
     """The tint's least opacity in the glass style in use: the clear glass shows more of what is behind it."""
-    return theme.glass_clear_alpha if glass.style == "clear" else theme.glass_alpha
+    return theme.glass_clear_alpha if glass.clear else theme.glass_alpha
 
 
 def _grained(color: QColor, light_text: bool) -> QColor:
@@ -292,7 +354,8 @@ def _softened(image: QImage, size: QSize) -> Image.Image:
     # Read as blue, green, red and a byte left out, the order of these formats in memory: no conversion.
     picture = Image.frombuffer("RGB", (width, height), bytes(small.constBits()), "raw", "BGRX", small.bytesPerLine(), 1)
     picture = picture.filter(_GAUSSIAN)
-    lift = SATURATION.get(glass.style, 1.0)
+    # Through the lens the page shows as it is: its colours, lifted, would mislead the tone and the surface.
+    lift = 1.0 if glass.liquid else SATURATION.get(glass.style, 1.0)
     return picture.convert("RGB", _saturation_matrix(lift)) if lift != 1.0 else picture
 
 
@@ -750,6 +813,82 @@ class Fade(QObject):
 # Glass ------------------------------------------------------------------------------
 
 
+def _tone_pair() -> tuple[float, float]:
+    """The luminances a bar in the app's theme turns dark under and light over (see TONE_LIGHT_OVER)."""
+    if themes.current.name == "dark":
+        return TONE_DARK_UNDER, TONE_LIGHT_OVER
+    return TONE_DARK_IN_LIGHT, TONE_LIGHT_IN_LIGHT
+
+
+def _tone_for(level: float, tone: str) -> str:
+    """The tone for a backdrop of luminance `level`, `tone` being the one taken so far: it changes only past the
+    far threshold of the pair, so the edge of a page doesn't flicker."""
+    dark_under, light_over = _tone_pair()
+    if themes.current.name == "dark":
+        if tone != "light" and level > light_over:
+            return "light"
+        if tone == "light" and level < dark_under:
+            return ""
+    else:
+        if tone != "dark" and level < dark_under:
+            return "dark"
+        if tone == "dark" and level > light_over:
+            return ""
+    return tone
+
+
+def _larger_part(picture: Image.Image, box: tuple[int, int, int, int]) -> float:
+    """The mean luminance of the larger part of `box` in `picture`, its light texels or its dark ones (split
+    halfway between the tone's two thresholds): a child across the edge of a page takes the side most of it is on."""
+    counts = picture.crop(box).convert("L").histogram()
+    middle = sum(_tone_pair()) / 2
+    split = next(level for level, linear in enumerate(_LINEAR8) if linear > middle)
+    dark, light = sum(counts[:split]), sum(counts[split:])
+    part = slice(split, 256) if light > dark else slice(0, split)
+    return sum(count * linear for count, linear in zip(counts[part], _LINEAR8[part])) / max(light, dark)
+
+
+def _turned(image: QImage) -> QImage:
+    """`image` with its lightness turned over and its hue and saturation kept: in HSL that moves every channel by
+    255 minus the largest and the smallest, so dark ink turns light and a coloured icon keeps its colour, lighter
+    or darker. The faint fills are left out (INK_FILL_MOST), all but the pixel round each glyph: there the soft
+    edge of the glyph lies, and without it the edge in the bar's own ink would ring the glyph."""
+    rgba = image.convertToFormat(QImage.Format.Format_RGBA8888)
+    width, height = rgba.width(), rgba.height()
+    picture = Image.frombuffer("RGBA", (width, height), bytes(rgba.constBits()), "raw", "RGBA", rgba.bytesPerLine(), 1)
+    red, green, blue, alpha = picture.split()
+    most = ImageChops.lighter(ImageChops.lighter(red, green), blue)
+    room = ImageChops.invert(ImageChops.darker(ImageChops.darker(red, green), blue))  # 255 minus the smallest
+    turned = [ImageChops.subtract(room, ImageChops.subtract(most, channel)) for channel in (red, green, blue)]
+    glyphs = alpha.point([255 if level > INK_FILL_MOST else 0 for level in range(256)]).filter(ImageFilter.MaxFilter(3))
+    alpha = ImageChops.darker(alpha, glyphs)
+    out = Image.merge("RGBA", (*turned, alpha))
+    return QImage(out.tobytes(), width, height, 4 * width, QImage.Format.Format_RGBA8888).copy()
+
+
+class _Inks(QWidget):
+    """Over a Liquid bar, the children whose backdrop wants the other ink, drawn again in it: each one's own
+    picture with its lightness turned over. It lies above every other child and lets the mouse through, so a
+    click or a hover reaches the child under it."""
+
+    def __init__(self, bar: FloatingBar):
+        super().__init__(bar)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setGeometry(bar.rect())
+
+    def paintEvent(self, event) -> None:
+        halo = self.parentWidget()._halo  # the bar paints first, in the same pass: its pictures are current
+        if halo is None or not halo[5]:
+            return
+        painter = QPainter(self)
+        device = painter.deviceTransform()  # in device pixels from the bar's (0, 0), as the bar lays its halo
+        painter.setWorldTransform(QTransform.fromTranslate(device.dx(), device.dy()) * device.inverted()[0]
+                                  * painter.worldTransform())
+        for place, picture in halo[5]:
+            painter.drawImage(place, picture)
+        painter.end()
+
+
 class FloatingBar(QFrame):
     """A floating bar of frosted glass, like Windows' acrylic.
 
@@ -766,6 +905,8 @@ class FloatingBar(QFrame):
     shadow; popups are solid and cast none.
     """
 
+    _inks: _Inks | None = None  # set in __init__, after the events of the children made before it
+
     def __init__(self, parent: QWidget | None = None, popup: bool = False, solid: bool | None = None):
         super().__init__(parent, POPUP_FLAGS if popup else Qt.WindowType.Widget)
         self.setObjectName("FloatingBar")
@@ -778,6 +919,20 @@ class FloatingBar(QFrame):
         self._source: QWidget | None = None
         self._frosted: QImage | None = None  # the backdrop blurred and lifted, before the tint
         self._backdrop: QPixmap | None = None  # the same under the tint: what shows
+        # In the Liquid glass, the grab as it is, which the lens bends; then the lens's picture of the bar with what
+        # it was made from, so a repaint for a hover renders nothing.
+        self._sharp: QImage | None = None
+        self._lensed: tuple[tuple, QImage] | None = None
+        # The content of a Liquid bar and its halo: (what it was drawn for, the content's alpha, each child drawn
+        # alone, the side each was on, the halo, the children in the other ink). The children are drawn again only
+        # when they can have changed, never because the pages moved; a child changing side recolours the rest.
+        self._halo: tuple | None = None
+        self._sides: dict[QWidget, str] = {}  # the tone each child's own backdrop asks for, at the last sample
+        self._haloing = False  # the content is being drawn alone, for the halo: the bar's own paint draws nothing
+        self._halo_check = QTimer(self)
+        self._halo_check.setSingleShot(True)
+        self._halo_check.setInterval(HALO_RECHECK_MS)
+        self._halo_check.timeout.connect(self._check_halo)
         self._backdrop_area = QRect()  # where the backdrop was sampled, in the source's coordinates
         self._shift = QPoint()  # how far the content has moved since
         self._columns: list[tuple[int, int, int]] = []  # the colour hardest to read on, column by column (_behind)
@@ -789,6 +944,7 @@ class FloatingBar(QFrame):
         self._overlay: tuple[tuple, QPixmap] | None = None  # the grain, the light and the edge, for one size
         self._shadow: _BarShadow | None = None
         self.tone = ""  # "light" or "dark" when the bar took that theme's colours; "" for the theme's own
+        self._inks = None if self._solid else _Inks(self)
         self._attach_shadow()
         themes.changed.connect(self._on_theme)
 
@@ -804,19 +960,7 @@ class FloatingBar(QFrame):
         """The tone for what is behind the bar, with some give either way so the edge of a page doesn't flicker."""
         if self._solid or not glass.adaptive or not glass.enabled:
             return ""
-        level = luminance(behind)
-        own = themes.current.name
-        if own == "dark":
-            if self.tone != "light" and level > TONE_LIGHT_OVER:
-                return "light"
-            if self.tone == "light" and level < TONE_DARK_UNDER:
-                return ""
-        else:
-            if self.tone != "dark" and level < TONE_DARK_IN_LIGHT:
-                return "dark"
-            if self.tone == "dark" and level > TONE_LIGHT_IN_LIGHT:
-                return ""
-        return self.tone
+        return _tone_for(luminance(behind), self.tone)
 
     def set_tone(self, tone: str) -> None:
         """Paint the bar, its text and its icons in the light or the dark theme's colours ("" for the app's)."""
@@ -841,13 +985,23 @@ class FloatingBar(QFrame):
         """The opacity of the tint over the backdrop, from 0 to 1."""
         return max(self._alpha, self.min_tint_alpha / 255)
 
+    def veil(self) -> float:
+        """How much of the tint lies over the page through the lens: LIQUID_VEIL under a dark or a light bar, more
+        in a look of smoked glass, and more where the bar asks for it (min_tint_alpha)."""
+        t = self.theme()
+        light_bar = luminance(QColor(t.text)) < 0.5
+        # Smoked glass keeps half its smoke: clear, its light icons would stand on black blots over a white page.
+        smoke = t.glass_clear_alpha / 2 if t.glass_clear_alpha > SMOKED else 0.0
+        return max(LIQUID_VEIL[light_bar], smoke, self.min_tint_alpha / 255)
+
     def radius(self) -> float:
         look = themes.current.look
         return (self.height() - 1) / 2 if look.capsules and self.height() <= CAPSULE_MAX else look.panel
 
     def surface(self) -> QColor:
         """The colour coloured icons stand on: the glass over the part of what is behind it hardest to read on
-        (the brightest under light text, the darkest under dark text), or the bar itself when it is solid."""
+        (the brightest under light text, the darkest under dark text), or the bar itself when it is solid. Through
+        the lens: the halo next to the icons, over the faint veil."""
         t = self.theme()
         if self._solid:
             return QColor(t.raised)
@@ -858,6 +1012,8 @@ class FloatingBar(QFrame):
         light_text = luminance(QColor(t.text)) > 0.5
         weight = (lambda c: 0.2126 * _LINEAR8[c[0]] + 0.7152 * _LINEAR8[c[1]] + 0.0722 * _LINEAR8[c[2]])
         worst = (max if light_text else min)(columns, key=weight)
+        if glass.liquid:  # icons stand on their halo, at least HALO_NEAR dense next to them, over the faint veil
+            return _over(t.glass_base, HALO_NEAR, _over(t.glass_base, self.veil(), QColor(*worst)))
         return _over(t.glass_base, self.tint_alpha, QColor(*worst))
 
     def set_backdrop(self, source: QWidget | None) -> None:
@@ -873,6 +1029,7 @@ class FloatingBar(QFrame):
 
     def refresh_backdrop(self) -> None:
         source = self._source
+        self._sharp = self._lensed = None
         if self._solid or source is None or not glass.enabled or not self.isVisible() or not source.isVisible():
             self._backdrop = self._frosted = None
             return
@@ -881,7 +1038,10 @@ class FloatingBar(QFrame):
             self._backdrop = self._frosted = None
             self.update()
             return
-        blurred = _softened(source.grab(area).toImage(), area.size())
+        _ask_for_lens()  # also here: a look with glass can come after the Liquid style was chosen
+        grab = source.grab(area).toImage()
+        blurred = _softened(grab, area.size())
+        self._sharp = grab if glass.liquid else None
         self._backdrop_area = area
         self._shift = QPoint()
         # The part of the picture right behind the bar decides how strong the tint must be.
@@ -896,6 +1056,9 @@ class FloatingBar(QFrame):
             self.set_tone(tone)
             light_text = luminance(QColor(self.theme().text)) > 0.5
             self._columns, self._under, self._mean = _behind(blurred, inner, light_text)
+        # Each child's own side only where its ink can follow it: through the lens, in a bar that changes tone.
+        sided = glass.liquid and glass.adaptive
+        self._sides = self._child_sides(blurred, origin - area.topLeft(), (scale_x, scale_y)) if sided else {}
         self._frosted = _qimage(blurred)
         self._tint()
         self.update()
@@ -929,7 +1092,7 @@ class FloatingBar(QFrame):
         painter.fillRect(tinted.rect(), gradient)
         painter.end()
         self._backdrop = QPixmap.fromImage(tinted)
-        self._flat = _over(t.glass_base, self.tint_alpha, self._mean)
+        self._flat = _over(t.glass_base, self.veil() if glass.liquid else self.tint_alpha, self._mean)
 
     def shift_backdrop(self, dx: int, dy: int) -> None:
         """The content behind moved by (dx, dy) pixels: move the picture with it until the next sample."""
@@ -948,7 +1111,22 @@ class FloatingBar(QFrame):
         spare = bar.adjusted(-BLUR_STEP, -BLUR_STEP, BLUR_STEP, BLUR_STEP).intersected(self._source.rect())
         return bar.isEmpty() or self._backdrop_area.translated(self._shift).contains(spare)
 
+    def _child_sides(self, blurred: Image.Image, corner: QPoint, scale: tuple[float, float]) -> dict[QWidget, str]:
+        """The tone the backdrop of each child asks for, in the blurred sample whose texels are `scale` per logical
+        px, the bar's corner at `corner` in it: through the clear lens each child is read against what lies behind
+        it alone, which can be the white page beside the dark canvas."""
+        sides = {}
+        for child, place in self._content():
+            left, top = (corner.x() + place.x()) * scale[0], (corner.y() + place.y()) * scale[1]
+            right, bottom = left + child.width() * scale[0], top + child.height() * scale[1]
+            box = (max(0, int(left)), max(0, int(top)), min(blurred.width, math.ceil(right)),
+                   min(blurred.height, math.ceil(bottom)))
+            if box[0] < box[2] and box[1] < box[3]:
+                sides[child] = _tone_for(_larger_part(blurred, box), self._sides.get(child, self.tone))
+        return sides
+
     def _on_theme(self, *_) -> None:
+        self._sides = {}  # a side is named after the theme's tones: the next sample finds them again
         self.set_tone("")  # the new theme's own colours, until the next sample says otherwise
         if self._frosted is not None:
             self._tint()  # in the new theme's colours; the owner resamples soon after
@@ -985,6 +1163,12 @@ class FloatingBar(QFrame):
             self._attach_shadow()
         elif kind == QEvent.Type.ZOrderChange and (shadow := self._cast_shadow()) is not None:
             shadow.stackUnder(self)
+        elif kind in (QEvent.Type.ChildAdded, QEvent.Type.ChildRemoved, QEvent.Type.LayoutRequest):
+            if kind == QEvent.Type.ChildAdded and self._inks is not None and event.child().isWidgetType():
+                self._inks.raise_()  # above every child, the new one too
+            if self._halo is not None:
+                self._halo = None  # other content, or the same laid out elsewhere: the halo shown is out of date
+                self.update()
         return super().event(event)
 
     def moveEvent(self, event) -> None:
@@ -994,6 +1178,8 @@ class FloatingBar(QFrame):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        if self._inks is not None:
+            self._inks.setGeometry(self.rect())
         if (shadow := self._cast_shadow()) is not None:
             shadow.follow()
 
@@ -1022,6 +1208,8 @@ class FloatingBar(QFrame):
     # Painting -------------------------------------------------------------------
 
     def paintEvent(self, event) -> None:
+        if self._haloing:
+            return
         t = self.theme()
         painter = QPainter(self)
         # Everything is laid out in device pixels, from the device pixels Qt gives the bar's rect: at 125% or
@@ -1042,13 +1230,19 @@ class FloatingBar(QFrame):
         shape = outline(rect, radius, look)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        textured = False
+        textured = lensed = False
         if self._solid:
             painter.setBrush(QColor(t.raised))
         elif self._backdrop is not None and self._source is not None:
             origin = self._origin()
             textured = self.covers(origin)
-            if textured:
+            picture = self._through_lens(rect, radius, ratio, origin) if textured and self._sharp is not None else None
+            if picture is not None:
+                lensed = True
+                brush = QBrush(picture)  # its pixels on the device's: no stretch
+                brush.setTransform(QTransform.fromTranslate(rect.left(), rect.top()))
+                painter.setBrush(brush)
+            elif textured:
                 painter.setBrush(self._backdrop_brush(ratio, origin))
                 painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
             else:  # the content jumped past the picture: its mean colour until the new sample, moments away
@@ -1056,7 +1250,166 @@ class FloatingBar(QFrame):
         else:
             painter.setBrush(t.glass_solid)
         painter.drawPath(shape)
-        painter.drawPixmap(rect.topLeft(), self._edges(rect.size().toSize(), radius, ratio, textured))
+        painter.drawPixmap(rect.topLeft(), self._edges(rect.size().toSize(), radius, ratio, textured, lensed))
+        if lensed:
+            # A paint of part of the bar is a child repainting itself: what it shows may have changed.
+            painter.setBrush(QBrush(self._halo_picture(ratio, event.rect() != self.rect())))
+            painter.drawPath(shape)
+        else:  # no halo off the lens; what the content shows meanwhile is not followed, so none is kept either
+            self._halo = None
+            self._halo_check.stop()
+
+    def _halo_picture(self, ratio: float, changed: bool) -> QImage:
+        """The halo under the bar's content, in device pixels from the bar's (0, 0): the one kept, unless the
+        content `changed` or the bar's size, scale, tone or theme did, or a child changed side."""
+        t = self.theme()
+        key = (self.size(), ratio, self.tone, t.name, t.look.key, t.glass_base.rgb())
+        if changed or self._halo is None or self._halo[0] != key:
+            pictures = self._pictures(ratio)
+            self._halo = (key, self._content_alpha(ratio, pictures), pictures, None, None, ())
+        key, alpha, pictures, sides, halo, turned = self._halo
+        now = tuple(self._sides.get(child, self.tone) for child, _, _ in pictures)
+        if now != sides:
+            halo, turned = self._halos(alpha, pictures, now, ratio)
+            self._halo = (key, alpha, pictures, now, halo, turned)
+        # The pages moving can hide a child's repaint inside one of the whole bar: look again once they stop.
+        self._halo_check.start()
+        return halo
+
+    def _content(self) -> list[tuple[QWidget, QPoint]]:
+        """The bar's children and theirs, with where each lies from the bar's (0, 0). The separators are left out:
+        a line between groups carries nothing to read, and a halo would make it a dark or a light bar."""
+        found, walk = [], [(self, QPoint())]
+        while walk:
+            parent, offset = walk.pop()
+            for child in parent.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly):
+                if (child.isVisible() and not child.isWindow() and not child.property("separator")
+                        and child is not self._inks):
+                    found.append((child, offset + child.pos()))
+                    walk.append((child, offset + child.pos()))
+        return found
+
+    def _pictures(self, ratio: float) -> list[tuple[QWidget, QRect, QImage]]:
+        """Each child drawn alone (its own children are drawn in turn), with the device pixels of the bar it
+        covers. Drawn where it lies in a picture of the whole bar, its glyphs fall on the pixels they fall on in
+        the bar."""
+        image = QImage(math.ceil(self.width() * ratio), math.ceil(self.height() * ratio),
+                       QImage.Format.Format_ARGB32_Premultiplied)
+        image.setDevicePixelRatio(ratio)
+        alone = QWidget.RenderFlag(0)
+        pictures = []
+        self._haloing = True
+        try:
+            for child, place in self._content():
+                left, top = math.floor(place.x() * ratio), math.floor(place.y() * ratio)
+                box = QRect(left, top, math.ceil((place.x() + child.width()) * ratio) - left,
+                            math.ceil((place.y() + child.height()) * ratio) - top).intersected(image.rect())
+                if box.isEmpty():
+                    continue
+                image.fill(Qt.GlobalColor.transparent)
+                child.render(image, place, QRegion(), alone)
+                picture = image.copy(box)
+                picture.setDevicePixelRatio(1.0)
+                pictures.append((child, box, picture))
+        finally:
+            self._haloing = False
+        return pictures
+
+    def _content_alpha(self, ratio: float, pictures: list | None = None) -> QImage:
+        """The bar's children drawn alone (or those of `pictures`), as an 8-bit alpha picture in device pixels."""
+        image = QImage(math.ceil(self.width() * ratio), math.ceil(self.height() * ratio),
+                       QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        for _, box, picture in self._pictures(ratio) if pictures is None else pictures:
+            painter.drawImage(box.topLeft(), picture)
+        painter.end()
+        return image.convertToFormat(QImage.Format.Format_Alpha8)
+
+    def _halos(self, alpha: QImage, pictures: list, sides: tuple, ratio: float) -> tuple[QImage, tuple]:
+        """The halo of the children on their `sides`, each in the glass of its ink (the light glass under dark ink,
+        the dark under light), so over a plain page or the plain canvas it melts into what the lens shows; and the
+        children whose ink is not the bar's, as (where, picture in the other ink)."""
+        bar_dark = luminance(QColor(self.theme().text)) < 0.5
+        inks = [(side or themes.current.name) == "light" for side in sides]  # dark ink over a light backdrop
+        turned = tuple((box.topLeft(), _turned(picture))
+                       for (_, box, picture), dark in zip(pictures, inks) if dark != bar_dark)
+        if not turned:  # every child in the bar's own ink: one halo, in its glass
+            return self._build_halo(alpha, ratio, self.theme().glass_base), ()
+        halo = QImage(alpha.size(), QImage.Format.Format_ARGB32_Premultiplied)
+        halo.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(halo)
+        for dark in (True, False):
+            group = [entry for entry, ink in zip(pictures, inks) if ink == dark]
+            if group:
+                painter.drawImage(0, 0, self._build_halo(self._content_alpha(ratio, group), ratio, self._glass(dark)))
+        painter.end()
+        return halo, turned
+
+    def _glass(self, dark_ink: bool) -> QColor:
+        """The glass ink of this lightness stands on: the bar's own, or the other tone's. A style with one palette
+        has no other tone; there it is the page its ink is for, white or black, under the bar's veil."""
+        t = self.theme()
+        if (luminance(QColor(t.text)) < 0.5) == dark_ink:
+            return t.glass_base
+        other = themes.tone("light" if dark_ink else "dark")
+        if (luminance(QColor(other.text)) < 0.5) == dark_ink:
+            return other.glass_base
+        return _over(t.glass_base, self.veil(), QColor(255, 255, 255) if dark_ink else QColor(0, 0, 0))
+
+    def _build_halo(self, alpha: QImage, ratio: float, base: QColor) -> QImage:
+        """The halo of the content whose `alpha` this is: that shape spread and blurred (one gaussian, as
+        _softened's), made dense next to the glyphs, in the colour `base`."""
+        width, height = alpha.width(), alpha.height()
+        mask = Image.frombuffer("L", (width, height), bytes(alpha.constBits()), "raw", "L", alpha.bytesPerLine(), 1)
+        spread = 2 * max(1, round(HALO_SPREAD * ratio)) + 1
+        mask = mask.filter(ImageFilter.MaxFilter(spread)).filter(ImageFilter.GaussianBlur(HALO_SIGMA * ratio))
+        mask = mask.point([min(255, round(level * HALO_GAIN)) for level in range(256)])
+        halo = Image.new("RGBA", (width, height), (base.red(), base.green(), base.blue(), 0))
+        halo.putalpha(mask)
+        picture = QImage(halo.tobytes(), width, height, 4 * width, QImage.Format.Format_RGBA8888).copy()
+        return picture
+
+    def _check_halo(self) -> None:
+        """Once the pages stop: build the halo again if the content changed under repaints of the whole bar."""
+        if self._halo is not None and glass.liquid and self.isVisible():
+            if self._content_alpha(self._halo[0][1]) != self._halo[1]:  # pixel by pixel, not the rows' padding
+                self._halo = None
+                self.update()
+
+    def _through_lens(self, rect: QRectF, radius: float, ratio: float, origin: QPoint) -> QImage | None:
+        """The bar through the lens, in the device pixels of `rect`: the picture kept from the last paint while the
+        sample, the shift, the size, the ratio and the tone stay as they were. None when the lens draws nothing;
+        when that is because the lens went off, every bar samples again as the Clear glass, after this paint."""
+        if not glass.liquid or self._sharp is None:
+            return None
+        t = self.theme()
+        # As _backdrop_brush() lays the picture, but moved by whole device pixels: at 125% or 175% a move of whole
+        # logical px would put the sharp picture between texels, and the rim would smear.
+        corner = self._backdrop_area.topLeft() - origin
+        place = (corner.x() * ratio + round(self._shift.x() * ratio) - rect.left(),
+                 corner.y() * ratio + round(self._shift.y() * ratio) - rect.top())
+        area = self._backdrop_area.size()
+        base, light, edge = t.glass_base, t.glass_highlight, t.glass_border
+        spec = lens.Spec(
+            int(rect.width()), int(rect.height()), ratio, radius, t.look.chamfer,
+            place,
+            (area.width() * ratio, area.height() * ratio),
+            (base.red(), base.green(), base.blue()),
+            # The same faint veil whatever is behind: the halo, not the glass, keeps the content readable.
+            self.veil(),
+            (light.red(), light.green(), light.blue(), light.alpha()),
+            (edge.red(), edge.green(), edge.blue(), edge.alpha()),
+            # The rim reaches the middle of the bar: one lens over all of it, with no flat middle.
+            band=min(LIQUID_BAND, min(rect.width(), rect.height()) / ratio / 2))
+        key = (self._sharp.cacheKey(), spec)
+        if self._lensed is None or self._lensed[0] != key:
+            # The sharp page is both pictures: a rim that never gives way shows no middle.
+            picture = lens.render(self._sharp, self._sharp, spec)
+            self._lensed = None if picture is None else (key, picture)
+            if picture is None and not lens.available():
+                QTimer.singleShot(0, lambda: set_glass(glass.style))  # never from inside a paint
+        return None if self._lensed is None else self._lensed[1]
 
     def _backdrop_brush(self, ratio: float, origin: QPoint) -> QBrush:
         """The blurred picture as a brush, in device pixels from the bar's origin (`origin` in the source):
@@ -1069,16 +1422,18 @@ class FloatingBar(QFrame):
         brush.setTransform(QTransform(sx, 0, 0, sy, place.x() * ratio, place.y() * ratio))
         return brush
 
-    def _edges(self, size: QSize, radius: float, ratio: float, grain: bool) -> QPixmap:
+    def _edges(self, size: QSize, radius: float, ratio: float, grain: bool, lensed: bool = False) -> QPixmap:
         """The faint grain, the line of light inside the top edge and the fine edge all round, in device pixels:
         put together once per size and theme. The edge and the light are each a whole number of device
-        pixels wide (one at 100% and 125%, two from 150%), and their straight runs fill whole pixels."""
+        pixels wide (one at 100% and 125%, two from 150%), and their straight runs fill whole pixels. Over the
+        lens's picture, the grain alone: the light and the edge are in the picture."""
         t = self.theme()
         width = max(1, int(ratio + 0.5))
         colours = (t.raised, t.border) if self._solid else (t.glass_highlight.rgba(), t.glass_border.rgba())
         lit = not self._solid or t.look.rail  # a style with a lit rail keeps it on solid bars too
         colours += (t.glass_highlight.rgba(),) if lit else ()
-        key = (size.width(), size.height(), radius, width, grain, self._solid, colours, glass.style, t.look.key)
+        key = (size.width(), size.height(), radius, width, grain, lensed, self._solid, colours, glass.style,
+               t.look.key)
         if self._overlay is not None and self._overlay[0] == key:
             return self._overlay[1]
         picture = QPixmap(size)
@@ -1092,6 +1447,10 @@ class FloatingBar(QFrame):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(_noise_tile()))
             painter.drawPath(shape)
+        if lensed:
+            painter.end()
+            self._overlay = (key, picture)
+            return picture
         painter.setBrush(Qt.BrushStyle.NoBrush)
         if lit:
             # Light along the top edge, fading down the corners: the second ring of pixels in. The Clear glass
@@ -1101,7 +1460,7 @@ class FloatingBar(QFrame):
             clear = QColor(255, 255, 255, 0)
             light.setColorAt(0.0, t.glass_highlight)
             light.setColorAt(fade, clear)
-            if glass.style == "clear":
+            if glass.clear:
                 rim = QColor(t.glass_highlight)
                 rim.setAlpha(rim.alpha() // 2)
                 light.setColorAt(1.0 - fade, clear)
@@ -1592,6 +1951,7 @@ class Segmented(QWidget):
 def separator(vertical: bool = True) -> QFrame:
     line = QFrame()
     line.setObjectName("Separator")
+    line.setProperty("separator", True)  # a Liquid bar leaves these out of its halo
     if vertical:
         line.setFixedSize(1, 20)
     else:

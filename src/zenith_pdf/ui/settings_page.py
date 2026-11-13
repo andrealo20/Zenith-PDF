@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSlider,
     QSpinBox,
     QVBoxLayout,
@@ -39,7 +40,7 @@ from ..core.platforms import SYSTEM_NAME, native_keys, package_family
 from ..icons import icon, readable
 from ..settings import DEFAULTS, Settings
 from ..theme import ACCENTS, THEME_NAMES, Style, accent_shade, outline, qcolor, themes, with_accent
-from . import messages, motion
+from . import lens, messages, motion
 from .dialogs import SHORTCUTS, delete_template, edit_template, template_summary
 from .document_view import LAYOUTS, TINTS
 from .tool_catalog import BY_KEY, CATALOG, base_of, instance_title
@@ -57,12 +58,14 @@ from .widgets import (
 )
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
-GLASS_CHOICES = (("clear", "Clear"), ("balanced", "Balanced"), ("solid", "Solid"))
-GLASS_TIPS = {"clear": "The pages show through, blurred, with a light tint.",
+GLASS_CHOICES = (("liquid", "Liquid"), ("clear", "Clear"), ("balanced", "Balanced"), ("solid", "Solid"))
+GLASS_TIPS = {"liquid": "Each bar is clear glass that bends the pages like a lens.",
+              "clear": "The pages show through, blurred, with a light tint.",
               "balanced": "A stronger tint: the pages show through less.",
               "solid": "Opaque bars, for when see-through bars are hard to read."}
 LOGO = ASSETS / "zenith.svg"  # drawn at every size, so it stays sharp on any screen
 CONTROL_WIDTH = 280  # combos and fields on the right of a setting
+QWIDGETSIZE_MAX = (1 << 24) - 1  # Qt's name for no limit to a widget's size, which PySide6 does not carry
 FLASH_MS = 1600  # how long a setting the assistant opened stays lit
 DEFAULT_APP_TEXT = {
     "win32": "Double-clicking a PDF opens it in Zenith PDF. Windows shows its list of apps: pick Zenith PDF, "
@@ -166,11 +169,18 @@ class Row(QFrame):
             grid.addWidget(text, rows, 0)
             rows += 1
         if control is not None:
-            if below or not title:
-                grid.addWidget(control, rows, 0, 1, 2)
-            else:
-                grid.addWidget(control, 0, 1, rows, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.place(control, below)
         grid.setColumnStretch(0, 1)
+
+    def place(self, control: QWidget, below: bool = False) -> None:
+        """Put `control` on the right of the title and the explanation, or below them across the row (below
+        too with no title). A control already in the row moves there."""
+        grid, lines = self.layout(), bool(self.title) + bool(self.description)
+        grid.removeWidget(control)
+        if below or not self.title:
+            grid.addWidget(control, lines, 0, 1, 2)
+        else:
+            grid.addWidget(control, 0, 1, lines, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
     def matches(self, words: list[str]) -> bool:
         return all(word in self.search_text for word in words)
@@ -923,6 +933,22 @@ class SettingsWindow(QDialog):
         self._glass.setEnabled(glass)
         self._glass.setToolTip("" if glass else tr("This style draws the bars solid."))
         self._adaptive.setEnabled(glass and not one)  # it turns the bars between a light and a dark palette
+        self._place_glass()  # a style brings its own font, and the labels another width
+
+    def _place_glass(self) -> None:
+        """The Glass control beside its row's words, as wide as the other controls, while its four labels show
+        whole there. Labels as long as Polish's or Russian's take it under the words, across the row."""
+        control = self._glass
+        control.ensurePolished()  # measured in the font the style sheet gives it
+        margins = control.layout().contentsMargins()
+        # A segment asks for 14 px either side of its label, and cuts the label short with less than 6.
+        least = (sum(max(button.sizeHint().width() - 16, button.minimumSizeHint().width())
+                     for button in control.buttons)
+                 + margins.left() + margins.right() + control.layout().spacing() * (len(control.buttons) - 1))
+        beside = least <= CONTROL_WIDTH
+        control.setMinimumWidth(CONTROL_WIDTH if beside else least)
+        control.setMaximumWidth(CONTROL_WIDTH if beside else QWIDGETSIZE_MAX)
+        self._glass_row.place(control, below=not beside)
 
     def _build_view(self) -> None:
         s = self._section("view")
@@ -938,14 +964,23 @@ class SettingsWindow(QDialog):
         s.add(Row("Coloured icons", "Icons take a colour by what they do, as in Acrobat's list of tools: blue for "
                   "files, purple for pens, red for making and removing, green for pages, orange for comments. Off, "
                   "they take the text colour.", self._switch("icon_colours"), "icons colours colorful monochrome"))
-        self._glass = glass = Segmented([(value, tr_in("glass", label)) for value, label in GLASS_CHOICES],
-                                        GLASS_TIPS)
-        glass.setFixedWidth(CONTROL_WIDTH)
+        liquid = lens.supported()  # where the lens cannot run, Liquid is neither offered nor described
+        choices = GLASS_CHOICES if liquid else GLASS_CHOICES[1:]
+        self._glass = glass = Segmented([(value, tr_in("glass", label)) for value, label in choices], GLASS_TIPS)
+        for index, button in enumerate(glass.buttons):
+            # Four labels are a tight fit: short of room, every segment gives up as much of the space round its
+            # label as the others. Left to itself the control would take it all from the longest labels, and
+            # cut those short while the others had room to spare.
+            button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+            glass.layout().setStretch(index, 0)
         self._watch("glass", glass, lambda: glass.set_value(glass_style(self._settings.get("glass"))))
         glass.chosen.connect(lambda value: self._settings.set("glass", value))
-        s.add(Row("Glass", "Clear lets the pages show through the floating bars, blurred; Balanced tints them more; "
-                  "Solid makes them opaque. Their text stays readable over any page.",
-                  glass, "transparency effects transparent blur frosted acrylic liquid clear balanced solid opaque"))
+        self._glass_row = s.add(Row(
+            "Glass", "Liquid makes each floating bar a lens of clear glass that bends the pages behind it; Clear lets "
+            "them show through, blurred; Balanced tints them more; Solid makes the bars opaque. Their text stays "
+            "readable over any page." if liquid else "Clear lets the pages show through the floating bars, "
+            "blurred; Balanced tints them more; Solid makes them opaque. Their text stays readable over any page.",
+            glass, "transparency effects transparent blur frosted acrylic liquid clear balanced solid opaque"))
         self._adaptive = adaptive = self._switch("glass_adaptive")
         s.add(Row("Glass follows the page", "The bars turn light over a bright page and dark over dark content, "
                   "whatever the theme, so they stay clear: as Apple's Liquid Glass does.",
