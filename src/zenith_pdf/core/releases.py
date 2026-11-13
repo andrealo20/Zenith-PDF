@@ -30,6 +30,14 @@ class Release:
 
 
 RELEASES = (
+    Release("0.6.8", (
+        Highlight("Liquid glass", "On Windows, Liquid in Settings > View & Layout > Glass makes each bar over the "
+                  "pages a lens of clear glass. The pages show through it sharp and bent, and every icon and number "
+                  "takes its ink from what is behind it: dark over a bright page, light over a dark one, even within "
+                  "the same bar.", "drop", "setting:view"),
+    ), (
+        "The View & Layout page of Settings fits its window in every style.",
+    )),
     Release("0.6.7", (
         Highlight("A smoother app", "Menus, panels and dialogs fade in, buttons and switches glide instead of jumping, "
                   "and the page marks what a click will pick. Settings > View & Layout > Reduce motion turns the "

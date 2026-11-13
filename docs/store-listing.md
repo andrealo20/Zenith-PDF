@@ -42,6 +42,13 @@ command or setting.
 Everything runs on your computer. Zenith PDF has no account, no ads, no paid version and no tracking, and your
 files never leave your PC. It is free and open source software.
 
+**What's new in this version** (0.6.8)
+
+Liquid glass: on Windows, Settings > View & Layout > Glass > Liquid makes each bar over the pages a lens of
+clear glass. The pages show through it sharp and bent, and every icon and number takes its colour from what is
+behind it, dark over a bright page and light over a dark one. The View & Layout page of Settings now fits its
+window in every style.
+
 **Product features**
 
 - Thirty-eight markup tools, each with its own menu
@@ -53,7 +60,7 @@ files never leave your PC. It is free and open source software.
 - Measurements: distance, perimeter, area, angle and volume
 - Read aloud and text recognition on scanned pages
 - Opens Word, Excel, PowerPoint and OpenDocument files as PDFs
-- Light and dark themes with frosted glass bars
+- Light and dark themes with frosted glass bars, or on Windows Liquid glass that bends the pages like a lens
 - Fifteen languages
 - Works offline: no account, no ads, no tracking
 
@@ -87,6 +94,13 @@ strumento, il comando o l'impostazione.
 Tutto funziona sul tuo computer. Zenith PDF non ha account, pubblicità, versione a pagamento né
 tracciamento, e i tuoi file non lasciano mai il PC. È software libero e open source.
 
+**Novità di questa versione** (0.6.8)
+
+Vetro Liquid: su Windows, Impostazioni > Vista e layout > Vetro > Liquid fa di ogni barra sopra le pagine una
+lente di vetro limpido. Le pagine si vedono attraverso, nitide e curvate, e ogni icona e numero prende il colore
+da ciò che ha dietro, scuro sopra una pagina chiara e chiaro sopra una scura. La pagina Vista e layout delle
+Impostazioni ora sta nella sua finestra con ogni stile.
+
 **Caratteristiche**
 
 - Trentotto strumenti di annotazione, ognuno con il suo menu
@@ -98,7 +112,7 @@ tracciamento, e i tuoi file non lasciano mai il PC. È software libero e open so
 - Misure: distanza, perimetro, area, angolo e volume
 - Lettura ad alta voce e riconoscimento del testo nelle pagine scansionate
 - Apre i file Word, Excel, PowerPoint e OpenDocument come PDF
-- Tema chiaro e scuro con barre in vetro smerigliato
+- Tema chiaro e scuro con barre in vetro smerigliato, o su Windows in vetro Liquid che curva le pagine come una lente
 - Quindici lingue
 - Funziona offline: niente account, pubblicità o tracciamento
 
