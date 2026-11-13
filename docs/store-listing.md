@@ -42,12 +42,10 @@ command or setting.
 Everything runs on your computer. Zenith PDF has no account, no ads, no paid version and no tracking, and your
 files never leave your PC. It is free and open source software.
 
-**What's new in this version** (0.6.8)
+**What's new in this version** (0.6.9)
 
-Liquid glass: on Windows, Settings > View & Layout > Glass > Liquid makes each bar over the pages a lens of
-clear glass. The pages show through it sharp and bent, and every icon and number takes its colour from what is
-behind it, dark over a bright page and light over a dark one. The View & Layout page of Settings now fits its
-window in every style.
+Zenith PDF has a new logo: a page that says PDF, with the pen nib of the old logo at its corner. You see it on
+the taskbar, in the Start menu and at the top of the home page.
 
 **Product features**
 
@@ -94,12 +92,10 @@ strumento, il comando o l'impostazione.
 Tutto funziona sul tuo computer. Zenith PDF non ha account, pubblicità, versione a pagamento né
 tracciamento, e i tuoi file non lasciano mai il PC. È software libero e open source.
 
-**Novità di questa versione** (0.6.8)
+**Novità di questa versione** (0.6.9)
 
-Vetro Liquid: su Windows, Impostazioni > Vista e layout > Vetro > Liquid fa di ogni barra sopra le pagine una
-lente di vetro limpido. Le pagine si vedono attraverso, nitide e curvate, e ogni icona e numero prende il colore
-da ciò che ha dietro, scuro sopra una pagina chiara e chiaro sopra una scura. La pagina Vista e layout delle
-Impostazioni ora sta nella sua finestra con ogni stile.
+Zenith PDF ha un nuovo logo: una pagina con la scritta PDF, con il pennino del vecchio logo nell'angolo. Lo vedi
+sulla barra delle applicazioni, nel menu Start e in cima alla pagina Home.
 
 **Caratteristiche**
 

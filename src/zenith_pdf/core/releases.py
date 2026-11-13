@@ -30,6 +30,11 @@ class Release:
 
 
 RELEASES = (
+    Release("0.6.9", (
+        Highlight("A new logo", "The logo is now a page that says PDF, with the pen nib of the old one at its "
+                  "corner. You find it as the app's icon and at the top of the home page.", "file-pdf",
+                  "setting:about"),
+    )),
     Release("0.6.8", (
         Highlight("Liquid glass", "On Windows, Liquid in Settings > View & Layout > Glass makes each bar over the "
                   "pages a lens of clear glass. The pages show through it sharp and bent, and every icon and number "
