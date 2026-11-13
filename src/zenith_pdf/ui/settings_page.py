@@ -325,7 +325,8 @@ class AccentPicker(QWidget):
 class StyleTile(QAbstractButton):
     """A style to choose: a small picture of a window in it, in the scheme and accent in use, and its name."""
 
-    WIDTH, PICTURE = 148, 88
+    # Four of them and their gaps fit the page in the window as it first opens, also in a style that pads its rows.
+    WIDTH, PICTURE = 128, 88
 
     def __init__(self, style: Style, accent, parent=None):
         super().__init__(parent)

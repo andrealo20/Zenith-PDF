@@ -346,6 +346,22 @@ def test_settings_icons_follow_the_theme(window):
         dialog.close()
 
 
+def test_the_view_page_fits_the_settings_window_in_every_style(window):
+    window.open_settings("view")
+    dialog = window._settings_window
+    style = window.settings.get("style")
+    try:
+        for key in ("zenith", "dot", "neon", "material"):
+            window.settings.set("style", key)
+            settle(80)
+            # The four style tiles set the page's least width. Wider than the window gives it, the page scrolls
+            # sideways and loses its right edge; Material has the least room, its rows being padded cards.
+            assert dialog.scroll.horizontalScrollBar().maximum() == 0, key
+    finally:
+        window.settings.set("style", style)
+        dialog.close()
+
+
 def test_a_pinned_help_card_goes_with_its_tab(window, workspace, sample_pdf, tmp_path):
     other = tmp_path / "other.pdf"
     shutil.copy(sample_pdf, other)
