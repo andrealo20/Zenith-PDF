@@ -106,8 +106,6 @@ FULL_CARD = 150  # quick action width that fits its caption
 SORT_ROLE = Qt.ItemDataRole.UserRole + 1
 FILE_ROLE = Qt.ItemDataRole.UserRole + 2
 LOGO = Path(__file__).resolve().parents[1] / "assets" / "zenith.svg"
-# The drawing fills the middle of its 512 x 512 canvas: frame a square around it (as tools/make_icon.py does).
-LOGO_FRAME = QRectF(61, 67, 390, 390)
 THUMBNAIL_AGE = 3600  # seconds an unlisted thumbnail is kept, in case its file is being read right now
 
 
@@ -141,7 +139,6 @@ def logo_pixmap(size: int, ratio: float) -> QPixmap:
     image.fill(Qt.GlobalColor.transparent)
     renderer = QSvgRenderer(str(LOGO))
     if renderer.isValid():
-        renderer.setViewBox(LOGO_FRAME)
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         renderer.render(painter, QRectF(0, 0, side, side))

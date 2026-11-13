@@ -64,6 +64,7 @@ GLASS_TIPS = {"liquid": "Each bar is clear glass that bends the pages like a len
               "balanced": "A stronger tint: the pages show through less.",
               "solid": "Opaque bars, for when see-through bars are hard to read."}
 LOGO = ASSETS / "zenith.svg"  # drawn at every size, so it stays sharp on any screen
+MARK = ASSETS / "zenith-mark.svg"  # the logo's pen nib alone, for sizes too small to read its letters
 CONTROL_WIDTH = 280  # combos and fields on the right of a setting
 QWIDGETSIZE_MAX = (1 << 24) - 1  # Qt's name for no limit to a widget's size, which PySide6 does not carry
 FLASH_MS = 1600  # how long a setting the assistant opened stays lit
@@ -134,8 +135,8 @@ def version_details() -> str:
     return "\n".join(lines)
 
 
-def logo_icon() -> QIcon:
-    return QIcon(str(LOGO)) if LOGO.exists() else icon("info")
+def logo_icon(file: Path = MARK) -> QIcon:
+    return QIcon(str(file)) if file.exists() else icon("info")
 
 
 class Row(QFrame):
@@ -1402,7 +1403,7 @@ class SettingsWindow(QDialog):
 
     def _draw_logo(self, *_) -> None:
         ratio = self.devicePixelRatioF()
-        self.logo.setPixmap(logo_icon().pixmap(QSize(72, 72), ratio))
+        self.logo.setPixmap(logo_icon(LOGO).pixmap(QSize(72, 72), ratio))
 
     def showEvent(self, event) -> None:
         super().showEvent(event)

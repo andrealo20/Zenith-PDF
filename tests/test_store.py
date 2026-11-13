@@ -46,6 +46,17 @@ def test_the_package_logos_are_drawn_whole_on_a_clear_square():
         assert logo.getpixel((0, 0))[3] == logo.getpixel((size - 1, size - 1))[3] == 0, name
 
 
+def test_the_smallest_package_logos_are_the_pen_nib_alone():
+    build = build_script()
+
+    def page(logo) -> int:  # how many pixels of the logo's white page it shows
+        data = logo.tobytes()
+        return sum(1 for i in range(0, len(data), 4) if data[i + 3] == 255 and min(data[i:i + 3]) > 230)
+
+    assert page(build.store_logo(16, 1.0)) == 0  # too small for the three letters on the page to be read
+    assert page(build.store_logo(24, 1.0)) > 50  # the taskbar's size on a screen at 100%
+
+
 def test_a_store_copy_leaves_registering_and_updating_to_the_store(monkeypatch, tmp_path):
     monkeypatch.setattr(default_app, "package_family", lambda: FAMILY)
     monkeypatch.setattr(updates, "package_family", lambda: FAMILY)

@@ -3,7 +3,8 @@
     python tools/make_icon.py
 
 Reads src/zenith_pdf/assets/zenith.svg and writes zenith.ico (one image per size,
-each rendered directly from the vector logo) and a large zenith.png.
+each rendered directly from the vector logo) and a large zenith.png. The smallest
+sizes are drawn from zenith-mark.svg, the pen nib alone.
 """
 
 from __future__ import annotations
@@ -19,15 +20,21 @@ from PySide6.QtWidgets import QApplication
 
 ASSETS = Path(__file__).resolve().parents[1] / "src" / "zenith_pdf" / "assets"
 SIZES = (256, 128, 64, 48, 32, 24, 16)
-# The drawing occupies the middle of its 512 x 512 canvas (x 121-391, y 72-452): frame a square
+SMALL = 16  # at this size the logo's three letters are 3 pixels tall: the pen nib alone
+# The nib occupies the middle of its 512 x 512 canvas (x 121-391, y 72-452): frame a square
 # around it so the icon isn't mostly empty space at small sizes.
 FRAME = QRectF(61, 67, 390, 390)
 
 
-def draw(renderer: QSvgRenderer, size: int) -> QImage:
+def draw(size: int) -> QImage:
+    small = size <= SMALL
+    renderer = QSvgRenderer(str(ASSETS / ("zenith-mark.svg" if small else "zenith.svg")))
+    if not renderer.isValid():
+        raise SystemExit("the logo could not be read")
+    if small:
+        renderer.setViewBox(FRAME)
     image = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.transparent)
-    renderer.setViewBox(FRAME)
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     renderer.render(painter, QRectF(0, 0, size, size))
@@ -79,11 +86,8 @@ def write_ico(path: Path, images: list[QImage]) -> None:
 
 def main() -> None:
     app = QApplication.instance() or QApplication(sys.argv)
-    renderer = QSvgRenderer(str(ASSETS / "zenith.svg"))
-    if not renderer.isValid():
-        raise SystemExit("zenith.svg could not be read")
-    write_ico(ASSETS / "zenith.ico", [draw(renderer, size) for size in SIZES])
-    draw(renderer, 1024).save(str(ASSETS / "zenith.png"))
+    write_ico(ASSETS / "zenith.ico", [draw(size) for size in SIZES])
+    draw(1024).save(str(ASSETS / "zenith.png"))
     print(f"wrote {ASSETS / 'zenith.ico'}")
     app.quit()
 
