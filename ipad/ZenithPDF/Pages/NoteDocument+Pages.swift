@@ -27,8 +27,8 @@ extension NoteDocument {
         _ = NoteReader.extract(from: copy)
         guard let page = copy.page(at: index) else { return }
         copy.removePage(at: index)
-        let original = pages[index].drawing
-        let drawing = (try? PKDrawing(data: original.dataRepresentation())) ?? original
+        // PKDrawing is a value: the copy is independent, and it serialises to the same bytes as the original.
+        let drawing = pages[index].drawing
         placePages([PlacedPage(index: index + 1, page: page, notePage: NotePage(drawing: drawing))],
               actionName: tr("Duplicate Page"))
     }

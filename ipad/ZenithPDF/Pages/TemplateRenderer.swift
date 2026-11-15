@@ -68,6 +68,7 @@ enum TemplateRenderer {
     }
 
     private static func cgColor(_ color: RGB) -> CGColor {
-        CGColor(red: color.r, green: color.g, blue: color.b, alpha: 1)
+        // sRGB, as the desktop's values are meant; CGColor(red:green:blue:alpha:) is Generic RGB and comes out lighter.
+        color.uiColor.cgColor
     }
 }

@@ -89,7 +89,13 @@ struct SearchIndex: Codable, Sendable {
     private static func words(in text: String) -> [(range: Range<String.Index>, folded: String)] {
         var words: [(range: Range<String.Index>, folded: String)] = []
         text.enumerateSubstrings(in: text.startIndex..<text.endIndex, options: .byWords) { word, range, _, _ in
-            if let word, !word.isEmpty { words.append((range, word.searchFolded)) }
+            guard let word, !word.isEmpty else { return }
+            words.append((range, word.searchFolded))
+            // "L'école" is one word to the system; the part after the elision is searched on its own too.
+            if let mark = text[range].lastIndex(where: { $0 == "'" || $0 == "\u{2019}" }) {
+                let rest = text.index(after: mark)..<range.upperBound
+                if !rest.isEmpty { words.append((rest, String(text[rest]).searchFolded)) }
+            }
         }
         return words
     }

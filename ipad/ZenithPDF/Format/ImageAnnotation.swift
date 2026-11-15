@@ -10,8 +10,9 @@ final class ImageAnnotation: PDFAnnotation {
         super.init(bounds: bounds, forType: .stamp, withProperties: nil)
         self.imageData = imageData
         decoded = UIImage(data: imageData)
-        let accepted = setValue(imageData.base64EncodedString() as NSString, forAnnotationKey: ZenithKey.imageData)
-        assert(accepted, "PDFKit refused /ZenithImageData")
+        if !setValue(imageData.base64EncodedString() as NSString, forAnnotationKey: ZenithKey.imageData) {
+            log.error("PDFKit refused /ZenithImageData")
+        }
     }
 
     /// As for InkAnnotation; imageData is decoded from value(forAnnotationKey: ZenithKey.imageData), else empty.

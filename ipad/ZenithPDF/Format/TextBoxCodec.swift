@@ -46,6 +46,11 @@ enum TextBoxCodec {
         style.bold = bold
         style.italic = italic
         if let size = annotation.font?.pointSize, size > 0 { style.size = size }
+        // PDFKit rounds the /DA size to whole points; /DS keeps the size as written.
+        if let css = annotation.value(forAnnotationKey: ZenithKey.defaultStyle) as? String,
+           let size = cssSize(css), size > 0 {
+            style.size = size
+        }
         if let color = annotation.fontColor { style.color = RGB(color) }
         let alignment = annotation.alignment.rawValue
         style.alignment = (0...2).contains(alignment) ? alignment : 0
@@ -106,6 +111,14 @@ enum TextBoxCodec {
         if lower.contains("cour") || lower.contains("mono") || lower.contains("consol") { return .courier }
         if lower.contains("helv") || lower.contains("arial") || lower.contains("sans") { return .helvetica }
         return nil
+    }
+
+    /// The point size in a style string ("... 18.5pt ..."), nil when there is none.
+    private static func cssSize(_ css: String) -> CGFloat? {
+        guard let regex = try? NSRegularExpression(pattern: "([0-9]+(?:\\.[0-9]+)?)\\s*pt", options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: css, range: NSRange(css.startIndex..., in: css)),
+              let range = Range(match.range(at: 1), in: css), let value = Double(css[range]) else { return nil }
+        return CGFloat(value)
     }
 
     /// The value of "font:" or "font-family:" in a style string.
