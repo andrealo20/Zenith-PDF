@@ -334,7 +334,8 @@ struct DemoState {
                                      timeOffset: TimeInterval(step) * 0.01, size: CGSize(width: 14, height: 14),
                                      opacity: 1, force: 1, azimuth: 0, altitude: .pi / 2)
             }
-            strokes.append(PKStroke(ink: PKInk(.marker, color: color),
+            // See-through, as a highlighter is: the canvas sits over the page's typed text.
+            strokes.append(PKStroke(ink: PKInk(.marker, color: color.withAlphaComponent(0.45)),
                                     path: PKStrokePath(controlPoints: points, creationDate: date),
                                     transform: .identity, mask: nil))
         }

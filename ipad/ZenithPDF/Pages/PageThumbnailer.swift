@@ -18,7 +18,7 @@ import UIKit
         if !drawing.strokes.isEmpty {
             // Pitfall P7: PencilKit would turn black ink white in a dark appearance.
             UITraitCollection(userInterfaceStyle: .light).performAsCurrent {
-                inkImage = drawing.image(from: CGRect(origin: .zero, size: display), scale: scale * format.scale)
+                inkImage = PencilKitWidth.forPencilKit(drawing).image(from: CGRect(origin: .zero, size: display), scale: scale * format.scale)
             }
         }
         let renderer = UIGraphicsImageRenderer(size: size, format: format)

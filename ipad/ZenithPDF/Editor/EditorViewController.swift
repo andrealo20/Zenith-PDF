@@ -255,7 +255,7 @@ final class PassThroughView: UIView {
               !undo.isUndoing, !undo.isRedoing, document.index(ofPageID: canvas.pageID) != nil else { return }
         let id = canvas.pageID
         let old = document.drawing(forPageID: id)
-        let new = canvas.drawing
+        let new = PencilKitWidth.fromPencilKit(canvas.drawing)
         storingPageID = id
         document.setDrawing(new, forPageID: id, undoable: true)
         storingPageID = nil
@@ -328,7 +328,7 @@ final class PassThroughView: UIView {
     private var isWriting: Bool { mode == .write && !isPresenting }
 
     private func shownDrawing(for id: UUID) -> PKDrawing {
-        presentationProvider?(id) ?? document.drawing(forPageID: id)
+        PencilKitWidth.forPencilKit(presentationProvider?(id) ?? document.drawing(forPageID: id))
     }
 
     private func applyMode() {

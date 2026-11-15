@@ -384,3 +384,33 @@ enum StrokeCodec {
             && abs(a.width - b.width) <= 0.011 && abs(a.height - b.height) <= 0.011
     }
 }
+
+/// Point sizes as the file means them (the drawn width, as the desktop draws it) against point sizes as PencilKit
+/// draws them. Measured on the iPadOS 26 simulator: a pen, monoline or pencil point of size s is drawn 2s - 4 wide
+/// (nothing at all up to 2), a marker point s / 2 wide. Every PencilKit rendering of a note's ink (canvases,
+/// thumbnails, the recogniser's image) goes through forPencilKit, and what a canvas draws comes back through
+/// fromPencilKit, so the file holds the width the person saw.
+enum PencilKitWidth {
+    static func forPencilKit(_ drawing: PKDrawing) -> PKDrawing {
+        map(drawing) { size, marker in marker ? size * 2 : size / 2 + 2 }
+    }
+
+    static func fromPencilKit(_ drawing: PKDrawing) -> PKDrawing {
+        map(drawing) { size, marker in max(marker ? size / 2 : 2 * size - 4, 0.1) }
+    }
+
+    private static func map(_ drawing: PKDrawing, _ size: (CGFloat, Bool) -> CGFloat) -> PKDrawing {
+        guard !drawing.strokes.isEmpty else { return drawing }
+        return PKDrawing(strokes: drawing.strokes.map { stroke in
+            let marker = stroke.ink.inkType == .marker
+            let points = stroke.path.map { p in
+                PKStrokePoint(location: p.location, timeOffset: p.timeOffset,
+                              size: CGSize(width: size(p.size.width, marker), height: size(p.size.height, marker)),
+                              opacity: p.opacity, force: p.force, azimuth: p.azimuth, altitude: p.altitude,
+                              secondaryScale: p.secondaryScale)
+            }
+            return PKStroke(ink: stroke.ink, path: PKStrokePath(controlPoints: points, creationDate: stroke.path.creationDate),
+                            transform: stroke.transform, mask: stroke.mask, randomSeed: stroke.randomSeed)
+        })
+    }
+}

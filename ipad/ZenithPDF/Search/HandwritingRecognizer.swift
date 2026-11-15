@@ -12,7 +12,7 @@ enum HandwritingRecognizer {
         var ink: UIImage?
         // Pitfall P7: without a light trait collection, black ink renders white in dark mode.
         UITraitCollection(userInterfaceStyle: .light).performAsCurrent {
-            ink = drawing.image(from: bounds, scale: scale)
+            ink = PencilKitWidth.forPencilKit(drawing).image(from: bounds, scale: scale)
         }
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
