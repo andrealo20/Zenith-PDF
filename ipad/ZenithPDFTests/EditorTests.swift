@@ -212,17 +212,9 @@ final class EditorTests: XCTestCase {
         XCTAssertEqual(canvas.zoomScale, live.resolution, accuracy: 0.001)
     }
 
-    /// Rows of dark pixels in the overlay's column at display x, as the overlay draws them on screen.
-    @MainActor private func inkRows(in overlay: PageOverlayView, atDisplayX x: CGFloat) -> Int {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        format.opaque = true
-        let image = UIGraphicsImageRenderer(bounds: overlay.bounds, format: format).image { context in
-            UIColor.white.setFill()
-            context.fill(overlay.bounds)
-            overlay.drawHierarchy(in: overlay.bounds, afterScreenUpdates: true)
-        }
-        guard let cgImage = image.cgImage, overlay.pageSize.width > 0 else { return -1 }
+    /// Rows in column x of `image` (scale 1) whose alpha is over half.
+    private func inkRows(_ image: UIImage, column x: Int) -> Int {
+        guard let cgImage = image.cgImage else { return -1 }
         let width = cgImage.width, height = cgImage.height
         var bytes = [UInt8](repeating: 0, count: width * height * 4)
         let drawn: Bool = bytes.withUnsafeMutableBytes { buffer in
@@ -234,39 +226,37 @@ final class EditorTests: XCTestCase {
             return true
         }
         guard drawn else { return -1 }
-        let column = min(max(Int(x * CGFloat(width) / overlay.pageSize.width), 0), width - 1)
-        return (0..<height).filter { row in
-            let offset = (row * width + column) * 4
-            return Int(bytes[offset]) + Int(bytes[offset + 1]) + Int(bytes[offset + 2]) < 3 * 128
-        }.count
+        if x < 0 { return stride(from: 3, to: bytes.count, by: 4).filter { bytes[$0] > 128 }.count }
+        let column = min(max(x, 0), width - 1)
+        return (0..<height).filter { bytes[($0 * width + column) * 4 + 3] > 128 }.count
     }
 
-    /// The canvas draws a stroke as wide as the stroke is, at any internal resolution: the editor shows the ink
-    /// the file holds, not a thinner copy of it.
+    /// Diagnostic: how wide PencilKit draws strokes built in code.
     @MainActor func testInkShownAtItsWidth() async throws {
-        let harness = try await EditorHarness.open(pages: 1)
-        defer { harness.close() }
-        let overlay = try harness.overlay(page: 0)
-        let line = TestSupport.stroke(stride(from: CGFloat(100), through: 400, by: 10).map { CGPoint(x: $0, y: 200) },
-                                      width: 12)
-        overlay.canvas.setDrawingSilently(PKDrawing(strokes: [line]))
-        let perPoint = overlay.bounds.width / overlay.pageSize.width
-        var measured: [String] = []
-        var widths: [CGFloat] = []
-        for resolution in [CGFloat(1), 2] {
-            overlay.resolution = resolution
-            overlay.layoutIfNeeded()
-            try await harness.spin(0.5)
-            let rows = inkRows(in: overlay, atDisplayX: 250)
-            let points = CGFloat(rows) / perPoint
-            widths.append(points)
-            measured.append("resolution \(resolution), zoom \(overlay.canvas.zoomScale): \(rows) px = \(points) pt")
+        func line(_ ink: PKInkingTool.InkType, size: CGFloat, force: CGFloat, spacing: CGFloat = 10) -> PKStroke {
+            let points = stride(from: CGFloat(20), through: 180, by: spacing).map { x in
+                PKStrokePoint(location: CGPoint(x: x, y: 50), timeOffset: TimeInterval(x) * 0.001,
+                              size: CGSize(width: size, height: size), opacity: 1, force: force, azimuth: 0,
+                              altitude: .pi / 2)
+            }
+            return PKStroke(ink: PKInk(ink, color: .black), path: PKStrokePath(controlPoints: points, creationDate: Date()),
+                            transform: .identity, mask: nil)
         }
-        let report = measured.joined(separator: "; ")
-        for width in widths {
-            XCTAssertGreaterThan(width, 12 * 0.6, report)
-            XCTAssertLessThan(width, 12 * 1.6, report)
+        let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
+        var report: [String] = []
+        for (name, stroke) in [("pen 12 f1", line(.pen, size: 12, force: 1)), ("pen 12 f0", line(.pen, size: 12, force: 0)),
+                               ("pen 12 f4", line(.pen, size: 12, force: 4)), ("pen 12 f1 dense", line(.pen, size: 12, force: 1, spacing: 1)),
+                               ("pen 2 f1", line(.pen, size: 2, force: 1)), ("monoline 12", line(.monoline, size: 12, force: 1)),
+                               ("marker 14", line(.marker, size: 14, force: 1)), ("pencil 12", line(.pencil, size: 12, force: 1))] {
+            let image = PKDrawing(strokes: [stroke]).image(from: rect, scale: 1)
+            report.append("\(name): \(inkRows(image, column: 100))")
         }
+        let hand = DemoInk.strokes("Hello", at: CGPoint(x: 10, y: 10), size: 40, ink: PKInk(.pen, color: .black),
+                                   startingAt: Date(), secondsPerStroke: 0.1)
+        report.append("hand strokes \(hand.count) points \(hand.map(\.path.count)) pixels \(inkRows(PKDrawing(strokes: hand).image(from: rect, scale: 1), column: -1))")
+        let tool = PKInkingTool(.pen, color: .black, width: 12)
+        report.append("tool width 12 -> \(tool.width)")
+        XCTFail(report.joined(separator: "; "))
     }
 
     @MainActor func testResolutionFormulaAndBudget() async throws {
