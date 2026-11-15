@@ -212,9 +212,9 @@ final class EditorTests: XCTestCase {
         XCTAssertEqual(canvas.zoomScale, live.resolution, accuracy: 0.001)
     }
 
-    /// Rows in column x of `image` (scale 1) whose alpha is over half.
-    private func inkRows(_ image: UIImage, column x: Int) -> Int {
-        guard let cgImage = image.cgImage else { return -1 }
+    /// Rows in column x of `image` (scale 1) whose alpha is over `threshold`, and the highest alpha there.
+    private func inkRows(_ image: UIImage, column x: Int, threshold: UInt8 = 128) -> (Int, Int) {
+        guard let cgImage = image.cgImage else { return (-1, -1) }
         let width = cgImage.width, height = cgImage.height
         var bytes = [UInt8](repeating: 0, count: width * height * 4)
         let drawn: Bool = bytes.withUnsafeMutableBytes { buffer in
@@ -225,38 +225,42 @@ final class EditorTests: XCTestCase {
             context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
             return true
         }
-        guard drawn else { return -1 }
-        if x < 0 { return stride(from: 3, to: bytes.count, by: 4).filter { bytes[$0] > 128 }.count }
+        guard drawn else { return (-1, -1) }
         let column = min(max(x, 0), width - 1)
-        return (0..<height).filter { bytes[($0 * width + column) * 4 + 3] > 128 }.count
+        let alphas = (0..<height).map { bytes[($0 * width + column) * 4 + 3] }
+        return (alphas.filter { $0 > threshold }.count, Int(alphas.max() ?? 0))
     }
 
     /// Diagnostic: how wide PencilKit draws strokes built in code.
     @MainActor func testInkShownAtItsWidth() async throws {
-        func line(_ ink: PKInkingTool.InkType, size: CGFloat, force: CGFloat, spacing: CGFloat = 10) -> PKStroke {
-            let points = stride(from: CGFloat(20), through: 180, by: spacing).map { x in
-                PKStrokePoint(location: CGPoint(x: x, y: 50), timeOffset: TimeInterval(x) * 0.001,
-                              size: CGSize(width: size, height: size), opacity: 1, force: force, azimuth: 0,
-                              altitude: .pi / 2)
+        func line(_ ink: PKInkingTool.InkType, size: CGFloat, secondsPer10: Double, triple: Bool = false) -> PKStroke {
+            var points: [PKStrokePoint] = []
+            for x in stride(from: CGFloat(20), through: 180, by: 10) {
+                let point = PKStrokePoint(location: CGPoint(x: x, y: 50), timeOffset: Double(x) / 10 * secondsPer10,
+                                          size: CGSize(width: size, height: size), opacity: 1, force: 1, azimuth: 0,
+                                          altitude: .pi / 2)
+                points += triple ? [point, point, point] : [point]
             }
             return PKStroke(ink: PKInk(ink, color: .black), path: PKStrokePath(controlPoints: points, creationDate: Date()),
                             transform: .identity, mask: nil)
         }
         let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
         var report: [String] = []
-        for (name, stroke) in [("pen 12 f1", line(.pen, size: 12, force: 1)), ("pen 12 f0", line(.pen, size: 12, force: 0)),
-                               ("pen 12 f4", line(.pen, size: 12, force: 4)), ("pen 12 f1 dense", line(.pen, size: 12, force: 1, spacing: 1)),
-                               ("pen 2 f1", line(.pen, size: 2, force: 1)), ("monoline 12", line(.monoline, size: 12, force: 1)),
-                               ("marker 14", line(.marker, size: 14, force: 1)), ("pencil 12", line(.pencil, size: 12, force: 1))] {
-            let image = PKDrawing(strokes: [stroke]).image(from: rect, scale: 1)
-            report.append("\(name): \(inkRows(image, column: 100))")
+        for ink in [PKInkingTool.InkType.pen, .marker, .monoline] {
+            for dt in [0.001, 0.05, 1.0] {
+                var row: [String] = []
+                for size in [CGFloat(1), 1.5, 2, 3, 4, 6, 8, 12, 20] {
+                    let image = PKDrawing(strokes: [line(ink, size: size, secondsPer10: dt)]).image(from: rect, scale: 4)
+                    let half = inkRows(image, column: 400)
+                    let faint = inkRows(image, column: 400, threshold: 24)
+                    row.append("\(size)=\(half.0)/\(faint.0)/\(half.1)")
+                }
+                report.append("\(ink.rawValue.split(separator: ".").last ?? "") dt\(dt): " + row.joined(separator: " "))
+            }
         }
-        let hand = DemoInk.strokes("Hello", at: CGPoint(x: 10, y: 10), size: 40, ink: PKInk(.pen, color: .black),
-                                   startingAt: Date(), secondsPerStroke: 0.1)
-        report.append("hand strokes \(hand.count) points \(hand.map(\.path.count)) pixels \(inkRows(PKDrawing(strokes: hand).image(from: rect, scale: 1), column: -1))")
-        let tool = PKInkingTool(.pen, color: .black, width: 12)
-        report.append("tool width 12 -> \(tool.width)")
-        XCTFail(report.joined(separator: "; "))
+        let tripled = PKDrawing(strokes: [line(.pen, size: 2, secondsPer10: 0.012, triple: true)]).image(from: rect, scale: 4)
+        report.append("pen 2 tripled: \(inkRows(tripled, column: 400))")
+        XCTFail("(rows over half alpha / rows visible / max alpha, at scale 4) " + report.joined(separator: " | "))
     }
 
     @MainActor func testResolutionFormulaAndBudget() async throws {
