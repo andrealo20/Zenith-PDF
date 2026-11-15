@@ -281,10 +281,16 @@ final class FormatTests: XCTestCase {
         let pdf = try XCTUnwrap(PDFDocument(url: url))
         let snapshot = NoteSnapshot(pdfData: try XCTUnwrap(pdf.dataRepresentation()), drawings: [PKDrawing(strokes: strokes)],
                                     geometries: geometries(pdf), pageCount: 1, noteID: "volume")
+        // One small save first, so the timing leaves out the one-time setup of PencilKit's encoder and PDFKit's writer.
+        _ = try NoteWriter.render(NoteSnapshot(pdfData: snapshot.pdfData, drawings: [PKDrawing(strokes: Array(strokes.prefix(20)))],
+                                               geometries: snapshot.geometries, pageCount: 1, noteID: "warm-up"))
         let start = Date()
         _ = try NoteWriter.write(snapshot, to: url, known: nil, keepPrevious: nil)
         let elapsed = Date().timeIntervalSince(start)
         XCTAssertLessThan(elapsed, 2.0, "1,000 strokes took \(elapsed) s")
+        let recordsStart = Date()
+        _ = StrokeCodec.records(for: PKDrawing(strokes: strokes), geometry: snapshot.geometries[0])
+        print("1,000 strokes: \(elapsed) s to save, \(Date().timeIntervalSince(recordsStart)) s of it building the records")
         let grown = try Data(contentsOf: url).count - before
         XCTAssertLessThan(grown, 3_000_000, "1,000 strokes added \(grown) bytes")
         XCTAssertEqual(PDFRaw.annotations(inFile: url, pageIndex: 0).filter { $0.subtype == "Ink" }.count, 1000)

@@ -67,7 +67,19 @@ struct InkCheck: Equatable, Sendable {
             text += "|\(path.count):"
             text += path.map { "\(centi($0.x - first.x)),\(centi($0.y - first.y))" }.joined(separator: ";")
         }
-        return SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+        return hex(SHA256.hash(data: Data(text.utf8)))
+    }
+
+    /// Lowercase hex without String(format:), which a save of a thousand strokes would call tens of thousands of times.
+    static func hex<Bytes: Sequence>(_ bytes: Bytes) -> String where Bytes.Element == UInt8 {
+        let digits = Array("0123456789abcdef".utf8)
+        var out: [UInt8] = []
+        out.reserveCapacity(64)
+        for byte in bytes {
+            out.append(digits[Int(byte >> 4)])
+            out.append(digits[Int(byte & 0x0F)])
+        }
+        return String(decoding: out, as: UTF8.self)
     }
 
     private static func format(_ value: CGFloat) -> String {
@@ -174,7 +186,9 @@ enum StrokeCodec {
         for range in ranges {
             var points: [CGPoint] = []
             var widths: [CGFloat] = []
+            var atControl: [Bool] = []
             for value in parameters(of: path, in: range) {
+                atControl.append(abs(value - value.rounded()) < 1e-6)
                 let point = path.interpolatedPoint(at: value)
                 points.append(point.location.applying(t))
                 widths.append(max(point.size.width * scale, 0.1))
@@ -185,15 +199,19 @@ enum StrokeCodec {
                 result.append((points: [first, CGPoint(x: first.x + 0.01, y: first.y)], widths: [firstWidth, firstWidth]))
                 continue
             }
-            let kept = keptWithWidths(points, widths, PolylineMath.simplifyIndices(points, tolerance: simplifyTolerance))
+            let kept = keptWithWidths(points, widths, atControl,
+                                      PolylineMath.simplifyIndices(points, tolerance: simplifyTolerance))
             result.append((points: kept.map { points[$0] }, widths: kept.map { widths[$0] }))
         }
         return result
     }
 
-    /// The simplified indices plus every sample whose width a straight line between its kept neighbours misses by
-    /// more than widthTolerance, so a reader interpolating widths along the polyline gets the stroke's own widths.
-    private static func keptWithWidths(_ points: [CGPoint], _ widths: [CGFloat], _ kept: [Int]) -> [Int] {
+    /// The simplified indices plus every sample at a control point whose width a straight line between its kept
+    /// neighbours misses by more than widthTolerance, so a reader interpolating widths along the polyline gets the
+    /// stroke's own widths. Only control points count: between them PencilKit eases the width, and for a rebuilt
+    /// stroke (tripled points) the widths at control points are exactly the desktop's linear ones.
+    private static func keptWithWidths(_ points: [CGPoint], _ widths: [CGFloat], _ atControl: [Bool],
+                                       _ kept: [Int]) -> [Int] {
         var result = Set(kept)
         var stack: [(Int, Int)] = zip(kept, kept.dropFirst()).map { ($0, $1) }
         while let pair = stack.popLast() {
@@ -204,7 +222,7 @@ enum StrokeCodec {
             let length = dx * dx + dy * dy
             var worst: CGFloat = 0
             var index = -1
-            for i in (first + 1)..<last {
+            for i in (first + 1)..<last where atControl[i] {
                 let p = points[i]
                 let t = length == 0 ? 0 : min(max(((p.x - a.x) * dx + (p.y - a.y) * dy) / length, 0), 1)
                 let error = abs(widths[i] - (widths[first] + (widths[last] - widths[first]) * t))
@@ -339,8 +357,7 @@ enum StrokeCodec {
         let text = String(format: "%.6f|%ld|%.3f|%.3f", path.creationDate.timeIntervalSinceReferenceDate,
                           path.count, Double(first.x), Double(first.y))
         let bytes = Array(SHA256.hash(data: Data(text.utf8)))
-        let hex = bytes.prefix(16).map { String(format: "%02x", $0) }.joined()
-        let chars = Array(hex)
+        let chars = Array(InkCheck.hex(bytes.prefix(16)))
         let groups = [0..<8, 8..<12, 12..<16, 16..<20, 20..<32].map { String(chars[$0]) }
         return "zenith-" + groups.joined(separator: "-")
     }
