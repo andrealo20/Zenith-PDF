@@ -61,6 +61,7 @@ struct DemoState {
         case .zoomed:
             openNote = lecture
             editor.zoom = 2.5
+            editor.focus = CGPoint(x: 50, y: 50)
         case .pages:
             openNote = lecture
             editor.showsPages = true
@@ -81,7 +82,6 @@ struct DemoState {
             sheet = .settings
         case .desktopNote:
             openNote = FileStore.exists(desktop) ? desktop : lecture
-            editor.zoom = 2
         }
         return DemoState(root: root, openNote: openNote, editor: editor, selection: selection,
                          searchText: searchText, sheet: sheet)

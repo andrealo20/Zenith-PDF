@@ -11,6 +11,7 @@ struct EditorLaunchState {
     var showsSearch = false
     var searchQuery: String? = nil
     var zoom: CGFloat? = nil
+    var focus: CGPoint? = nil                      // display space on the launch page, scrolled to the top-left
     var fingerDrawing: Bool? = nil                 // overrides the setting for this editor (UI tests)
     var replayAt: TimeInterval? = nil              // plays the first recording, seeks, pauses
 
@@ -160,6 +161,10 @@ struct EditorLaunchState {
     private func apply(_ launch: EditorLaunchState) async {
         if let zoom = launch.zoom { controller.setZoom(zoom) }
         if launch.page > 0 { controller.go(toPage: currentPage, animated: false) }
+        if let focus = launch.focus {
+            controller.pdfView.layoutIfNeeded()
+            controller.show(displayPoint: focus, onPage: currentPage)
+        }
         if let query = launch.searchQuery {
             showsSearch = true
             search.query = query

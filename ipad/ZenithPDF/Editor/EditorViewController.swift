@@ -162,6 +162,12 @@ final class PassThroughView: UIView {
         setCurrentPage(index)
     }
 
+    /// Scrolls so that a display-space point of a page sits at the top-left of the view.
+    func show(displayPoint point: CGPoint, onPage index: Int) {
+        guard let page = document.pdf.page(at: index) else { return }
+        pdfView.go(to: PDFDestination(page: page, at: document.geometry(at: index).toPDF(point)))
+    }
+
     func setZoom(_ scale: CGFloat) {
         guard scale > 0, scale.isFinite else { return }
         pdfView.autoScales = false
