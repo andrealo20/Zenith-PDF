@@ -24,9 +24,8 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 75
     env:
-      # 0 while packages are still landing: a step whose tool, test or demo scene is not written yet
-      # is skipped with a warning. Set to "1" once every package has landed.
-      ZENITH_STRICT: "0"
+      # Every package has landed: a missing tool, test or demo scene fails its step.
+      ZENITH_STRICT: "1"
       # A commit whose message holds "[only Class Class ...]" runs only those test classes and skips the
       # screenshots and the .ipa: a quick round while fixing. Without it every step runs.
       COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
