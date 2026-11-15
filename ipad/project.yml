@@ -37,7 +37,7 @@ targets:
         CFBundleDisplayName: Zenith PDF
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        CFBundleLocalizations: [en, cs, de, es, fr, it, ja, ko, nl, pl, pt, ru, tr, uk, zh-Hans]
+        CFBundleLocalizations: [en]
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true

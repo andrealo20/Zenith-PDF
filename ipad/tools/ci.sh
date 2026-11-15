@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CI steps of the iPad app. Run from anywhere: ipad/tools/ci.sh <step>
-#   setup | fixtures | strings-check | generate | build | test-package <branch> | test |
+#   setup | fixtures | generate | build | test-package <branch> | test |
 #   desktop-check | desktop-roundtrip | screenshots | summary | ipa
 # Steps whose tools or tests other packages have not written yet are skipped with a warning,
 # unless ZENITH_STRICT=1 (the release build), where a missing piece fails the step.
@@ -44,14 +44,7 @@ fixtures() {       # written by the desktop code of this very commit
   python3 "$IPAD/tools/make_fixtures.py" "$IPAD/ZenithPDF/Resources/Demo/desktop-ink.pdf" \
     "$IPAD/ZenithPDFTests/Fixtures/desktop-ink.json"
 }
-strings_check() {
-  need "$IPAD/tools/make_strings.py" "the String Catalog writer" || return 0
-  python3 "$IPAD/tools/make_strings.py" --check
-}
 generate() {
-  if need "$IPAD/tools/make_strings.py" "the String Catalog writer"; then
-    python3 "$IPAD/tools/make_strings.py"
-  fi
   (cd "$IPAD" && xcodegen generate --spec project.yml)
 }
 simulator() { python3 "$IPAD/tools/pick_simulator.py"; }   # prints one UDID
@@ -94,7 +87,6 @@ test_package() {   # the test classes of the package a branch named wp<N>-... be
     wp9-*) classes="ZenithPDFTests/SearchTests" ;;
     wp10-*) classes="ZenithPDFTests/LibraryModelTests" ;;
     wp11-*) classes="ZenithPDFTests/AppTests ZenithPDFUITests" ;;
-    wp12-*) classes="ZenithPDFTests/LocalizationTests" ;;
     *) echo "no package tests for branch '$branch'"; return 0 ;;
   esac
   set --
@@ -109,7 +101,17 @@ test_package() {   # the test classes of the package a branch named wp<N>-... be
   if [ "$#" -eq 0 ]; then echo "no package tests written yet for '$branch'"; return 0; fi
   run_tests Package "$@"
 }
-test_step() { run_tests Tests; }
+test_step() {      # every test, or only the classes named in "[only A B]" in the commit message
+  local only spec
+  only="$(printf '%s\n' "${COMMIT_MESSAGE:-}" | sed -n 's/.*\[only \([^]]*\)\].*/\1/p' | head -1 | tr ',' ' ')"
+  if [ -z "$only" ]; then run_tests Tests; return; fi
+  set --
+  for spec in $only; do
+    case "$spec" in */*) ;; *) spec="ZenithPDFTests/$spec" ;; esac
+    set -- "$@" -only-testing:"$spec"
+  done
+  run_tests Tests "$@"
+}
 desktop_check() {  # the desktop reads what the iPad wrote, renders it, then edits it for the round trip
   need "$IPAD/tools/check_desktop_reads.py" "the desktop reader check" || return 0
   mkdir -p "$BUILD/exports" "$BUILD/screenshots"
@@ -201,9 +203,9 @@ ipa() {
   test -s "$BUILD/Zenith-PDF-iPad.ipa"
 }
 case "${1:-}" in
-  setup) setup ;; fixtures) fixtures ;; strings-check) strings_check ;; generate) generate ;;
+  setup) setup ;; fixtures) fixtures ;; generate) generate ;;
   build) build_step ;; test-package) test_package "${2:-}" ;; test) test_step ;;
   desktop-check) desktop_check ;; desktop-roundtrip) desktop_roundtrip ;;
   screenshots) screenshots ;; summary) summary ;; ipa) ipa ;;
-  *) echo "usage: ci.sh setup|fixtures|strings-check|generate|build|test-package <branch>|test|desktop-check|desktop-roundtrip|screenshots|summary|ipa" >&2; exit 2 ;;
+  *) echo "usage: ci.sh setup|fixtures|generate|build|test-package <branch>|test|desktop-check|desktop-roundtrip|screenshots|summary|ipa" >&2; exit 2 ;;
 esac

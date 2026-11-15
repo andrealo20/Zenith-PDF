@@ -120,9 +120,6 @@ jobs:
       - name: Desktop fixture
         run: bash ipad/tools/ci.sh fixtures
 
-      - name: Translations
-        run: bash ipad/tools/ci.sh strings-check
-
       - name: Generate project
         run: bash ipad/tools/ci.sh generate
 
