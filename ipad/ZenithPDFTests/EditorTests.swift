@@ -212,6 +212,63 @@ final class EditorTests: XCTestCase {
         XCTAssertEqual(canvas.zoomScale, live.resolution, accuracy: 0.001)
     }
 
+    /// Rows of dark pixels in the overlay's column at display x, as the screen shows them.
+    @MainActor private func inkRows(in overlay: PageOverlayView, atDisplayX x: CGFloat) -> Int {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let image = UIGraphicsImageRenderer(bounds: overlay.bounds, format: format).image { context in
+            UIColor.white.setFill()
+            context.fill(overlay.bounds)
+            overlay.drawHierarchy(in: overlay.bounds, afterScreenUpdates: true)
+        }
+        guard let cgImage = image.cgImage, overlay.pageSize.width > 0 else { return -1 }
+        let width = cgImage.width, height = cgImage.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn: Bool = bytes.withUnsafeMutableBytes { buffer in
+            guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+                  let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width * 4, space: space,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return -1 }
+        let column = min(max(Int(x * CGFloat(width) / overlay.pageSize.width), 0), width - 1)
+        return (0..<height).filter { row in
+            let offset = (row * width + column) * 4
+            return Int(bytes[offset]) + Int(bytes[offset + 1]) + Int(bytes[offset + 2]) < 3 * 128
+        }.count
+    }
+
+    /// The canvas draws a stroke as wide as the stroke is, at any internal resolution: the editor shows the ink
+    /// the file holds, not a thinner copy of it.
+    @MainActor func testInkShownAtItsWidth() async throws {
+        let harness = try await EditorHarness.open(pages: 1)
+        defer { harness.close() }
+        let overlay = try harness.overlay(page: 0)
+        let line = TestSupport.stroke(stride(from: CGFloat(100), through: 400, by: 10).map { CGPoint(x: $0, y: 200) },
+                                      width: 12)
+        overlay.canvas.setDrawingSilently(PKDrawing(strokes: [line]))
+        let perPoint = overlay.bounds.width / overlay.pageSize.width
+        var measured: [String] = []
+        var widths: [CGFloat] = []
+        for resolution in [CGFloat(1), 2] {
+            overlay.resolution = resolution
+            overlay.layoutIfNeeded()
+            try await harness.spin(0.5)
+            let rows = inkRows(in: overlay, atDisplayX: 250)
+            let points = CGFloat(rows) / perPoint
+            widths.append(points)
+            measured.append("resolution \(resolution), zoom \(overlay.canvas.zoomScale): \(rows) px = \(points) pt")
+        }
+        let report = measured.joined(separator: "; ")
+        for width in widths {
+            XCTAssertGreaterThan(width, 12 * 0.6, report)
+            XCTAssertLessThan(width, 12 * 1.6, report)
+        }
+    }
+
     @MainActor func testResolutionFormulaAndBudget() async throws {
         let a4 = PaperSize.a4.points
         XCTAssertEqual(PageOverlayView.resolution(onScreenScale: 0.5, pageSize: a4, screenScale: 2), 1)
