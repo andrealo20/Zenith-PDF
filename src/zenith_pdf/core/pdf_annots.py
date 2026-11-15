@@ -6,6 +6,7 @@ rewritten, so replies, popups and other applications' private keys survive.
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from dataclasses import replace
@@ -565,10 +566,28 @@ def picture_parts(obj) -> tuple[pikepdf.Stream, tuple[float, ...]] | None:
     return image, multiply(multiply(drawn, form_matrix), placement)
 
 
+def _carried_picture(obj, geometry: PageGeometry, common: dict) -> ImageStamp | None:
+    """A picture the iPad app placed: its bytes ride in /ZenithImageData (base64 PNG or JPEG), since the
+    appearance PDFKit writes for it may hold more than picture_parts accepts. It fills the stamp's Rect, upright."""
+    value = obj.get("/ZenithImageData")
+    if not isinstance(value, String):
+        return None
+    try:
+        data = base64.b64decode(bytes(value), validate=True)
+    except (ValueError, TypeError):
+        return None
+    if not (images.is_jpeg(data) or data[:8] == b"\x89PNG\r\n\x1a\n"):
+        return None
+    rect = geometry.rect_to_display(_pdf_box(obj))
+    if rect[2] < 0.5 or rect[3] < 0.5:
+        return None
+    return ImageStamp(rect=rect, data=data, rotation=0, **common)
+
+
 def _read_picture(obj, geometry: PageGeometry, common: dict) -> ImageStamp | None:
     parts = picture_parts(obj)
     if parts is None:
-        return None
+        return _carried_picture(obj, geometry, common)
     image, (a, b, c, d, e, f) = parts
     corner = lambda u, v: geometry.to_display(a * u + c * v + e, b * u + d * v + f)
     # The picture's top-left, top-right and bottom-left corners on screen (its first row is at v = 1).
