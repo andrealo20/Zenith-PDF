@@ -188,8 +188,11 @@ enum StrokeCodec {
             var widths: [CGFloat] = []
             var atControl: [Bool] = []
             for value in parameters(of: path, in: range) {
-                atControl.append(abs(value - value.rounded()) < 1e-6)
                 let point = path.interpolatedPoint(at: value)
+                let whole = Int(value.rounded())
+                atControl.append(abs(value - value.rounded()) < 1e-6 && path.indices.contains(whole)
+                                 && hypot(point.location.x - path[whole].location.x,
+                                          point.location.y - path[whole].location.y) < 0.01)
                 points.append(point.location.applying(t))
                 widths.append(max(point.size.width * scale, 0.1))
             }
@@ -206,10 +209,9 @@ enum StrokeCodec {
         return result
     }
 
-    /// The simplified indices plus every sample at a control point whose width a straight line between its kept
-    /// neighbours misses by more than widthTolerance, so a reader interpolating widths along the polyline gets the
-    /// stroke's own widths. Only control points count: between them PencilKit eases the width, and for a rebuilt
-    /// stroke (tripled points) the widths at control points are exactly the desktop's linear ones.
+    /// The simplified indices plus every sample lying on its own control point whose width a straight line between
+    /// its kept neighbours misses by more than widthTolerance. Those are the points of a rebuilt stroke (each tripled),
+    /// so the desktop's own widths come back; elsewhere PencilKit eases widths between control points.
     private static func keptWithWidths(_ points: [CGPoint], _ widths: [CGFloat], _ atControl: [Bool],
                                        _ kept: [Int]) -> [Int] {
         var result = Set(kept)

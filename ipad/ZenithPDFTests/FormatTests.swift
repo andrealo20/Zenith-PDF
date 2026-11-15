@@ -290,7 +290,17 @@ final class FormatTests: XCTestCase {
         XCTAssertLessThan(elapsed, 2.0, "1,000 strokes took \(elapsed) s")
         let recordsStart = Date()
         _ = StrokeCodec.records(for: PKDrawing(strokes: strokes), geometry: snapshot.geometries[0])
-        print("1,000 strokes: \(elapsed) s to save, \(Date().timeIntervalSince(recordsStart)) s of it building the records")
+        let recordsTime = Date().timeIntervalSince(recordsStart)
+        let records = StrokeCodec.records(for: PKDrawing(strokes: strokes), geometry: snapshot.geometries[0])
+        let copy = try XCTUnwrap(PDFDocument(data: snapshot.pdfData))
+        let page = try XCTUnwrap(copy.page(at: 0))
+        let addStart = Date()
+        for record in records { page.addAnnotation(InkAnnotation(record: record)) }
+        let addTime = Date().timeIntervalSince(addStart)
+        let writeStart = Date()
+        _ = copy.dataRepresentation()
+        print("1,000 strokes: \(elapsed) s to save; records \(recordsTime) s, annotations \(addTime) s, " +
+              "PDFKit writing \(Date().timeIntervalSince(writeStart)) s")
         let grown = try Data(contentsOf: url).count - before
         XCTAssertLessThan(grown, 3_000_000, "1,000 strokes added \(grown) bytes")
         XCTAssertEqual(PDFRaw.annotations(inFile: url, pageIndex: 0).filter { $0.subtype == "Ink" }.count, 1000)
