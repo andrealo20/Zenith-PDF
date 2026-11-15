@@ -19,7 +19,7 @@ struct DocumentScanner: UIViewControllerRepresentable {
         Coordinator(onFinish: onFinish)
     }
 
-    @MainActor final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
+    @MainActor final class Coordinator: NSObject, @preconcurrency VNDocumentCameraViewControllerDelegate {
         private let onFinish: ([UIImage]) -> Void
 
         init(onFinish: @escaping ([UIImage]) -> Void) {

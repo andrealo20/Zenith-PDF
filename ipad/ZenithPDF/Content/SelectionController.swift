@@ -320,7 +320,7 @@ private final class SelectionOutlineView: UIView, UIEditMenuInteractionDelegate 
         dash.lineWidth = 1.5
         dash.lineDashPattern = [6, 4]
         layer.addSublayer(dash)
-        let pan = UIPanGestureRecognizer(target: self, action: #selector(move(_:)))
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(dragOutline(_:)))
         addGestureRecognizer(pan)
         movePan = pan
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
@@ -387,7 +387,7 @@ private final class SelectionOutlineView: UIView, UIEditMenuInteractionDelegate 
         presentMenu()
     }
 
-    @objc private func move(_ gesture: UIPanGestureRecognizer) {
+    @objc private func dragOutline(_ gesture: UIPanGestureRecognizer) {
         onMove?(gesture)
     }
 
