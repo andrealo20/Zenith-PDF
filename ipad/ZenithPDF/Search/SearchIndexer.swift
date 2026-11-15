@@ -57,13 +57,16 @@ import PencilKit
         for index in 0..<count {
             let drawing = drawings[index]
             let hash = SearchIndex.inkHash(of: drawing)
-            var words = known[hash] ?? []
-            if known[hash] == nil, !drawing.strokes.isEmpty,
+            // The page's own entry first: two pages can share a hash (two blank pages) but not their words.
+            let own = (old?.pages ?? []).indices.contains(index) ? old?.pages[index] : nil
+            let reused = own?.inkHash == hash ? own?.words : known[hash]
+            var words = reused ?? []
+            if reused == nil, !drawing.strokes.isEmpty,
                let image = HandwritingRecognizer.image(of: drawing, pageSize: sizes[index]) {
                 // A failure is stored like an empty result, so the page is tried again only when its ink changes.
                 words = (try? await HandwritingRecognizer.words(in: image, pageSize: sizes[index])) ?? []
             }
-            known[hash] = words
+            if known[hash] == nil { known[hash] = words }
             pages.append(PageText(typed: index < typed.count ? typed[index] : "", words: words, inkHash: hash))
         }
 

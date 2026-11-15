@@ -10,7 +10,7 @@ final class ImageAnnotation: PDFAnnotation {
         super.init(bounds: bounds, forType: .stamp, withProperties: nil)
         self.imageData = imageData
         decoded = UIImage(data: imageData)
-        if !setValue(imageData.base64EncodedString() as NSString, forAnnotationKey: ZenithKey.imageData) {
+        if !setValue(WrittenKeys.carried(imageData) as NSString, forAnnotationKey: ZenithKey.imageData) {
             log.error("PDFKit refused /ZenithImageData")
         }
     }
@@ -63,7 +63,7 @@ final class ImageAnnotation: PDFAnnotation {
 
     private func loadCarriedData() {
         guard let text = value(forAnnotationKey: ZenithKey.imageData) as? String,
-              let data = Data(base64Encoded: text) else { return }
+              let data = WrittenKeys.decodeCarried(text) else { return }
         imageData = data
         decoded = UIImage(data: data)
     }

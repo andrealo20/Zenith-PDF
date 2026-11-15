@@ -49,7 +49,7 @@ enum NoteReader {
             let sameStamps = liveStamps.count == rawStamps.count
             var replaced: [PDFAnnotation] = []
             for (position, stamp) in rawStamps.enumerated() {
-                guard let text = stamp.imageData, let data = Data(base64Encoded: text), !data.isEmpty,
+                guard let text = stamp.imageData, let data = WrittenKeys.decodeCarried(text), !data.isEmpty,
                       let live = match(stamp, position: position, among: liveStamps, sameCount: sameStamps,
                                        taken: replaced),
                       !(live is ImageAnnotation) else { continue }

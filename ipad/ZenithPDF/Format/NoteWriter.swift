@@ -101,14 +101,44 @@ enum WrittenKeys {
         (Data("(ZenithNoteID) (".utf8), Data("/ZenithNoteID  (".utf8)),
     ]
 
+    /// Base64 of a picture for /ZenithImageData. PDFKit writes a string value that starts with "/" as a name, and
+    /// every JPEG's base64 starts with "/9j/": such a value gets a "!" in front, which patch(_:) turns back into
+    /// a plain string of the same length.
+    static func carried(_ data: Data) -> String {
+        let text = data.base64EncodedString()
+        return text.hasPrefix("/") ? "!" + text : text
+    }
+
+    /// The picture bytes of a /ZenithImageData value, with or without the "!" of carried(_:).
+    static func decodeCarried(_ text: String) -> Data? {
+        Data(base64Encoded: text.hasPrefix("!") ? String(text.dropFirst()) : text)
+    }
+
     static func patch(_ data: inout Data) {
         patchNameArrays(&data)
+        patchCarriedPictures(&data)
         for (from, to) in replacements {
             var start = data.startIndex
             while let found = data.range(of: from, options: [], in: start..<data.endIndex) {
                 data.replaceSubrange(found, with: to)
                 start = found.upperBound
             }
+        }
+    }
+
+    /// "/ZenithImageData (!/9j/..." becomes "/ZenithImageData  (/9j/...".
+    private static func patchCarriedPictures(_ data: inout Data) {
+        let key = Data("/ZenithImageData".utf8)
+        let left = UInt8(ascii: "("), mark = UInt8(ascii: "!")
+        var start = data.startIndex
+        while let found = data.range(of: key, options: [], in: start..<data.endIndex) {
+            var index = found.upperBound
+            while index < data.endIndex, [0x20, 0x0A, 0x0D].contains(data[index]) { index += 1 }
+            if index + 1 < data.endIndex, data[index] == left, data[index + 1] == mark {
+                data[index] = 0x20
+                data[index + 1] = left
+            }
+            start = index
         }
     }
 

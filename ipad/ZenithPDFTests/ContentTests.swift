@@ -61,14 +61,6 @@ final class ContentTests: XCTestCase {
         TestSupport.stroke(stride(from: CGFloat(50), through: 300, by: 10).map { CGPoint(x: $0, y: y) }, width: width)
     }
 
-    private func diagnoseStamp(_ data: Data?, _ label: String) throws {
-        let url = TestSupport.temporaryFolder("diag").appendingPathComponent(UUID().uuidString + ".pdf")
-        try XCTUnwrap(data, label).write(to: url)
-        let stamps = PDFRaw.annotations(inFile: url, pageIndex: 0).filter { $0.subtype == "Stamp" }
-        XCTAssertEqual(stamps.count, 1, label)
-        XCTAssertNotNil(stamps.first?.imageData, label + " \(stamps.first?.imageData?.count ?? -1)")
-    }
-
     private func assertRect(_ rect: CGRect, _ expected: CGRect, accuracy: CGFloat = 0.01,
                             file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertEqual(rect.minX, expected.minX, accuracy: accuracy, "x", file: file, line: line)
@@ -378,26 +370,21 @@ final class ContentTests: XCTestCase {
         step(f.document) { ImageInsertion.insert(image(width: 300, height: 200), into: f.editor) }
         XCTAssertEqual(pictures(on: page).count, 1)
         XCTAssertTrue(f.document.isDirty)
-        XCTAssertFalse(pictures(on: page).first?.imageData.isEmpty ?? true, "diag: bytes in memory")
-        XCTAssertNotNil(pictures(on: page).first?.value(forAnnotationKey: ZenithKey.imageData), "diag: key after insert")
-        try diagnoseStamp(f.document.pdf.dataRepresentation(), "diag: live write after insert")
         f.document.undoManager.undo()
         XCTAssertTrue(pictures(on: page).isEmpty)
         f.document.undoManager.redo()
         XCTAssertEqual(pictures(on: page).count, 1)
-        XCTAssertNotNil(pictures(on: page).first?.value(forAnnotationKey: ZenithKey.imageData), "diag: key after redo")
-        try diagnoseStamp(f.document.pdf.dataRepresentation(), "diag: live write after redo")
-        if let live = f.document.pdf.dataRepresentation() {
-            let snapshot = NoteSnapshot(pdfData: live, drawings: f.document.pages.map(\.drawing),
-                                        geometries: f.document.pages.indices.map { f.document.geometry(at: $0) },
-                                        pageCount: f.document.pages.count, noteID: "diag")
-            try diagnoseStamp(try NoteWriter.render(snapshot), "diag: NoteWriter.render")
-        }
+        let bytes = try XCTUnwrap(pictures(on: page).first).imageData
 
         await f.document.save()
         let stamps = PDFRaw.annotations(inFile: f.document.url, pageIndex: 0).filter { $0.subtype == "Stamp" }
         XCTAssertEqual(stamps.count, 1)
-        XCTAssertNotNil(stamps.first?.imageData, "the picture's bytes ride along in /ZenithImageData")
+        // A JPEG's base64 starts with "/", which PDFKit would write as a name: the desktop reads only a string.
+        XCTAssertEqual(stamps.first?.imageData.flatMap { Data(base64Encoded: $0) }, bytes,
+                       "the picture's bytes ride along in /ZenithImageData")
+        let reopened = try await NoteDocument.open(f.document.url, libraryRoot: f.document.libraryRoot)
+        let back = (reopened.pdf.page(at: 0)?.annotations ?? []).compactMap { $0 as? ImageAnnotation }
+        XCTAssertEqual(back.map(\.imageData), [bytes])
     }
 
     // MARK: - Sharing
