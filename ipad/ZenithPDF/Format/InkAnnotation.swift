@@ -55,7 +55,9 @@ final class InkAnnotation: PDFAnnotation {
         context.setLineJoin(.round)
         context.setAlpha(record.opacity)
         if record.highlighter { context.setBlendMode(.multiply) }
-        context.setStrokeColor(record.color.uiColor.cgColor)
+        // DeviceRGB, as the desktop writes ink: no ICC profile resource in each of a thousand appearances.
+        let rgb = record.color
+        context.setStrokeColor(red: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1)
         for (points, widths) in zip(record.paths, record.widths) where points.count > 1 && widths.count == points.count {
             // Segments of one width go out as one path: far fewer operators in the file and a faster save.
             var runWidth: CGFloat = -1
