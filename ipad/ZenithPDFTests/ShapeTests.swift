@@ -207,9 +207,7 @@ final class ShapeTests: XCTestCase {
     @MainActor func testFilterReplacesOnlyLastStroke() {
         let shapes = SmartShapes()
         shapes.isEnabled = true
-        let first = TestSupport.stroke((0..<200).map { i in
-            CGPoint(x: 100 + 40 * sin(Double(i) / 3) + Double(i), y: 400 + 30 * cos(Double(i) / 5))
-        }, date: Date(timeIntervalSince1970: 1))
+        let first = TestSupport.stroke(Drawn.scribble(x: 100, y: 400), date: Date(timeIntervalSince1970: 1))
         let second = TestSupport.stroke(Drawn.sample(Drawn.points([(50, 600), (80, 630), (160, 540)])),
                                         date: Date(timeIntervalSince1970: 2))
         let drawnDate = Date(timeIntervalSince1970: 3)
@@ -242,9 +240,7 @@ final class ShapeTests: XCTestCase {
         XCTAssertEqual(box.maxY, 200, accuracy: 1.5)
 
         // A last stroke that is ink stays ink.
-        let scribble = TestSupport.stroke((0..<200).map { i in
-            CGPoint(x: 300 + 40 * sin(Double(i) / 3) + Double(i), y: 100 + 30 * cos(Double(i) / 5))
-        }, date: Date(timeIntervalSince1970: 4))
+        let scribble = TestSupport.stroke(Drawn.scribble(x: 300, y: 100), date: Date(timeIntervalSince1970: 4))
         XCTAssertNil(shapes.filter(pageID: UUID(), old: old, new: PKDrawing(strokes: [first, second, scribble]), zoom: 1))
     }
 
@@ -312,6 +308,18 @@ private struct DrawnCase {
 
 /// The desktop's tests/test_inking.py helpers and CASES, in the same order.
 private enum Drawn {
+    /// 200 points of a looping scribble starting near (x, y).
+    static func scribble(x: Double, y: Double) -> [CGPoint] {
+        var result: [CGPoint] = []
+        for i in 0..<200 {
+            let t = Double(i)
+            let px: Double = x + 40 * sin(t / 3) + t
+            let py: Double = y + 30 * cos(t / 5)
+            result.append(CGPoint(x: px, y: py))
+        }
+        return result
+    }
+
     static func points(_ pairs: [(Double, Double)]) -> [CGPoint] {
         pairs.map { CGPoint(x: $0.0, y: $0.1) }
     }
@@ -379,11 +387,7 @@ private enum Drawn {
                 Drawn.sample(Drawn.points([(200, 100), (300, 200), (200, 300), (100, 200), (198, 103)]))
             }, expected: "polygon", atLeast: 40),
             DrawnCase(name: "line", make: { Drawn.sample(Drawn.points([(50, 50), (400, 80)])) }, expected: "line", atLeast: 40),
-            DrawnCase(name: "scribble", make: {
-                (0..<200).map { i in
-                    CGPoint(x: 100 + 40 * sin(Double(i) / 3) + Double(i), y: 100 + 30 * cos(Double(i) / 5))
-                }
-            }, expected: "ink", atLeast: 40),
+            DrawnCase(name: "scribble", make: { Drawn.scribble(x: 100, y: 100) }, expected: "ink", atLeast: 40),
             DrawnCase(name: "slight curve", make: {
                 (0..<101).map { i in
                     let d = Double(i * 3 - 150)
