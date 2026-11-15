@@ -70,6 +70,7 @@ import UIKit
             guard let pdf = PDFDocument(data: data) else { throw ZenithError.invalidPDF }
             let attributes = pdf.documentAttributes ?? [:]
             let written = (attributes[ZenithKey.noteID] as? String) ?? (attributes[ZenithKey.noteID.rawValue] as? String)
+                ?? pdf.documentRef.flatMap { PDFRaw.documentInfo(of: $0)[ZenithKey.Raw.noteID] }
             var noteID = written.flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString
             let sidecar = SidecarLayout.folder(forNote: url, libraryRoot: libraryRoot)
             if written != nil && !FileStore.exists(sidecar) {

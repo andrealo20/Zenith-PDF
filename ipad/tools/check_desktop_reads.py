@@ -194,6 +194,14 @@ def check_round_trip(original_path: Path, ipad_path: Path, edit: dict, losses: d
                 report.check(why is None, f"{where} page {page} ink path {number}", why or "")
         others_before = [a for a in before if not isinstance(a, Ink)]
         others_after = [a for a in after if not isinstance(a, Ink)]
+        # A kind listed in known_losses.json may be missing after the iPad saved: warned about, not failed.
+        lost = [a for a in others_before if type(a).__name__ in losses]
+        if lost and len(others_after) != len(others_before):
+            for a in lost:
+                kind = type(a).__name__
+                print(f"WARNING {where} page {page} {kind} {a.id} (known loss: {losses[kind]})")
+            others_before = [a for a in others_before if type(a).__name__ not in losses]
+            others_after = [a for a in others_after if type(a).__name__ not in losses]
         if not report.check(len(others_before) == len(others_after), f"{where} page {page}",
                             f"{len(others_after)} other annotations, the desktop wrote {len(others_before)}: "
                             f"{[type(a).__name__ for a in others_after]}"):

@@ -15,6 +15,19 @@ enum NoteReader {
             let geometry = PageGeometry(page: page)
             let raw = PDFRaw.annotations(of: page)
             var strokes: [PKStroke] = []
+            // PDFKit drops /NM when it saves; each annotation keeps its id under the stand-in NoteWriter patches back.
+            let all = page.annotations
+            if all.count == raw.count {
+                for (live, entry) in zip(all, raw) where entry.subtype != "Ink" {
+                    if let identifier = entry.identifier {
+                        _ = live.setValue(identifier as NSString, forAnnotationKey: WrittenKeys.identifier)
+                    }
+                    // PDFKit keeps /LE on a Line but drops it from a PolyLine.
+                    if entry.subtype == "PolyLine", let endings = entry.lineEndings, !endings.isEmpty {
+                        _ = live.setValue(endings.map { $0 as NSString } as NSArray, forAnnotationKey: WrittenKeys.lineEndings)
+                    }
+                }
+            }
 
             let rawInks = raw.filter { $0.subtype == "Ink" }
             let liveInks = page.annotations.filter { $0.type == "Ink" }
@@ -44,6 +57,7 @@ enum NoteReader {
                 let picture = ImageAnnotation(bounds: live.bounds, imageData: data)
                 if let identifier = stamp.identifier {
                     _ = picture.setValue(identifier as NSString, forAnnotationKey: ZenithKey.identifier)
+                    _ = picture.setValue(identifier as NSString, forAnnotationKey: WrittenKeys.identifier)
                 }
                 if let popup = live.popup { page.removeAnnotation(popup) }
                 page.removeAnnotation(live)

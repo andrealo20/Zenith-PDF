@@ -51,7 +51,8 @@ enum NoteWriter {
                 page.addAnnotation(InkAnnotation(record: record))
             }
         }
-        guard let data = document.dataRepresentation() else { throw failed("PDFKit wrote nothing.") }
+        guard var data = document.dataRepresentation() else { throw failed("PDFKit wrote nothing.") }
+        WrittenKeys.patch(&data)
         guard let check = PDFDocument(data: data), check.pageCount == snapshot.pageCount else {
             throw failed("The written file does not reopen with every page.")
         }
@@ -83,5 +84,49 @@ enum NoteWriter {
         }
         let modified = try FileStore.replace(url, with: data, keepPrevious: keepPrevious)
         return WriteResult(saved: SavedFile(url: url, modified: modified, hash: hash), conflictWith: nil)
+    }
+}
+
+/// Keys PDFKit will not write as given: it refuses /CA, silently drops /NM, and writes a custom document information
+/// key as a string instead of a name. They go in under stand-in names of the same length, and the bytes PDFKit wrote
+/// are patched in place, so every offset in the cross-reference table stays right.
+enum WrittenKeys {
+    static let identifier = PDFAnnotationKey(rawValue: "/ZenithPadNM")
+    static let opacity = PDFAnnotationKey(rawValue: "/ZenithPadCA")
+    static let lineEndings = PDFAnnotationKey(rawValue: "/ZenithPadLE")   // an array of strings, patched to names
+
+    private static let replacements: [(Data, Data)] = [
+        (Data("/ZenithPadNM".utf8), Data("/NM         ".utf8)),
+        (Data("/ZenithPadCA".utf8), Data("/CA         ".utf8)),
+        (Data("(ZenithNoteID) (".utf8), Data("/ZenithNoteID  (".utf8)),
+    ]
+
+    static func patch(_ data: inout Data) {
+        patchNameArrays(&data)
+        for (from, to) in replacements {
+            var start = data.startIndex
+            while let found = data.range(of: from, options: [], in: start..<data.endIndex) {
+                data.replaceSubrange(found, with: to)
+                start = found.upperBound
+            }
+        }
+    }
+
+    /// "/ZenithPadLE [ (None) (OpenArrow) ]" becomes "/LE          [ /None  /OpenArrow  ]".
+    private static func patchNameArrays(_ data: inout Data) {
+        let key = Data("/ZenithPadLE".utf8)
+        let open = UInt8(ascii: "["), close = UInt8(ascii: "]")
+        let left = UInt8(ascii: "("), right = UInt8(ascii: ")")
+        var start = data.startIndex
+        while let found = data.range(of: key, options: [], in: start..<data.endIndex) {
+            data.replaceSubrange(found, with: Data("/LE         ".utf8))
+            start = found.upperBound
+            guard let first = data[start...].firstIndex(of: open), data[start..<first].allSatisfy({ $0 == 0x20 || $0 == 0x0A || $0 == 0x0D }),
+                  let last = data[first...].firstIndex(of: close) else { continue }
+            for index in first..<last {
+                if data[index] == left { data[index] = UInt8(ascii: "/") } else if data[index] == right { data[index] = 0x20 }
+            }
+            start = last
+        }
     }
 }

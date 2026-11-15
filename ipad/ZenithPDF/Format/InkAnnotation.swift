@@ -25,13 +25,13 @@ final class InkAnnotation: PDFAnnotation {
         let border = PDFBorder()
         border.lineWidth = record.maxWidth
         self.border = border
-        write(NSNumber(value: Double(record.opacity)), ZenithKey.opacity)
+        write(NSNumber(value: Double(record.opacity)), WrittenKeys.opacity)
         let widths = record.widths.map { $0.map { NSNumber(value: Double($0)) } } as NSArray
         write(widths, ZenithKey.widths)
         if record.highlighter { write(NSNumber(value: true), ZenithKey.highlighter) }
         write(record.pencilKit as NSString, ZenithKey.pencilKit)
         write(record.check.string as NSString, ZenithKey.inkCheck)
-        write(record.identifier as NSString, ZenithKey.identifier)
+        write(record.identifier as NSString, WrittenKeys.identifier)
     }
 
     /// PDFKit's designated initialiser. PDFKit calls it when it copies an annotation; without this override
@@ -57,12 +57,19 @@ final class InkAnnotation: PDFAnnotation {
         if record.highlighter { context.setBlendMode(.multiply) }
         context.setStrokeColor(record.color.uiColor.cgColor)
         for (points, widths) in zip(record.paths, record.widths) where points.count > 1 && widths.count == points.count {
+            // Segments of one width go out as one path: far fewer operators in the file and a faster save.
+            var runWidth: CGFloat = -1
             for i in 1..<points.count {
-                context.setLineWidth((widths[i - 1] + widths[i]) / 2)
-                context.move(to: points[i - 1])
+                let width = (widths[i - 1] + widths[i]) / 2
+                if abs(width - runWidth) > 0.005 {
+                    if runWidth >= 0 { context.strokePath() }
+                    runWidth = width
+                    context.setLineWidth(width)
+                    context.move(to: points[i - 1])
+                }
                 context.addLine(to: points[i])
-                context.strokePath()
             }
+            context.strokePath()
         }
         context.restoreGState()
     }

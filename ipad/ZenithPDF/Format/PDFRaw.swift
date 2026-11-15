@@ -24,6 +24,7 @@ struct RawAnnotation {
     let rectDifferences: [CGFloat]?   // /RD
     let appearanceData: Data?         // decoded /AP /N stream content, nil when absent
     let appearanceImageCount: Int     // image XObjects in /AP /N /Resources /XObject
+    var lineEndings: [String]? = nil  // /LE names, nil when absent
 
     /// /F bit 2.
     var isHidden: Bool { flags & 2 != 0 }
@@ -55,7 +56,13 @@ enum PDFRaw {
 
     /// The trailer's /Info strings, for tests.
     static func documentInfo(inFile url: URL) -> [String: String] {
-        guard let document = CGPDFDocument(url as CFURL), let info = document.info else { return [:] }
+        guard let document = CGPDFDocument(url as CFURL) else { return [:] }
+        return documentInfo(of: document)
+    }
+
+    /// The /Info strings of a parsed document (PDFDocument.documentRef).
+    static func documentInfo(of document: CGPDFDocument) -> [String: String] {
+        guard let info = document.info else { return [:] }
         var result: [String: String] = [:]
         CGPDFDictionaryApplyBlock(info, { key, object, _ in
             var string: CGPDFStringRef? = nil
@@ -141,7 +148,8 @@ enum PDFRaw {
             defaultStyle: string(d, ZenithKey.Raw.defaultStyle),
             rectDifferences: numbers(array(d, ZenithKey.Raw.rectDifferences)),
             appearanceData: appearanceData,
-            appearanceImageCount: imageCount
+            appearanceImageCount: imageCount,
+            lineEndings: names(array(d, "LE"))
         )
     }
 
@@ -186,6 +194,18 @@ enum PDFRaw {
             var value: CGPDFReal = 0
             guard CGPDFArrayGetNumber(array, index, &value) else { return nil }
             result.append(CGFloat(value))
+        }
+        return result
+    }
+
+    /// Every element as a name, or nil when one is not a name.
+    private static func names(_ array: CGPDFArrayRef?) -> [String]? {
+        guard let array else { return nil }
+        var result: [String] = []
+        for index in 0..<CGPDFArrayGetCount(array) {
+            var value: UnsafePointer<CChar>? = nil
+            guard CGPDFArrayGetName(array, index, &value), let value else { return nil }
+            result.append(String(cString: value))
         }
         return result
     }

@@ -119,13 +119,22 @@ enum StrokeCodec {
     static let simplifyTolerance: CGFloat = 0.15   // Ramer-Douglas-Peucker tolerance, display space
     static let originTolerance: CGFloat = 0.05     // PDF space: a first point within this has not moved
     static let styleTolerance: CGFloat = 0.011     // colour channels, opacity and width within this are unchanged
+    static let widthTolerance: CGFloat = 0.02      // widths a kept segment may miss by when interpolated
 
     /// One record per stroke, in drawing order (section 4.2). A stroke with no visible piece writes nothing.
     static func records(for drawing: PKDrawing, geometry: PageGeometry) -> [InkRecord] {
+        let strokes = drawing.strokes
+        // Each record is independent and costs a PencilKit encode, so a page of many strokes is built in parallel.
+        var built = [InkRecord?](repeating: nil, count: strokes.count)
+        built.withUnsafeMutableBufferPointer { buffer in
+            let slots = buffer
+            DispatchQueue.concurrentPerform(iterations: strokes.count) { index in
+                slots[index] = record(for: strokes[index], geometry: geometry)
+            }
+        }
         var used: [String: Int] = [:]
         var result: [InkRecord] = []
-        for stroke in drawing.strokes {
-            guard var written = record(for: stroke, geometry: geometry) else { continue }
+        for case var written? in built {
             // Two identical strokes (a pasted copy in place) would share an /NM, which must be unique.
             let seen = used[written.identifier, default: 0]
             used[written.identifier] = seen + 1
@@ -176,10 +185,41 @@ enum StrokeCodec {
                 result.append((points: [first, CGPoint(x: first.x + 0.01, y: first.y)], widths: [firstWidth, firstWidth]))
                 continue
             }
-            let kept = PolylineMath.simplifyIndices(points, tolerance: simplifyTolerance)
+            let kept = keptWithWidths(points, widths, PolylineMath.simplifyIndices(points, tolerance: simplifyTolerance))
             result.append((points: kept.map { points[$0] }, widths: kept.map { widths[$0] }))
         }
         return result
+    }
+
+    /// The simplified indices plus every sample whose width a straight line between its kept neighbours misses by
+    /// more than widthTolerance, so a reader interpolating widths along the polyline gets the stroke's own widths.
+    private static func keptWithWidths(_ points: [CGPoint], _ widths: [CGFloat], _ kept: [Int]) -> [Int] {
+        var result = Set(kept)
+        var stack: [(Int, Int)] = zip(kept, kept.dropFirst()).map { ($0, $1) }
+        while let pair = stack.popLast() {
+            let (first, last) = pair
+            guard last - first > 1 else { continue }
+            let a = points[first], b = points[last]
+            let dx = b.x - a.x, dy = b.y - a.y
+            let length = dx * dx + dy * dy
+            var worst: CGFloat = 0
+            var index = -1
+            for i in (first + 1)..<last {
+                let p = points[i]
+                let t = length == 0 ? 0 : min(max(((p.x - a.x) * dx + (p.y - a.y) * dy) / length, 0), 1)
+                let error = abs(widths[i] - (widths[first] + (widths[last] - widths[first]) * t))
+                if error > worst {
+                    worst = error
+                    index = i
+                }
+            }
+            if index > 0 && worst > widthTolerance {
+                result.insert(index)
+                stack.append((first, index))
+                stack.append((index, last))
+            }
+        }
+        return result.sorted()
     }
 
     /// Parametric values every sampleSpacing along the curve, plus every whole value (control point) inside the
