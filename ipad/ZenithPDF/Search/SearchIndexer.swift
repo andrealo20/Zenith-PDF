@@ -56,7 +56,7 @@ import PencilKit
         var pages: [PageText] = []
         for index in 0..<count {
             let drawing = drawings[index]
-            let hash = SHA256.hash(data: drawing.dataRepresentation()).map { String(format: "%02x", $0) }.joined()
+            let hash = SearchIndex.inkHash(of: drawing)
             var words = known[hash] ?? []
             if known[hash] == nil, !drawing.strokes.isEmpty,
                let image = HandwritingRecognizer.image(of: drawing, pageSize: sizes[index]) {

@@ -1,12 +1,14 @@
 import CoreGraphics
+import CryptoKit
 import Foundation
+import PencilKit
 
 struct InkWord: Codable, Equatable, Sendable { var text: String; var rect: CGRect }    // display space
 
 struct PageText: Codable, Equatable, Sendable {
     var typed: String                 // PDFPage.string
     var words: [InkWord]              // recognised handwriting
-    var inkHash: String               // SHA-256 of the page's drawing data, to skip unchanged pages
+    var inkHash: String               // SearchIndex.inkHash of the page's drawing, to skip unchanged pages
 }
 
 /// Equal and hashed by id only, so nothing depends on CGRect being Hashable (section 9).
@@ -33,6 +35,33 @@ struct SearchIndex: Codable, Sendable {
 
     init(pages: [PageText]) {
         self.pages = pages
+    }
+
+    /// SHA-256 of what the strokes draw. PKDrawing.dataRepresentation() cannot serve: it holds each stroke's random
+    /// seed and identity, which are new every time the same file is decoded.
+    static func inkHash(of drawing: PKDrawing) -> String {
+        var data = Data()
+        func put(_ value: CGFloat) {
+            withUnsafeBytes(of: Double(value).bitPattern.littleEndian) { data.append(contentsOf: $0) }
+        }
+        for stroke in drawing.strokes {
+            data.append(contentsOf: Array(stroke.ink.inkType.rawValue.utf8))
+            for component in stroke.ink.color.cgColor.components ?? [] { put(component) }
+            let t = stroke.transform
+            for value in [t.a, t.b, t.c, t.d, t.tx, t.ty] { put(value) }
+            if let mask = stroke.mask?.bounds {
+                for value in [mask.minX, mask.minY, mask.width, mask.height] { put(value) }
+            }
+            put(CGFloat(stroke.path.creationDate.timeIntervalSinceReferenceDate))
+            for point in stroke.path {
+                for value in [point.location.x, point.location.y, point.size.width, point.size.height, point.opacity,
+                              point.force, point.azimuth, point.altitude, CGFloat(point.timeOffset)] {
+                    put(value)
+                }
+            }
+            data.append(0xFF)
+        }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     /// nil when the sidecar is missing, unreadable or written by a newer version.

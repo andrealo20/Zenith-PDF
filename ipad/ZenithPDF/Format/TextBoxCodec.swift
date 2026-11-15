@@ -52,6 +52,11 @@ enum TextBoxCodec {
             style.size = size
         }
         if let color = annotation.fontColor { style.color = RGB(color) }
+        // PDFKit hands fontColor back in its own colour space, a little off the sRGB that was set; /DS has it exactly.
+        if let css = annotation.value(forAnnotationKey: ZenithKey.defaultStyle) as? String,
+           let color = cssColor(css) {
+            style.color = color
+        }
         let alignment = annotation.alignment.rawValue
         style.alignment = (0...2).contains(alignment) ? alignment : 0
         return style
@@ -119,6 +124,15 @@ enum TextBoxCodec {
               let match = regex.firstMatch(in: css, range: NSRange(css.startIndex..., in: css)),
               let range = Range(match.range(at: 1), in: css), let value = Double(css[range]) else { return nil }
         return CGFloat(value)
+    }
+
+    /// The "color:#rrggbb" of a style string.
+    private static func cssColor(_ css: String) -> RGB? {
+        guard let regex = try? NSRegularExpression(pattern: "color\\s*:\\s*#([0-9a-f]{6})", options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: css, range: NSRange(css.startIndex..., in: css)),
+              let range = Range(match.range(at: 1), in: css), let value = UInt32(css[range], radix: 16) else { return nil }
+        return RGB(r: CGFloat((value >> 16) & 0xFF) / 255, g: CGFloat((value >> 8) & 0xFF) / 255,
+                   b: CGFloat(value & 0xFF) / 255)
     }
 
     /// The value of "font:" or "font-family:" in a style string.

@@ -61,6 +61,14 @@ final class ContentTests: XCTestCase {
         TestSupport.stroke(stride(from: CGFloat(50), through: 300, by: 10).map { CGPoint(x: $0, y: y) }, width: width)
     }
 
+    private func diagnoseStamp(_ data: Data?, _ label: String) throws {
+        let url = TestSupport.temporaryFolder("diag").appendingPathComponent(UUID().uuidString + ".pdf")
+        try XCTUnwrap(data, label).write(to: url)
+        let stamps = PDFRaw.annotations(inFile: url, pageIndex: 0).filter { $0.subtype == "Stamp" }
+        XCTAssertEqual(stamps.count, 1, label)
+        XCTAssertNotNil(stamps.first?.imageData, label + " \(stamps.first?.imageData?.count ?? -1)")
+    }
+
     private func assertRect(_ rect: CGRect, _ expected: CGRect, accuracy: CGFloat = 0.01,
                             file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertEqual(rect.minX, expected.minX, accuracy: accuracy, "x", file: file, line: line)
@@ -159,18 +167,21 @@ final class ContentTests: XCTestCase {
         page.addAnnotation(box)
         XCTAssertTrue(f.textBoxes.editExisting(page: page, pdfPoint: CGPoint(x: 110, y: 110)))
         XCTAssertTrue(f.textBoxes.editing === box)
-        step(f.document) { f.textBoxes.endEditing() }
+        // No undo group here: an explicit group stays on the stack even when it is empty.
+        f.textBoxes.endEditing()
         XCTAssertEqual(textBoxes(on: page).count, 1)
         XCTAssertFalse(f.document.undoManager.canUndo, "nothing changed, nothing to undo")
+        XCTAssertFalse(f.document.isDirty)
     }
 
     @MainActor func testEmptyNewBoxRemoved() async throws {
         let f = try await fixture()
         let page = f.page
-        step(f.document) { _ = f.textBoxes.handleTap(page: page, pdfPoint: CGPoint(x: 200, y: 400)) }
+        // No undo groups here: an explicit group stays on the stack even when it is empty.
+        _ = f.textBoxes.handleTap(page: page, pdfPoint: CGPoint(x: 200, y: 400))
         XCTAssertNotNil(f.textBoxes.editing)
         f.textBoxes.textView?.text = "  \n "
-        step(f.document) { f.textBoxes.endEditing() }
+        f.textBoxes.endEditing()
         XCTAssertNil(f.textBoxes.editing)
         XCTAssertTrue(textBoxes(on: page).isEmpty)
         XCTAssertFalse(f.document.undoManager.canUndo)
@@ -344,7 +355,8 @@ final class ContentTests: XCTestCase {
         let page = f.page
         let box = PageGeometry(page: page).box
 
-        ImageInsertion.insert(image(width: 2000, height: 1000), into: f.editor)
+        // Inside an undo group: with groupsByEvent off, registering outside one raises.
+        step(f.document) { ImageInsertion.insert(image(width: 2000, height: 1000), into: f.editor) }
         let large = try XCTUnwrap(pictures(on: page).first)
         XCTAssertEqual(large.bounds.width, box.width * 0.6, accuracy: 0.01, "at most 60% of the page width")
         XCTAssertEqual(large.bounds.height, box.width * 0.3, accuracy: 0.01, "aspect kept")
@@ -353,7 +365,7 @@ final class ContentTests: XCTestCase {
         XCTAssertFalse(large.imageData.isEmpty)
         XCTAssertNotNil(large.image)
 
-        ImageInsertion.insert(image(width: 40, height: 30), into: f.editor)
+        step(f.document) { ImageInsertion.insert(image(width: 40, height: 30), into: f.editor) }
         let small = try XCTUnwrap(pictures(on: page).first { $0 !== large })
         XCTAssertEqual(small.bounds.width, 40, accuracy: 0.01, "a small picture is not blown up")
         XCTAssertEqual(small.bounds.height, 30, accuracy: 0.01)
@@ -366,10 +378,21 @@ final class ContentTests: XCTestCase {
         step(f.document) { ImageInsertion.insert(image(width: 300, height: 200), into: f.editor) }
         XCTAssertEqual(pictures(on: page).count, 1)
         XCTAssertTrue(f.document.isDirty)
+        XCTAssertFalse(pictures(on: page).first?.imageData.isEmpty ?? true, "diag: bytes in memory")
+        XCTAssertNotNil(pictures(on: page).first?.value(forAnnotationKey: ZenithKey.imageData), "diag: key after insert")
+        try diagnoseStamp(f.document.pdf.dataRepresentation(), "diag: live write after insert")
         f.document.undoManager.undo()
         XCTAssertTrue(pictures(on: page).isEmpty)
         f.document.undoManager.redo()
         XCTAssertEqual(pictures(on: page).count, 1)
+        XCTAssertNotNil(pictures(on: page).first?.value(forAnnotationKey: ZenithKey.imageData), "diag: key after redo")
+        try diagnoseStamp(f.document.pdf.dataRepresentation(), "diag: live write after redo")
+        if let live = f.document.pdf.dataRepresentation() {
+            let snapshot = NoteSnapshot(pdfData: live, drawings: f.document.pages.map(\.drawing),
+                                        geometries: f.document.pages.indices.map { f.document.geometry(at: $0) },
+                                        pageCount: f.document.pages.count, noteID: "diag")
+            try diagnoseStamp(try NoteWriter.render(snapshot), "diag: NoteWriter.render")
+        }
 
         await f.document.save()
         let stamps = PDFRaw.annotations(inFile: f.document.url, pageIndex: 0).filter { $0.subtype == "Stamp" }

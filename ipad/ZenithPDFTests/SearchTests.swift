@@ -174,7 +174,7 @@ final class SearchTests: XCTestCase {
 
         var index = try XCTUnwrap(SearchIndex.load(note: document.url, libraryRoot: folder))
         XCTAssertEqual(index.pages.count, 2)
-        XCTAssertEqual(index.pages.first?.inkHash, sha256(document.drawing(forPageID: document.pageID(at: 0)).dataRepresentation()))
+        XCTAssertEqual(index.pages.first?.inkHash, SearchIndex.inkHash(of: document.drawing(forPageID: document.pageID(at: 0))))
         // Words no recogniser would produce: they survive only if the page is skipped.
         let marker = [InkWord(text: "untouched", rect: CGRect(x: 1, y: 2, width: 3, height: 4))]
         index.pages[0].words = marker
@@ -242,7 +242,7 @@ final class SearchTests: XCTestCase {
         // The ink hashes match the note's drawings, so the indexer keeps these words.
         let pages = (0..<2).map { index in
             PageText(typed: "", words: index == 1 ? [InkWord(text: "Zenith", rect: zenith), InkWord(text: "notes", rect: notes)] : [],
-                     inkHash: sha256(document.drawing(forPageID: document.pageID(at: index)).dataRepresentation()))
+                     inkHash: SearchIndex.inkHash(of: document.drawing(forPageID: document.pageID(at: index))))
         }
         try SearchIndex(pages: pages).save(note: document.url, libraryRoot: folder)
         let model = NoteSearchModel(document: document, editor: editor)

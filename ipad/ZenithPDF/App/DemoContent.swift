@@ -412,7 +412,7 @@ struct DemoState {
             let drawing = read.indices.contains(index) ? read[index].drawing : PKDrawing()
             return PageText(typed: pdf.page(at: index)?.string ?? "",
                             words: pages.indices.contains(index) ? pages[index].words : [],
-                            inkHash: FileStore.sha256(drawing.dataRepresentation()))
+                            inkHash: SearchIndex.inkHash(of: drawing))
         }
         try SearchIndex(pages: texts).save(note: note, libraryRoot: root)
     }

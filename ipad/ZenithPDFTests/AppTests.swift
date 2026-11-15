@@ -41,7 +41,7 @@ final class AppTests: XCTestCase {
                 let index = try XCTUnwrap(SearchIndex.load(note: note.url, libraryRoot: state.root), note.title)
                 XCTAssertEqual(index.pages.count, document.pages.count)
                 for (page, text) in zip(document.pages, index.pages) {
-                    XCTAssertEqual(text.inkHash, FileStore.sha256(page.drawing.dataRepresentation()), note.title)
+                    XCTAssertEqual(text.inkHash, SearchIndex.inkHash(of: page.drawing), note.title)
                 }
             }
             await document.close()
