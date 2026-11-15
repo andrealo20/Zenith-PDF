@@ -212,7 +212,7 @@ final class EditorTests: XCTestCase {
         XCTAssertEqual(canvas.zoomScale, live.resolution, accuracy: 0.001)
     }
 
-    /// Rows of dark pixels in the overlay's column at display x, as the screen shows them.
+    /// Rows of dark pixels in the overlay's column at display x, as the overlay draws them on screen.
     @MainActor private func inkRows(in overlay: PageOverlayView, atDisplayX x: CGFloat) -> Int {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
