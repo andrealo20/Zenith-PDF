@@ -145,6 +145,14 @@ PDFs side by side, with what was added, removed or changed marked on both and li
   </tr>
 </table>
 
+### New in 0.6.10
+
+- Folio, a fifth style in Settings > View & Layout > Style: white cards over the pages, slate tool icons with a
+  pale body, and the tool in use drawn in its own ink, with a short line of it underneath. Large titles take a
+  serif where one is installed.
+
+<img src="docs/images/folio.png" alt="The Folio style in the light theme: a white toolbar over the page with slate icons, and the pen that is on drawn in purple with a purple line under it" width="100%">
+
 ### New in 0.6.8
 
 - Liquid glass, on Windows: a fourth choice in Settings > View & Layout > Glass. Each floating bar is one lens

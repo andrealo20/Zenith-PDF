@@ -42,10 +42,10 @@ command or setting.
 Everything runs on your computer. Zenith PDF has no account, no ads, no paid version and no tracking, and your
 files never leave your PC. It is free and open source software.
 
-**What's new in this version** (0.6.9)
+**What's new in this version** (0.6.10)
 
-Zenith PDF has a new logo: a page that says PDF, with the pen nib of the old logo at its corner. You see it on
-the taskbar, in the Start menu and at the top of the home page.
+A new style, Folio, in Settings > View & Layout > Style: white cards over the pages, slate tool icons with a pale
+body, and the tool in use drawn in its own ink.
 
 **Product features**
 
@@ -92,10 +92,10 @@ strumento, il comando o l'impostazione.
 Tutto funziona sul tuo computer. Zenith PDF non ha account, pubblicità, versione a pagamento né
 tracciamento, e i tuoi file non lasciano mai il PC. È software libero e open source.
 
-**Novità di questa versione** (0.6.9)
+**Novità di questa versione** (0.6.10)
 
-Zenith PDF ha un nuovo logo: una pagina con la scritta PDF, con il pennino del vecchio logo nell'angolo. Lo vedi
-sulla barra delle applicazioni, nel menu Start e in cima alla pagina Home.
+Un nuovo stile, Folio, in Impostazioni > Vista e layout > Stile: schede bianche sopra le pagine, icone degli
+strumenti in grigio ardesia con il corpo chiaro e lo strumento in uso nel colore del suo inchiostro.
 
 **Caratteristiche**
 

@@ -30,6 +30,12 @@ class Release:
 
 
 RELEASES = (
+    Release("0.6.10", (
+        Highlight("Folio, a new style", "Settings > View & Layout > Style has a fifth choice, Folio: white cards over "
+                  "the pages, slate tool icons with a pale body, and the tool in use drawn in its own ink, with a short "
+                  "line of it underneath. Large titles take a serif where one is installed.", "palette",
+                  "setting:view"),
+    )),
     Release("0.6.9", (
         Highlight("A new logo", "The logo is now a page that says PDF, with the pen nib of the old one at its "
                   "corner. You find it as the app's icon and at the top of the home page.", "file-pdf",
