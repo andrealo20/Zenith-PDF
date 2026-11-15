@@ -155,13 +155,15 @@ class ToolButton(QToolButton):
 
     def _inks(self, t, bar: FloatingBar | None) -> tuple[str, str]:
         """The icon's colour while the tool is off and while it is on. A tool with an ink shows it, made readable on
-        the bar (on glass, on what shows through it); the others take the colour of what they do, in the bar's own
-        tone, and the accent once they are on."""
+        the bar (on glass, on what shows through it), at rest too unless the style keeps it for the tool that is on
+        (Look.idle_ink); the others take the colour of what they do, in the bar's own tone, and the accent once they
+        are on."""
+        rest = hue_colour(self.spec.icon, t.name) or (t.text_muted if t.look.icon_tone == "muted" else t.text)
         if self.tint:
             surface = bar.surface().name() if bar is not None else t.raised
             ink = readable(QColor(self.tint).getRgbF()[:3], surface, t.text)
-            return ink, ink
-        return hue_colour(self.spec.icon, t.name) or t.text, self._on_colour(t)
+            return (ink if t.look.idle_ink else rest), ink
+        return rest, self._on_colour(t)
 
     @staticmethod
     def _on_colour(t) -> str:
@@ -189,17 +191,20 @@ class ToolButton(QToolButton):
                 # Round like the bar's ends, the same 4 px in from them; on a bar with corners, its corners 4 px in.
                 corner = min(bar_radius(t.look), wide / 2, self.height() / 2)
                 painter.drawPath(outline(QRectF(0, 0, wide, self.height()), corner, t.look))
+        rest, on = self._inks(t, bar)
         if lit > 0.0 and t.look.on_mark:  # the style's own sign of the tool that is on
-            mark = QColor(t.accent)
+            mark = QColor(on if t.look.on_mark == "ink" else t.accent)
             mark.setAlphaF(lit)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(mark)
             if t.look.on_mark == "dot":
                 painter.drawEllipse(QPointF(wide / 2, self.height() - 5), 2 * lit, 2 * lit)
+            elif t.look.on_mark == "ink":  # under the icon, not the widened button, growing from its middle
+                reach = self.ICON / 2 * lit
+                painter.drawRoundedRect(QRectF(8 + self.ICON / 2 - reach, self.height() - 4, 2 * reach, 2), 1, 1)
             else:  # the line grows from its middle
                 reach = (wide - 16) / 2 * lit
                 painter.drawRect(QRectF(wide / 2 - reach, self.height() - 3, 2 * reach, 2))
-        rest, on = self._inks(t, bar)
         mode = QIcon.Mode.Normal if self.isEnabled() else QIcon.Mode.Disabled
         glyph, centre = QRect(8, 8, self.ICON, self.ICON), Qt.AlignmentFlag.AlignCenter
         if lit < 1.0 or on == rest:  # turning on, the icon takes the accent over its own colour
@@ -208,7 +213,7 @@ class ToolButton(QToolButton):
             painter.setOpacity(shown * lit)
             self._icon(self.spec.icon, on).paint(painter, glyph, centre, mode)
         if lit > 0.0:
-            accent = self._on_colour(t)
+            accent = on if t.look.on_mark == "ink" else self._on_colour(t)  # an ink tool keeps its ink beside it too
             painter.setOpacity(shown * lit)
             self._icon("caret-down-bold", accent).paint(painter, QRect(round(33 + 2 * lit), 13, 10, 10))
             if self._padlock.value > 0.0:

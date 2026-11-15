@@ -48,8 +48,8 @@ glass, and you choose which. Liquid glass, on Windows, makes each bar one lens o
 through it sharp and bent, and every icon and number takes its ink from what lies behind it, dark over a bright
 page and light over the dark canvas, also within one bar. Clear and Balanced are frosted glass, the pages
 blurred behind them; Solid makes the bars opaque. On every glass the text stays easy to read. A style changes
-the whole look: Dot in black and white with one red and dot-matrix titles, Neon with glowing edges, or Material,
-with every colour drawn from the accent.
+the whole look: Dot in black and white with one red and dot-matrix titles, Neon with glowing edges, Material,
+with every colour drawn from the accent, or Folio, with white cards and slate tool icons.
 
 <img src="docs/images/liquid-glass.png" alt="The Liquid glass in the dark theme: the toolbar bends the heading and the first line of the page under it, and the page counter and the zoom bar are dark over the page and light past its edge" width="100%">
 
@@ -234,7 +234,7 @@ every change, and publishes them with each new version.
 | Search in every PDF | SQLite's full-text index (FTS5), kept on the computer |
 | Comparing versions | the words of both versions, lined up with Python's difflib |
 | Updates | GitHub's releases API; each download checked against the release's SHA256SUMS |
-| Tests | pytest on Qt's offscreen platform: 971 tests, run on Windows, macOS and Linux |
+| Tests | pytest on Qt's offscreen platform: 980 tests, run on Windows, macOS and Linux |
 | Downloads | PyInstaller, then an NSIS installer, a .dmg or an AppImage (`tools/build.py`), built by GitHub Actions |
 
 ```

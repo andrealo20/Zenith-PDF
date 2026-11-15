@@ -5,6 +5,7 @@ in theme.py; each of the others has a module here.
 """
 
 from ..theme import ZENITH, Style
-from . import dot, material, neon
+from . import dot, folio, material, neon
 
-STYLES: dict[str, Style] = {style.key: style for style in (ZENITH, dot.STYLE, neon.STYLE, material.STYLE)}
+STYLES: dict[str, Style] = {style.key: style for style in (ZENITH, dot.STYLE, neon.STYLE, material.STYLE,
+                                                          folio.STYLE)}

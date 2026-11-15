@@ -1429,7 +1429,9 @@ class FloatingBar(QFrame):
         lens's picture, the grain alone: the light and the edge are in the picture."""
         t = self.theme()
         width = max(1, int(ratio + 0.5))
-        colours = (t.raised, t.border) if self._solid else (t.glass_highlight.rgba(), t.glass_border.rgba())
+        # A style with no glass gives its solid bars their own edge; a glass style drawn solid takes the border.
+        edge = QColor(t.border) if (self._solid and t.look.glass) else t.glass_border
+        colours = (t.raised, edge.rgba()) if self._solid else (t.glass_highlight.rgba(), t.glass_border.rgba())
         lit = not self._solid or t.look.rail  # a style with a lit rail keeps it on solid bars too
         colours += (t.glass_highlight.rgba(),) if lit else ()
         key = (size.width(), size.height(), radius, width, grain, lensed, self._solid, colours, glass.style,
@@ -1471,7 +1473,7 @@ class FloatingBar(QFrame):
             painter.setPen(QPen(QBrush(light), width))
             painter.drawPath(outline(rect.adjusted(inset, inset, -inset, -inset), max(radius - inset, 0), look))
         inset = width / 2
-        painter.setPen(QPen(QColor(t.border) if self._solid else t.glass_border, width))
+        painter.setPen(QPen(edge, width))
         painter.drawPath(outline(rect.adjusted(inset, inset, -inset, -inset), max(radius - inset, 0), look))
         painter.end()
         self._overlay = (key, picture)

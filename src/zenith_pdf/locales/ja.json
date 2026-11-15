@@ -2105,6 +2105,7 @@
  "While idle, draw the next zoom level in and out, so the mouse wheel finds it ready and sharp.": "待機中に一段階上と下のズームを先に描いておき、マウスホイールですぐ鮮明に表示します。",
  "While moving, resizing or drawing, edges and centres line up with other annotations. Hold Alt to place freely.": "移動、サイズ変更、描画の間、端や中心がほかの注釈にそろいます。Alt を押すと自由に置けます。",
  "While this tool is on, links show as boxes: click one to change or remove it.": "このツールがオンの間、リンクは枠で表示されます。クリックすると変更や削除ができます。",
+ "White floating cards, two-tone slate tool icons, and the tool in use drawn in its own ink.": "浮かぶ白いカード、スレートグレーの2色のツールアイコン、使用中のツールはそのインクの色で表示。",
  "Whole strokes": "線全体",
  "Whole words": "単語単位",
  "Whole words only": "単語単位のみ",

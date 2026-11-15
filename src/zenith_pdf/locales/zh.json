@@ -2105,6 +2105,7 @@
  "While idle, draw the next zoom level in and out, so the mouse wheel finds it ready and sharp.": "空闲时预先绘制放大和缩小的下一级缩放，让鼠标滚轮使用时立即清晰。",
  "While moving, resizing or drawing, edges and centres line up with other annotations. Hold Alt to place freely.": "移动、调整大小或绘制时，边缘和中心会与其他批注对齐。按住 Alt 可自由放置。",
  "While this tool is on, links show as boxes: click one to change or remove it.": "此工具打开时，链接会显示为方框：点击某个链接即可更改或删除它。",
+ "White floating cards, two-tone slate tool icons, and the tool in use drawn in its own ink.": "浮动的白色卡片、石板灰双色工具图标，正在使用的工具以自身墨色显示。",
  "Whole strokes": "整条笔画",
  "Whole words": "全字匹配",
  "Whole words only": "仅全字匹配",

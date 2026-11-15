@@ -56,7 +56,13 @@ class Look:
     tint: tuple[int, int] = (56, 40)  # (dark, light) alpha of the accent tint that selects; 0 keeps the palette's own
     checked_icon: str = "accent"  # a checked tool's icon: "accent", or "text" where a neutral fill marks it
     rail: bool = False  # the line of light along the floating bars' top edge takes the accent
-    on_mark: str = ""  # under the tool that is on: "" nothing, "dot" a small accent dot, "bar" a short accent line
+    on_mark: str = ""  # under the tool that is on: "" nothing, "dot" a small accent dot, "bar" a short accent line,
+    # "ink" a short line in the tool's own ink
+    # An icon name to the one this style draws instead (icons.icon); empty keeps every icon as it is.
+    icons: dict[str, str] = field(default_factory=dict, compare=False, hash=False)
+    duotone: float = 0.0  # tool icons' closed bodies filled with this share of their colour; 0 draws outlines only
+    idle_ink: bool = True  # False: a tool shows its own ink only while it is on, and rests in the icon colour
+    icon_tone: str = "text"  # "muted": icons take text_muted, a softer slate beside the text
     # Each accent key's own shade in this style, (dark, light); empty for ACCENTS.
     accents: dict[str, tuple[str, str]] = field(default_factory=dict, compare=False, hash=False)
     # A palette made from the accent instead of the accent laid over the palette (dynamic colour).

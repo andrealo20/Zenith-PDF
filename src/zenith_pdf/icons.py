@@ -288,7 +288,173 @@ def _note_insert(p: QPainter) -> None:
     p.drawLine(QPointF(3.5, 20.5), QPointF(20.5, 20.5))
 
 
+def _body(p: QPainter, path: QPainterPath, share: float = 1.0) -> None:
+    """Strokes a closed body, filled first with the style's pale share of the pen colour (Look.duotone)."""
+    alpha = themes.current.look.duotone * share
+    p.save()
+    if alpha > 0:
+        fill = QColor(p.pen().color())
+        fill.setAlphaF(min(1.0, fill.alphaF() * alpha))
+        p.setBrush(fill)
+    p.drawPath(path)
+    p.restore()
+
+
+def _solid(p: QPainter, path: QPainterPath) -> None:
+    p.save()
+    p.setBrush(p.pen().color())
+    p.drawPath(path)
+    p.restore()
+
+
+def _diagonal(p: QPainter) -> None:
+    """Lays an object drawn along x, tip on the left, at 45 degrees with its tip at the lower left."""
+    p.translate(12, 12)
+    p.rotate(-45)
+
+
+def _rr(x: float, y: float, w: float, h: float, r: float) -> QPainterPath:
+    path = QPainterPath()
+    path.addRoundedRect(QRectF(x, y, w, h), r, r)
+    return path
+
+
+def _poly(*points: tuple[float, float]) -> QPainterPath:
+    path = QPainterPath()
+    path.addPolygon(QPolygonF([QPointF(*q) for q in points]))
+    path.closeSubpath()
+    return path
+
+
+def _dashed(p: QPainter) -> None:
+    pen = QPen(p.pen())
+    pen.setDashPattern([1.6, 1.8])
+    p.setPen(pen)
+
+
+def _folio_pen(p: QPainter) -> None:
+    """A gel pen with its cap on and a clip running back off the cap."""
+    _diagonal(p)
+    _solid(p, _poly((-10.6, 0), (-7.4, -1.6), (-7.4, 1.6)))
+    _body(p, _rr(-7.4, -2.6, 13.4, 5.2, 1.4))
+    _body(p, _rr(6, -3, 4.6, 6, 1.6))
+    p.drawLine(QPointF(-4.2, -2.6), QPointF(-4.2, 2.6))
+    p.drawPolyline(QPolygonF([QPointF(7.2, -3), QPointF(7.2, -4.6), QPointF(1.5, -4.6)]))
+
+
+def _folio_marker(p: QPainter) -> None:
+    """A chisel marker, its nib solid so it shows the ink at full strength."""
+    _diagonal(p)
+    _solid(p, _poly((-10.4, -0.4), (-7.6, -2.2), (-7.6, 2.2), (-10.4, 1.6)))
+    _body(p, _poly((-7.6, -2.2), (-5, -3.4), (-5, 3.4), (-7.6, 2.2)))
+    _body(p, _rr(-5, -3.8, 15.2, 7.6, 2))
+    p.drawLine(QPointF(5, -3.8), QPointF(5, 3.8))
+
+
+def _folio_eraser(p: QPainter) -> None:
+    _diagonal(p)
+    _body(p, _rr(-9, -4, 18, 8, 2.2))
+    _body(p, _rr(-9, -4, 6, 8, 2.2), 2.2)  # the worn rubber end, denser
+    p.drawLine(QPointF(-3, -4), QPointF(-3, 4))
+
+
+def _folio_text(p: QPainter) -> None:
+    """A hollow capital T with a text caret beside it."""
+    _body(p, _poly((4, 4.5), (16, 4.5), (16, 8.5), (12, 8.5), (12, 19.5), (8, 19.5), (8, 8.5), (4, 8.5)))
+    p.drawLine(QPointF(19.5, 9), QPointF(19.5, 19.5))
+    p.drawLine(QPointF(18, 9), QPointF(21, 9))
+    p.drawLine(QPointF(18, 19.5), QPointF(21, 19.5))
+
+
+def _folio_select(p: QPainter) -> None:
+    p.save()
+    _dashed(p)
+    _body(p, _rr(5, 5, 14, 14, 2.5))
+    p.restore()
+    for x, y in ((5, 5), (19, 5), (5, 19), (19, 19)):
+        handle = QPainterPath()
+        handle.addEllipse(QPointF(x, y), 1.4, 1.4)
+        _solid(p, handle)
+
+
+def _folio_lasso(p: QPainter) -> None:
+    loop = QPainterPath(QPointF(8, 15))
+    loop.cubicTo(QPointF(2, 13), QPointF(3, 4), QPointF(11, 4))
+    loop.cubicTo(QPointF(19, 4), QPointF(22, 10), QPointF(17, 14))
+    loop.cubicTo(QPointF(14, 16.5), QPointF(11, 16), QPointF(8, 15))
+    p.save()
+    _dashed(p)
+    _body(p, loop)
+    p.restore()
+    tail = QPainterPath(QPointF(8, 15))
+    tail.cubicTo(QPointF(6.5, 17.5), QPointF(9.5, 18.5), QPointF(7.5, 21))
+    p.drawPath(tail)
+    knot = QPainterPath()
+    knot.addEllipse(QPointF(8, 15), 1.3, 1.3)
+    _solid(p, knot)
+
+
+def _folio_picture(p: QPainter) -> None:
+    _body(p, _rr(3.5, 5, 17, 14, 2.5))
+    p.drawEllipse(QPointF(8.5, 9.5), 1.6, 1.6)
+    p.drawPolyline(QPolygonF([QPointF(3.8, 17), QPointF(9, 12.5), QPointF(12.5, 15.5), QPointF(15.5, 12),
+                              QPointF(20.2, 16.5)]))
+
+
+def _folio_mic(p: QPainter) -> None:
+    _body(p, _rr(9, 3.5, 6, 11, 3))
+    holder = QPainterPath(QPointF(6, 11))
+    holder.cubicTo(QPointF(6, 18.5), QPointF(18, 18.5), QPointF(18, 11))
+    p.drawPath(holder)
+    p.drawLine(QPointF(12, 17), QPointF(12, 20.5))
+    p.drawLine(QPointF(9, 20.5), QPointF(15, 20.5))
+
+
+def _folio_ruler(p: QPainter) -> None:
+    _diagonal(p)
+    _body(p, _rr(-10, -3.6, 20, 7.2, 1.4))
+    for i, x in enumerate(range(-7, 9, 3)):
+        p.drawLine(QPointF(x, -3.6), QPointF(x, -3.6 + (3 if i % 2 == 0 else 1.8)))
+
+
+def _folio_tape(p: QPainter) -> None:
+    """A roll and its strip, with a torn zigzag end."""
+    p.translate(0, 1.5)  # the drawing spans y 4.5 to 16.5: centred on the grid like the other tools
+    ring = QPainterPath()
+    ring.addEllipse(QPointF(9, 10.5), 6, 6)
+    _body(p, ring)
+    p.drawEllipse(QPointF(9, 10.5), 2.2, 2.2)
+    _body(p, _poly((9, 16.5), (19.5, 16.5), (21, 15), (19.5, 13.5), (21, 12), (19.5, 10.5), (14.6, 10.5)))
+
+
+def _folio_laser(p: QPainter) -> None:
+    """A pointer and the spot it casts at the lower left."""
+    p.save()
+    _diagonal(p)
+    _body(p, _rr(-3, -2.4, 13, 4.8, 2.4))
+    p.drawLine(QPointF(3, -2.4), QPointF(3, 2.4))
+    p.restore()
+    spot = QPainterPath()
+    spot.addEllipse(QPointF(5.5, 18.5), 1.8, 1.8)
+    _solid(p, spot)
+    for angle in (180, 225, 270):  # out to 4.5: the round cap of the left ray stays inside the grid
+        a = math.radians(angle)
+        p.drawLine(QPointF(5.5 + 3.2 * math.cos(a), 18.5 + 3.2 * math.sin(a)),
+                   QPointF(5.5 + 4.5 * math.cos(a), 18.5 + 4.5 * math.sin(a)))
+
+
 CUSTOM = {
+    "z-folio-pen": _folio_pen,
+    "z-folio-marker": _folio_marker,
+    "z-folio-eraser": _folio_eraser,
+    "z-folio-text": _folio_text,
+    "z-folio-select": _folio_select,
+    "z-folio-lasso": _folio_lasso,
+    "z-folio-picture": _folio_picture,
+    "z-folio-mic": _folio_mic,
+    "z-folio-ruler": _folio_ruler,
+    "z-folio-tape": _folio_tape,
+    "z-folio-laser": _folio_laser,
     "z-squiggle": _squiggle,
     "z-tape": _tape,
     "z-lasso": _lasso,
@@ -400,19 +566,19 @@ PALETTE = {
     "teal": ("#11908f", "#4fd1cf"),
 }
 _HUE_NAMES = {
-    "blue": "cursor hand folder-open folder-simple files file file-pdf export floppy-disk download-simple "
-            "arrow-square-out article "
+    "blue": "cursor z-folio-select hand folder-open folder-simple files file file-pdf export floppy-disk "
+            "download-simple arrow-square-out article "
             "copy copy-simple printer app-window browsers house shield-check lock-simple lock-simple-fill "
             "clipboard clipboard-text paperclip link arrows-clockwise arrow-circle-up desktop",
-    "purple": "pen-nib pencil-simple pencil-line z-signature z-pen-basic z-pen-pro z-pen-calligraphy "
-              "check-square-offset user translate z-equation polygon hexagon line-segments z-tape",
-    "pink": "eraser note-pencil text-t text-aa z-paragraph z-note-insert z-text-highlight marker-circle "
-            "highlighter-circle",
-    "red": "file-plus trash eye-slash warning-circle warning microphone microphone-slash stop "
-           "arrows-in z-laser z-cleaner record x-circle lock-key file-search stack-simple",
-    "green": "plus-circle squares-four image image-square camera magnifying-glass books bounding-box path ruler "
-             "line-segment arrow-up-right square circle cloud z-lasso z-snapshot crop frame-corners list-numbers "
-             "arrows-down-up file-x scissors",
+    "purple": "pen-nib z-folio-pen pencil-simple pencil-line z-signature z-pen-basic z-pen-pro z-pen-calligraphy "
+              "check-square-offset user translate z-equation polygon hexagon line-segments z-tape z-folio-tape",
+    "pink": "eraser z-folio-eraser note-pencil text-t z-folio-text text-aa z-paragraph z-note-insert "
+            "z-text-highlight marker-circle z-folio-marker highlighter-circle",
+    "red": "file-plus trash eye-slash warning-circle warning microphone z-folio-mic microphone-slash stop "
+           "arrows-in z-laser z-folio-laser z-cleaner record x-circle lock-key file-search stack-simple",
+    "green": "plus-circle squares-four image z-folio-picture image-square camera magnifying-glass books "
+             "bounding-box path ruler z-folio-ruler line-segment arrow-up-right square circle cloud z-lasso "
+             "z-folio-lasso z-snapshot crop frame-corners list-numbers arrows-down-up file-x scissors",
     "orange": "chat-centered-text chat-teardrop-text note note-blank bookmark-simple bookmarks tag tag-simple "
               "star star-fill lightbulb lightbulb-filament notebook cards z-squiggle text-underline "
               "text-strikethrough",
@@ -460,20 +626,32 @@ def _weighted(name: str) -> str:
     return f"{name}-{weight}"
 
 
+@lru_cache(maxsize=None)
+def _tool_icons() -> frozenset[str]:
+    """The icons of the catalog's tools, the ones a style's duotone fills."""
+    from .ui.tool_catalog import CATALOG  # at the first icon, not at load: icons.py comes before the ui package
+
+    return frozenset(spec.icon for spec in CATALOG)
+
+
 def icon(name: str, color: str | None = None) -> QIcon:
     """The icon `name` (Phosphor, or one drawn here), in `color`, else the colour of what it does when coloured
-    icons are on (hue_colour), else the theme's text colour. In the style's weight: thin, light, regular or bold."""
+    icons are on (hue_colour), else the theme's text colour (or its muted one, by the style's icon_tone). In the
+    style's weight: thin, light, regular or bold, and drawn as the style draws it instead (Look.icons)."""
     t = themes.current
-    color = color or hue_colour(name) or t.text
-    on = t.text if t.look.checked_icon == "text" else t.accent
+    look = t.look
+    color = color or hue_colour(name) or (t.text_muted if look.icon_tone == "muted" else t.text)
+    tool = look.duotone and name in _tool_icons()
+    name = look.icons.get(name, name)
+    on = t.text if look.checked_icon == "text" else t.accent
     if name in CUSTOM:
         return QIcon(_DrawnIcon(CUSTOM[name], color, on, t.text_disabled))
     # qtawesome derives the hover colour from the checked one unless both are given.
-    return qta.icon(
-        name if "." in name else f"ph.{_weighted(name)}",
-        color=color,
-        color_active=color,
-        color_on=on,
-        color_on_active=on,
-        color_disabled=t.text_disabled,
-    )
+    colours = {"color": color, "color_active": color, "color_on": on, "color_on_active": on,
+               "color_disabled": t.text_disabled}
+    if tool and "." not in name and f"{name}-fill" in _phosphor():
+        # The filled glyph under the outline, pale: the two tones of the style's tool icons.
+        alpha = round(255 * look.duotone)
+        pale = {key: (value, alpha) for key, value in colours.items()}
+        return qta.icon(f"ph.{name}-fill", f"ph.{_weighted(name)}", options=[pale, colours])
+    return qta.icon(name if "." in name else f"ph.{_weighted(name)}", **colours)

@@ -336,8 +336,9 @@ class AccentPicker(QWidget):
 class StyleTile(QAbstractButton):
     """A style to choose: a small picture of a window in it, in the scheme and accent in use, and its name."""
 
-    # Four of them and their gaps fit the page in the window as it first opens, also in a style that pads its rows.
-    WIDTH, PICTURE = 128, 88
+    # Five of them and their gaps fit the page in the window as it first opens, also in a style that pads its rows.
+    # The picture is drawn in a 128 x 88 frame and scaled down to fit.
+    WIDTH, PICTURE = 100, 69
 
     def __init__(self, style: Style, accent, parent=None):
         super().__init__(parent)
@@ -374,7 +375,11 @@ class StyleTile(QAbstractButton):
         k = t.look
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        frame = QRectF(3, 3, self.WIDTH - 6, self.PICTURE - 6)
+        width, picture = 128, 88
+        painter.save()
+        painter.scale(self.WIDTH / width, self.PICTURE / picture)
+        inset = QPointF(3 * width / self.WIDTH, 3 * picture / self.PICTURE)  # 3 px on screen, clear of the ring
+        frame = QRectF(inset.x(), inset.y(), width - 2 * inset.x(), picture - 2 * inset.y())
         corner = min(k.card, 10)
         painter.setPen(QPen(QColor(t.border), 1))
         painter.setBrush(QColor(t.window))
@@ -433,6 +438,7 @@ class StyleTile(QAbstractButton):
         painter.setBrush(QColor(t.accent_fill))
         rounding = 5 if k.pill_buttons else min(k.control, 3)
         painter.drawRoundedRect(button, rounding, rounding)
+        painter.restore()  # the ring and the name at full size, so the ring stays 2 px and the name sharp
         # The ring of the style in use grows in; under the pointer a fainter one shows, and the keyboard's is plain.
         chosen = self._ring.value if self._ring.running else float(self.isChecked())
         muted = QColor(app.text_muted)
@@ -443,7 +449,8 @@ class StyleTile(QAbstractButton):
         if ring.alpha():
             painter.setPen(QPen(ring, 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawPath(outline(QRectF(1, 1, self.WIDTH - 2, self.PICTURE - 2), corner + 2, k))
+            painter.drawPath(outline(QRectF(1, 1, self.WIDTH - 2, self.PICTURE - 2),
+                                     corner * self.WIDTH / width + 2, k))
         font = QFont(k.title_font())
         font.setWeight(QFont.Weight.DemiBold if chosen >= 0.5 else QFont.Weight.Normal)
         painter.setFont(font)
@@ -956,7 +963,7 @@ class SettingsWindow(QDialog):
         s.caption("Appearance")
         s.add(Row("Style", "How the whole app looks: its colours, shapes and type. Every feature stays the same.",
                   StylePicker(self._settings), "style look design skin theme appearance minimal neon material dot "
-                  "android pixel nothing", below=True))
+                  "android pixel nothing folio notebook paper", below=True))
         self._theme_box = theme = self._combo("theme", THEME_NAMES)
         s.add(Row("Theme", f"Dark, light, or the same as {SYSTEM_NAME}.", theme,
                   "dark mode light mode colours appearance"))

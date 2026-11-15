@@ -785,6 +785,21 @@ def main() -> None:
         print("liquid-glass.png and liquid-glass-detail.png: the lens does not run here, so they are left as they are")
     settings.set("glass", "clear")
     settle(300)
+
+    # The Folio style: white cards over the pages, slate tool icons, the pen that is on drawn in its own ink.
+    settings.theme = "light"
+    settings.set("style", "folio")
+    tools.update_style("pen", color=(0.68, 0.0, 0.8))  # an ink other than the blue accent, so its own colour shows
+    settle(400)
+    show_page(1, 1.0)
+    tools.set_tool("pen")
+    settle(400)
+    save(to_pil(window.grab()), out, "folio.png", False)
+    tools.update_style("pen", color=(0.15, 0.4, 0.95))
+    settings.set("style", "zenith")
+    settings.theme = "dark"
+    settle(400)
+
     show_page(0, 1.0)
     marks = writing_dialogs.marks_of(view)
     texts = {page: view.document.page_text(page) for page in {mark.page for mark in marks}}

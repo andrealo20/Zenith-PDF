@@ -117,7 +117,7 @@ RECENT_KEEP = 200  # recent files stored; "recent_limit" only says how many are 
 # Stored values of older versions, and what they mean now. Anything else not in CHOICES reads as the default.
 MIGRATIONS = {"after_drawing": {"keep": "pan"}, "glass": {"true": "clear", "false": "solid"}}
 CHOICES = {"after_drawing": ("select", "pan"), "glass": ("liquid", "clear", "balanced", "solid"),
-           "style": ("zenith", "dot", "neon", "material"),
+           "style": ("zenith", "dot", "neon", "material", "folio"),
            "toolbar_side": ("top", "bottom", "left", "right")}
 
 

@@ -119,3 +119,42 @@ def test_dot_titles_draw_the_large_titles_as_dots(qt_app):
         assert label.grab().toImage() == plain  # the filter goes with the style
     finally:
         themes.apply(before)
+
+
+def test_folio_icons_all_exist(qt_app):
+    from zenith_pdf import icons
+
+    for name in STYLES["folio"].dark.look.icons.values():
+        assert name in icons.CUSTOM or name in icons._phosphor(), name
+
+
+def test_solid_styles_keep_their_edge():
+    """A solid bar draws its edge in glass_border once the style has no glass: those that had the border keep it."""
+    for style in STYLES.values():
+        if style.key == "folio":
+            continue
+        for scheme in style.schemes:
+            palette = style.palette(scheme)
+            if not palette.look.glass:
+                assert QColor(palette.glass_border) == QColor(palette.border), (style.key, scheme)
+
+
+def test_five_style_tiles_fit_the_settings_page(window):
+    from zenith_pdf.ui.settings_page import StylePicker
+
+    settings = window._settings
+    before = settings.get("style")
+    page = window.settings_window()
+    page.show()
+    try:
+        for key in STYLES:
+            settings.set("style", key)
+            settle()
+            picker = page.findChild(StylePicker)
+            row = picker.parentWidget()
+            assert picker.sizeHint().width() <= row.contentsRect().width(), key
+            assert not page.scroll.horizontalScrollBar().isVisible(), key
+    finally:
+        page.hide()
+        settings.set("style", before)
+        settle()
