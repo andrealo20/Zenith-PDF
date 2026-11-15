@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// UIViewControllerRepresentable around the editor controller.
+/// Puts the editor controller into SwiftUI. The controller is made by EditorModel and outlives this struct.
 struct PDFEditorRepresentable: UIViewControllerRepresentable {
     let controller: EditorViewController
 

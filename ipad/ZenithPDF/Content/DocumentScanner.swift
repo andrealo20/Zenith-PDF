@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import VisionKit
 
-/// VNDocumentCameraViewController wrapper.
+/// VNDocumentCameraViewController wrapper. The presenter dismisses it from onFinish.
 struct DocumentScanner: UIViewControllerRepresentable {
     let onFinish: ([UIImage]) -> Void             // empty on cancel or failure
 
@@ -19,12 +19,26 @@ struct DocumentScanner: UIViewControllerRepresentable {
         Coordinator(onFinish: onFinish)
     }
 
-    @MainActor final class Coordinator: NSObject, @preconcurrency VNDocumentCameraViewControllerDelegate {
+    @MainActor final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
         private let onFinish: ([UIImage]) -> Void
 
         init(onFinish: @escaping ([UIImage]) -> Void) {
             self.onFinish = onFinish
             super.init()
+        }
+
+        func documentCameraViewController(_ controller: VNDocumentCameraViewController,
+                                          didFinishWith scan: VNDocumentCameraScan) {
+            onFinish((0..<scan.pageCount).map { scan.imageOfPage(at: $0) })
+        }
+
+        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
+            onFinish([])
+        }
+
+        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
+            log.error("scan failed: \(error.localizedDescription, privacy: .public)")
+            onFinish([])
         }
     }
 }

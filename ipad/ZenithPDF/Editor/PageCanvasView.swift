@@ -1,7 +1,7 @@
 import PencilKit
 import UIKit
 
-/// PKCanvasView subclass.
+/// One page's PencilKit canvas. Its drawing coordinates are the page's display space (section 3.5).
 @MainActor final class PageCanvasView: PKCanvasView {
     let pageID: UUID
     private let pencilKitUndo = UndoManager()
@@ -15,6 +15,16 @@ import UIKit
     init(pageID: UUID) {
         self.pageID = pageID
         super.init(frame: .zero)
+        backgroundColor = .clear
+        isOpaque = false
+        isScrollEnabled = false
+        showsVerticalScrollIndicator = false
+        showsHorizontalScrollIndicator = false
+        bouncesZoom = false
+        contentInsetAdjustmentBehavior = .never
+        // PencilKit turns black ink white in dark mode; paper is always light (pitfall P7).
+        overrideUserInterfaceStyle = .light
+        maximumSupportedContentVersion = .latest
     }
 
     required init?(coder: NSCoder) {
@@ -26,6 +36,7 @@ import UIKit
         suppressesChanges = true
         self.drawing = drawing
         suppressesChanges = false
+        pencilKitUndo.removeAllActions()
     }
 
     /// removeAllActions() on the private manager.

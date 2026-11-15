@@ -6,9 +6,22 @@ import SwiftUI
             RootView()
         }
         WindowGroup(id: "note", for: NoteWindowValue.self) { $value in
-            if let value {
-                NoteScreen(value: value, launch: EditorLaunchState(), onClose: {})
-            }
+            NoteWindow(value: value)
+        }
+    }
+}
+
+/// A window that shows one note; closing the note closes the window.
+private struct NoteWindow: View {
+    let value: NoteWindowValue?
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    var body: some View {
+        if let value {
+            NoteScreen(value: value, launch: LaunchOptions.baseEditorLaunch(), onClose: { dismissWindow() })
+                .tint(Folio.accent)
+        } else {
+            Folio.window.ignoresSafeArea()
         }
     }
 }
@@ -21,13 +34,34 @@ struct NoteWindowValue: Codable, Hashable {
 
     /// libraryPath when the note is inside libraryRoot, else url.bookmarkData().
     init(url: URL, libraryRoot: URL?) {
-        libraryPath = nil
-        bookmark = nil
+        if let libraryRoot, SidecarLayout.isInside(url, root: libraryRoot) {
+            libraryPath = LibraryStore(root: libraryRoot).relativePath(of: url)
+            bookmark = nil
+        } else {
+            libraryPath = nil
+            do {
+                bookmark = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+            } catch {
+                log.error("No bookmark for a note window: \(error.localizedDescription, privacy: .public)")
+                bookmark = nil
+            }
+        }
     }
 
     /// Starts security-scoped access for a bookmark; nil when it fails.
     func resolve(libraryRoot: URL?) -> URL? {
-        nil
+        if let libraryPath {
+            guard let libraryRoot else { return nil }
+            let url = LibraryStore(root: libraryRoot).url(forRelativePath: libraryPath)
+            return FileStore.exists(url) ? url : nil
+        }
+        guard let bookmark else { return nil }
+        var isStale = false
+        guard let url = try? URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil,
+                                 bookmarkDataIsStale: &isStale) else { return nil }
+        // Files inside the app's own container are not security-scoped (false here) and are still readable.
+        _ = url.startAccessingSecurityScopedResource()
+        return FileStore.exists(url) ? url : nil
     }
 }
 
