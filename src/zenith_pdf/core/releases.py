@@ -30,6 +30,12 @@ class Release:
 
 
 RELEASES = (
+    Release("0.7.0", (
+        Highlight("Zenith PDF for iPad", "There is now an app for iPad, in English, for handwritten notes. It keeps "
+                  "each note as a PDF in the same format, so a note written on the iPad opens here with its ink, text "
+                  "boxes and pictures, and a note from here opens on the iPad. Download it from the releases page on "
+                  "GitHub.", "device-tablet"),
+    )),
     Release("0.6.10", (
         Highlight("Folio, a new style", "Settings > View & Layout > Style has a fifth choice, Folio: white cards over "
                   "the pages, slate tool icons with a pale body, and the tool in use drawn in its own ink, with a short "

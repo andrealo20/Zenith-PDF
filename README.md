@@ -8,6 +8,8 @@
 Thirty-eight markup tools with a menu each, page management, PDF tools, forms, flashcards, reading aloud,<br>
 and an assistant, in fifteen languages. Everything runs on your computer.
 
+On the iPad, a companion app takes handwritten notes in the same PDF format.
+
 Completely free and open source, with no account, no ads and no paid version.<br>
 In continuous development: new versions come out often.
 
@@ -18,14 +20,16 @@ In continuous development: new versions come out often.
 <a href="https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-macOS.dmg"><img src="https://img.shields.io/badge/macOS-Download_the_.dmg-1D1D1F?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" height="38"></a>
 &nbsp;
 <a href="https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-Linux-x86_64.AppImage"><img src="https://img.shields.io/badge/Linux-Download_the_AppImage-E95420?style=for-the-badge&logo=linux&logoColor=white" alt="Download the Linux AppImage" height="38"></a>
+&nbsp;
+<a href="https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-iPad.ipa"><img src="https://img.shields.io/badge/iPad-Download_the_.ipa-6E6E73?style=for-the-badge" alt="Download the iPad app, to install with Sideloadly or AltStore" height="38"></a>
 
-<sub>Windows 10 and 11, 64-bit &nbsp;·&nbsp; macOS on Apple silicon &nbsp;·&nbsp; Linux x86-64 &nbsp;·&nbsp; <a href="https://github.com/andrealo20/Zenith-PDF/releases">all releases</a></sub>
+<sub>Windows 10 and 11, 64-bit &nbsp;·&nbsp; macOS on Apple silicon &nbsp;·&nbsp; Linux x86-64 &nbsp;·&nbsp; iPad on iPadOS 26, <a href="#download-and-install">sideloaded</a> &nbsp;·&nbsp; <a href="https://github.com/andrealo20/Zenith-PDF/releases">all releases</a></sub>
 
 <br>
 
 [![Build](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml/badge.svg)](https://github.com/andrealo20/Zenith-PDF/actions/workflows/build.yml)
 ![Windows, macOS, Linux](https://img.shields.io/badge/runs_on-Windows%20%7C%20macOS%20%7C%20Linux-555?style=flat-square)
-![Version 0.6.6](https://img.shields.io/badge/version-0.6.6-2E8BFF?style=flat-square)
+![Version 0.7.0](https://img.shields.io/badge/version-0.7.0-2E8BFF?style=flat-square)
 ![Free and open source](https://img.shields.io/badge/free-open_source-2EA44F?style=flat-square)
 ![In continuous development](https://img.shields.io/badge/development-active-2EA44F?style=flat-square)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)
@@ -145,6 +149,23 @@ PDFs side by side, with what was added, removed or changed marked on both and li
   </tr>
 </table>
 
+### New in 0.7.0
+
+- Zenith PDF for iPad: a separate app, in English, for handwritten notes with Apple Pencil or a finger. Each note
+  is a PDF in the same format as here, so a note written on the iPad opens on the computer with its ink, text
+  boxes and pictures, and a note from the computer opens on the iPad ready to write on. It has subjects and
+  favourites, five papers in white, cream or dark, the system's pens with eraser, lasso and ruler, shapes
+  recognised from strokes, text boxes, pictures and scans, audio recorded with the writing whose replay brings
+  the strokes back as they were written, and a search that reads handwriting. How to install it is under
+  [Download and install](#download-and-install).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/ipad-library.png" alt="Zenith PDF for iPad: the library, with subjects in the sidebar and each note shown by its first page" width="100%"></td>
+    <td width="50%"><img src="docs/images/ipad-note.png" alt="A lecture note on the iPad: handwriting, a boxed formula, a highlighted line and a picture, with the pens at the bottom" width="100%"></td>
+  </tr>
+</table>
+
 ### New in 0.6.10
 
 - Folio, a fifth style in Settings > View & Layout > Style: white cards over the pages, slate tool icons with a
@@ -208,6 +229,23 @@ AppImages need FUSE 2 (`sudo apt install libfuse2`, or `libfuse2t64` on Ubuntu 2
 Tesseract and spelling the Hunspell dictionaries, when they are installed: for Italian on Ubuntu or Debian,
 `sudo apt install tesseract-ocr tesseract-ocr-ita hunspell-it`.
 
+**iPad.** Zenith PDF for iPad needs iPadOS 26 or later and is not on the App Store: each release has an
+unsigned [Zenith-PDF-iPad.ipa](https://github.com/andrealo20/Zenith-PDF/releases/latest/download/Zenith-PDF-iPad.ipa), which you sign
+with your own Apple ID and install from a Windows PC or a Mac with [Sideloadly](https://sideloadly.io) or
+[AltStore](https://altstore.io) Classic (AltStore PAL installs only notarized apps). With Sideloadly (on
+Windows, first install the iTunes and iCloud it links to, not the Microsoft Store versions): connect the iPad
+by cable and trust the computer, drag the .ipa onto Sideloadly, enter your Apple ID and press Start. Then, on
+the iPad, turn on Settings > Privacy & Security > Developer Mode (the iPad restarts) and trust your Apple ID in
+Settings > General > VPN & Device Management. A free Apple ID signs an app for 7 days and for at most 3 apps
+at a time: when it runs out, install it again over the old copy with the same Apple ID and your notes stay, or
+let AltStore Classic renew it over Wi-Fi while AltServer runs on a computer on the same network.
+
+At the first launch the app asks where notes live. Pick a folder in Files, such as iCloud Drive or On My iPad:
+notes kept inside the app go when the app is deleted. Each note is a PDF, so a folder the computer syncs too
+(iCloud Drive, OneDrive or any other) opens in Zenith PDF there. When the iPad saves a note made on the
+computer, two things don't come through whole: a picture or an equation stays on the page but can no longer be
+moved or edited, and a voice note or an attached file loses its sound or its file.
+
 **From source**, on any of the three, with Python 3.11 or later:
 
 ```
@@ -242,8 +280,9 @@ every change, and publishes them with each new version.
 | Search in every PDF | SQLite's full-text index (FTS5), kept on the computer |
 | Comparing versions | the words of both versions, lined up with Python's difflib |
 | Updates | GitHub's releases API; each download checked against the release's SHA256SUMS |
-| Tests | pytest on Qt's offscreen platform: 980 tests, run on Windows, macOS and Linux |
+| Tests | pytest on Qt's offscreen platform: 987 tests, run on Windows, macOS and Linux |
 | Downloads | PyInstaller, then an NSIS installer, a .dmg or an AppImage (`tools/build.py`), built by GitHub Actions |
+| iPad app | Swift with SwiftUI, PDFKit and PencilKit, in `ipad/`; tested on an iPad simulator by GitHub Actions, where the desktop's own code reads and edits its notes |
 
 ```
 src/zenith_pdf/
@@ -264,7 +303,10 @@ tools/        build.py makes the download of the system it runs on;
               zooming; snapshot.py renders the window to a PNG; i18n.py
               gathers the texts to translate
 packaging/    the Windows installer script and the Linux desktop entry
-.github/      the workflow that tests and builds on the three systems
+ipad/         the iPad app: its Swift sources, tests, and the scripts its
+              workflow runs
+.github/      the workflows that test and build on the three systems and
+              for the iPad
 docs/images/  the pictures of this README
 ```
 
