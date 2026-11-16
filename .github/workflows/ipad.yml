@@ -1,0 +1,108 @@
+name: iPad
+
+# Generate the project, run the unit and UI tests on an iPad simulator, check both ways that the desktop
+# and the iPad read each other's notes, take screenshots of the demo scenes, build the unsigned .ipa.
+
+on:
+  push:
+    branches: [ipad, main]
+    paths: ["ipad/**", "src/zenith_pdf/core/**", ".github/workflows/ipad.yml"]
+  pull_request:
+    paths: ["ipad/**", "src/zenith_pdf/core/**", ".github/workflows/ipad.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ipad-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipad:
+    name: iPad
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      # Every package has landed: a missing tool, test or demo scene fails its step.
+      ZENITH_STRICT: "1"
+      # A commit whose message holds "[only Class Class ...]" runs only those test classes and skips the
+      # screenshots and the .ipa: a quick round while fixing. Without it every step runs.
+      COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+      QUICK: ${{ contains(github.event.head_commit.message, '[only ') }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Tools
+        run: bash ipad/tools/ci.sh setup
+
+      - name: Desktop fixture
+        run: bash ipad/tools/ci.sh fixtures
+
+      - name: Generate project
+        run: bash ipad/tools/ci.sh generate
+
+      - name: Build for testing
+        id: build
+        run: bash ipad/tools/ci.sh build
+
+      - name: Package tests
+        if: github.event_name == 'pull_request'
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: bash ipad/tools/ci.sh test-package "$BRANCH"
+
+      - name: All tests
+        id: tests
+        # Until every package has landed, a package's pull request is judged by its own tests above.
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
+        run: bash ipad/tools/ci.sh test
+
+      - name: Desktop reads and edits iPad notes
+        if: always() && steps.build.outcome == 'success'
+        run: bash ipad/tools/ci.sh desktop-check
+
+      - name: iPad reads desktop edits
+        if: always() && steps.build.outcome == 'success'
+        run: bash ipad/tools/ci.sh desktop-roundtrip
+
+      - name: Screenshots
+        if: always() && steps.build.outcome == 'success' && env.QUICK != 'true'
+        run: bash ipad/tools/ci.sh screenshots
+
+      - name: Test summary
+        if: always()
+        run: bash ipad/tools/ci.sh summary
+
+      - name: Unsigned ipa
+        if: env.QUICK != 'true'
+        run: bash ipad/tools/ci.sh ipa
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iPad-screenshots
+          path: ipad/build/screenshots/
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iPad-test-results
+          path: |
+            ipad/build/*.xcresult
+            ipad/build/test-summary.txt
+            ipad/build/attachments/
+            ipad/build/exports/
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: env.QUICK != 'true'
+        with:
+          name: Zenith-PDF-iPad
+          path: ipad/build/Zenith-PDF-iPad.ipa
+          if-no-files-found: error

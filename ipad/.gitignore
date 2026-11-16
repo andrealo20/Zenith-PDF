@@ -1,0 +1,6 @@
+ZenithPDF.xcodeproj/
+Generated/
+ZenithPDF/Resources/*.xcstrings
+ZenithPDF/Resources/Demo/desktop-ink.pdf
+ZenithPDFTests/Fixtures/desktop-ink.json
+build/

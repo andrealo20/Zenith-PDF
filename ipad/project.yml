@@ -1,0 +1,109 @@
+# XcodeGen spec of the iPad app: `xcodegen generate --spec project.yml` from this folder
+# (ci.sh generate does it). The generated ZenithPDF.xcodeproj is not committed.
+name: ZenithPDF
+options:
+  bundleIdPrefix: io.github.andrealo20
+  deploymentTarget:
+    iOS: "26.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    TARGETED_DEVICE_FAMILY: "2"
+    SUPPORTS_MACCATALYST: NO
+    SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+    MARKETING_VERSION: "0.0.0"            # ci.sh passes the version from pyproject.toml
+    CURRENT_PROJECT_VERSION: "1"          # ci.sh passes GITHUB_RUN_NUMBER
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+targets:
+  ZenithPDF:
+    type: application
+    platform: iOS
+    sources:
+      # Every file under ZenithPDF/ is picked up: Swift sources, Resources/Assets.xcassets,
+      # the generated String Catalogs and Resources/Demo/desktop-ink.pdf.
+      - path: ZenithPDF
+    info:
+      path: Generated/Info.plist
+      properties:
+        CFBundleDisplayName: Zenith PDF
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleLocalizations: [en]
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UISupportsDocumentBrowser: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: PDF Document
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.adobe.pdf]
+        NSMicrophoneUsageDescription: Zenith PDF records audio notes that play back with your writing.
+        NSCameraUsageDescription: Zenith PDF scans paper documents into your notes.
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_NAME: ZenithPDF
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.andrealo20.zenithpdf
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: NO
+  ZenithPDFTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ZenithPDFTests
+        excludes: ["Fixtures/**"]
+      # A folder reference, so tests find files under Fixtures/ in the test bundle.
+      - path: ZenithPDFTests/Fixtures
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: ZenithPDF
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.andrealo20.zenithpdf.tests
+        GENERATE_INFOPLIST_FILE: YES
+  ZenithPDFUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: ZenithPDFUITests
+    dependencies:
+      - target: ZenithPDF
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.andrealo20.zenithpdf.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: ZenithPDF
+schemes:
+  ZenithPDF:
+    build:
+      targets:
+        ZenithPDF: all
+        ZenithPDFTests: [test]
+        ZenithPDFUITests: [test]
+    test:
+      config: Debug
+      targets: [ZenithPDFTests, ZenithPDFUITests]
+      environmentVariables:
+        PDFKIT_LOG_ANNOTATIONS: "1"
+    run:
+      config: Debug
+    archive:
+      config: Release

@@ -2,6 +2,7 @@ name: Build
 
 # Every push is tested and built on Windows, macOS and Linux. A tag such as v0.4.0
 # also publishes the three downloads as a GitHub release.
+# A tag also builds the unsigned iPad app, attached to the release as Zenith-PDF-iPad.ipa.
 
 on:
   push:
@@ -99,8 +100,57 @@ jobs:
           path: dist/release/*
           if-no-files-found: error
 
+  ipad:
+    name: iPad
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      ZENITH_STRICT: "1"  # a release needs every tool and test in place
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Tools
+        run: bash ipad/tools/ci.sh setup
+
+      - name: Desktop fixture
+        run: bash ipad/tools/ci.sh fixtures
+
+      - name: Generate project
+        run: bash ipad/tools/ci.sh generate
+
+      - name: Build for testing
+        run: bash ipad/tools/ci.sh build
+
+      - name: Tests
+        # One retry, so a simulator hiccup does not hold back the desktop release; a real failure still does.
+        run: bash ipad/tools/ci.sh test || bash ipad/tools/ci.sh test
+
+      - name: Desktop reads and edits iPad notes
+        run: bash ipad/tools/ci.sh desktop-check
+
+      - name: iPad reads desktop edits
+        run: bash ipad/tools/ci.sh desktop-roundtrip
+
+      - name: Test summary
+        if: always()
+        run: bash ipad/tools/ci.sh summary
+
+      - name: Unsigned ipa
+        run: bash ipad/tools/ci.sh ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Zenith-PDF-iPad
+          path: ipad/build/Zenith-PDF-iPad.ipa
+          if-no-files-found: error
+
   release:
-    needs: build
+    needs: [build, ipad]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

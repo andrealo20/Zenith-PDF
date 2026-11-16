@@ -334,9 +334,10 @@ class Document:
                 if str(obj.get("/NM", "")) != annotation.id:
                     self._clean = None  # a new id: the bytes loaded would give another one next time
                 obj.NM = pikepdf.String(annotation.id)
-                if isinstance(annotation, ImageStamp):
+                parts = picture_parts(obj) if isinstance(annotation, ImageStamp) else None
+                if parts is not None:  # None for a picture carried in /ZenithImageData
                     # Moving a picture later reuses this image object, untouched, instead of re-encoding it.
-                    self._pictures.setdefault(annotation.digest, picture_parts(obj)[0])
+                    self._pictures.setdefault(annotation.digest, parts[0])
                 self._sources[annotation.id] = obj
                 self._saved[annotation.id] = annotation
                 self._owned.setdefault(index, []).append(annotation.id)

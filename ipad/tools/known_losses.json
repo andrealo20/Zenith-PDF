@@ -1,0 +1,4 @@
+[
+  {"kind": "ImageStamp", "reason": "PDFKit rewrites a desktop picture's appearance with a clip and an ICC colour space, which the desktop no longer reads as a picture; the page still shows it"},
+  {"kind": "Attachment", "reason": "PDFKit drops the embedded file (/EF) of a file attachment when it saves the note"}
+]
